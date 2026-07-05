@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PartLine",
+  "type": "object",
+  "required": [
+    "line_id",
+    "name",
+    "quantity"
+  ],
+  "properties": {
+    "line_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "oem": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "article": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "safety_critical": {
+      "type": "boolean"
+    },
+    "allow_analogs": {
+      "type": "boolean"
+    }
+  }
+}

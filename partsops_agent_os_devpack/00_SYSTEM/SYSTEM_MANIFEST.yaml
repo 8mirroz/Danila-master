@@ -1,0 +1,34 @@
+system:
+  name: PartsOps Agent OS Control Console
+  version: 0.1.0
+  type: agent_control_plane
+  mission: Управлять AI-агентом PartsOps: модели, очереди, бюджеты, tool calls, approval, debug, evals, replay и rollback.
+
+truth_sources:
+  financial_truth: ERPNext
+  operational_truth: event_log
+  procurement_truth: supplier_evidence
+  commercial_truth: admin_approval
+  ai_role: assistant_not_authority
+
+runtime_modes:
+  - DEV
+  - STAGE
+  - PROD
+current_stage: discovery
+flow_statuses:
+  - active
+  - paused
+  - degraded
+  - safe_mode
+  - incident
+
+hard_rules:
+  - invoice_send_requires_admin
+  - invoice_draft_requires_admin
+  - all_tool_calls_require_permission_check
+  - all_agent_runs_require_trace
+  - all_decisions_require_evidence
+  - client_report_must_hide_margin
+  - external_inputs_are_untrusted
+  - dangerous_actions_require_audit_reason

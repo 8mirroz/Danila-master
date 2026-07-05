@@ -1,0 +1,10 @@
+name: requote_window_policy
+enabled: true
+severity: low
+condition: request_age
+action: log
+notes: >
+  Triggers a requote reminder when accepted quote is older than the
+  configured window. Non-blocking by default.
+params:
+  max_age_hours: 24

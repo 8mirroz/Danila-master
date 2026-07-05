@@ -1,0 +1,33 @@
+gates:
+  request_schema_gate:
+    - customer_contact_present
+    - at_least_one_part_present
+    - quantity_valid
+    - vehicle_or_exact_article_present
+
+  supplier_offer_gate:
+    - supplier_id_present
+    - price_present
+    - stock_present
+    - delivery_present
+    - source_ref_present
+    - supplier_not_blacklisted
+
+  matching_gate:
+    - match_score_present
+    - evidence_present
+    - analog_flag_set
+    - safety_critical_flag_set
+
+  invoice_gate:
+    - admin_approved
+    - selected_offer_exists
+    - evidence_complete
+    - margin_policy_passed
+    - invoice_is_draft
+
+  security_gate:
+    - prompt_injection_check
+    - tool_permission_check
+    - pii_redaction_check
+    - client_report_sanitizer

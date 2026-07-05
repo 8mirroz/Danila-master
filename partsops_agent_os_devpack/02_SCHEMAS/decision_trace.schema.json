@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DecisionTrace",
+  "type": "object",
+  "required": [
+    "decision_id",
+    "request_id",
+    "selected_offer_id",
+    "reason",
+    "evidence"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "selected_offer_id": {
+      "type": "string"
+    },
+    "final_score": {
+      "type": "number"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "requires_admin_approval": {
+      "type": "boolean"
+    }
+  }
+}

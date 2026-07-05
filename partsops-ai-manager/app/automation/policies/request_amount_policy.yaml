@@ -1,0 +1,10 @@
+name: request_amount_policy
+enabled: true
+severity: high
+condition: request_amount
+action: allow
+notes: >
+  Caps on automated approval. Tune `max_amount` to match finance policy.
+  The CLI runner prints structured output for audit.
+params:
+  max_amount: 50000

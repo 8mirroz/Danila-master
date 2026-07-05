@@ -1,0 +1,41 @@
+roles:
+  operator:
+    can:
+      - view_dashboard
+      - inspect_runs
+      - approve_low_risk
+      - ask_client
+      - rerun_request
+    cannot:
+      - kill_switch
+      - change_prod_policy
+      - approve_high_value_invoice
+
+  admin:
+    can:
+      - approve_all
+      - safe_mode
+      - restart_workers
+      - edit_policy
+      - rollback_config
+    cannot:
+      - disable_audit_log
+
+  auditor:
+    can:
+      - view_logs
+      - export_traces
+      - view_policy_snapshots
+    cannot:
+      - mutate_data
+      - approve_actions
+
+  agent_engineer:
+    can:
+      - edit_prompts_dev
+      - run_evals
+      - inspect_debug
+      - test_tools
+    cannot:
+      - approve_invoice
+      - change_prod_policy_without_admin

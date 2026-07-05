@@ -1,0 +1,41 @@
+routes:
+  no_llm:
+    tasks:
+      - final_score_calculation
+      - margin_check
+      - supplier_blacklist_check
+      - invoice_gate
+      - exact_article_match
+
+  cheap_fast_model:
+    tasks:
+      - classify_request
+      - clean_text
+      - detect_missing_fields
+      - generate_short_clarification
+    default_temperature: 0.1
+
+  mid_model:
+    tasks:
+      - request_parsing
+      - supplier_email_parsing
+      - report_draft
+      - risk_summary
+    default_temperature: 0.1
+
+  strong_model:
+    tasks:
+      - ambiguous_part_reasoning
+      - conflict_resolution
+      - complex_supplier_comparison
+      - debug_root_cause
+    use_when:
+      - safety_critical
+      - low_confidence
+      - high_value_order
+      - repeated_failure
+
+fallback:
+  on_timeout: retry_once_then_fallback
+  on_invalid_json: repair_once_then_admin_review
+  on_budget_exceeded: pause_new_runs

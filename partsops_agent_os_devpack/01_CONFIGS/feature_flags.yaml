@@ -1,0 +1,11 @@
+feature_flags:
+  shadow_mode: true
+  dry_run: true
+  safe_mode: false
+  auto_supplier_sync: true
+  auto_report_draft: true
+  invoice_draft_enabled: true
+  invoice_send_enabled: false
+  prediction_widgets_enabled: false
+  replay_enabled: true
+  eval_lab_enabled: true

@@ -1,0 +1,24 @@
+approval_required:
+  always:
+    - invoice_draft
+    - invoice_send
+    - safety_critical_part
+    - analog_used
+    - match_score_below_0_90
+    - supplier_reliability_below_0_85
+    - stale_price
+    - margin_below_minimum
+    - new_supplier
+    - high_value_order
+
+approval_actions:
+  approve_recommended:
+    creates: admin_action_event
+  reject:
+    creates: rejection_event
+  ask_client:
+    creates: clarification_event
+  rerun:
+    creates: rerun_event
+  escalate:
+    creates: escalation_event

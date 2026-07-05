@@ -1,0 +1,17 @@
+budget:
+  session_budget_usd: 10.0
+  daily_budget_usd: 50.0
+  cost_per_request_limit_usd: 0.30
+  rpm_limit: 20
+  max_parallel_runs: 4
+  max_tool_calls_per_request: 25
+  max_supplier_queries_per_request: 20
+
+actions:
+  at_80_percent:
+    - warn_operator
+    - switch_to_low_cost_mode
+  at_100_percent:
+    - pause_new_runs
+    - create_budget_incident
+    - allow_read_only_debug

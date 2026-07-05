@@ -1,0 +1,10 @@
+name: phr_report_policy
+enabled: true
+severity: medium
+condition: request_age
+action: log
+notes: >
+  PHR verification is bound to the bind_type='file' channel. This policy
+  produces the structured report event used by `cli_phr_verifier`.
+params:
+  max_age_hours: 0.17

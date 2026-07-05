@@ -1,0 +1,39 @@
+components:
+  TopControlBar:
+    purpose: status and global controls
+  SystemMetricCard:
+    purpose: spend, rpm, queue, errors
+  LeftControlMenu:
+    purpose: navigation between control sections
+  ModelConfigPanel:
+    purpose: active model settings
+  RoutingPolicyPanel:
+    purpose: task-to-model routing
+  BudgetPanel:
+    purpose: cost and rpm controls
+  ToolRegistryPanel:
+    purpose: tool permissions and health
+  CronJobsPanel:
+    purpose: scheduled jobs management
+  LiveEventLog:
+    purpose: realtime events
+  AgentRunInspector:
+    purpose: inspect one run
+  WorkflowGraph:
+    purpose: show pipeline nodes
+  QueueManager:
+    purpose: manage job queues
+  ToolCallsTable:
+    purpose: inspect tool calls
+  EvalLab:
+    purpose: run regression/evals
+  DebugConsole:
+    purpose: raw debug and replay
+  AgentCopilotPanel:
+    purpose: current agent and recommendations
+  ApprovalCard:
+    purpose: human-in-the-loop decisions
+  DecisionQuiz:
+    purpose: choose between recommended options
+  EvidenceTimeline:
+    purpose: inspect proof chain

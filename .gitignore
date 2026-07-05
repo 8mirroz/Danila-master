@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+.env
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db.bak
+
+# Artifacts
+*.bak
+*.tmp
+*.log
+*.pid
+webui.db
+
+# Frontend build
+node_modules/
+dist/
+build/
+.vite/
+
+# Playwright / automation
+.playwright-mcp/
+.playwright-cli/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Project tooling
+__TRASH__/
+.pytest_cache/
+playwright-report/
+test-results/

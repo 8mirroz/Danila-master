@@ -1,0 +1,21 @@
+matching_policy:
+  exact_article_auto_pass: true
+  fuzzy_below_0_90_requires_review: true
+  no_vehicle_no_article_blocks: true
+
+supplier_policy:
+  stale_price_hours: 24
+  low_reliability_threshold: 0.85
+  blacklist_enabled: true
+
+invoice_policy:
+  draft_only: true
+  send_requires_admin: true
+  submit_forbidden_for_agent: true
+  delete_forbidden_for_agent: true
+
+report_policy:
+  client_report_hide_margin: true
+  client_report_hide_purchase_price: true
+  client_report_hide_supplier_internal_score: true
+  admin_report_show_evidence: true

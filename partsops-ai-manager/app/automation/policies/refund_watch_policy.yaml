@@ -1,0 +1,10 @@
+name: refund_watch_policy
+enabled: true
+severity: medium
+condition: request_age
+action: log
+notes: >
+  Passes refund watch if creation timestamp is within 10 minutes.
+  Events are filtered on the bind_type='file' channel placeholder.
+params:
+  max_age_hours: 0.17

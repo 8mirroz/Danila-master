@@ -1,0 +1,8 @@
+name: customer_tier_policy
+enabled: true
+severity: medium
+condition: customer_tier
+action: allow
+notes: >
+  Allows requests from known customer tiers. Add tiers to `allowed_tiers`
+  to widen access; keep `action: reject` for strict mode.

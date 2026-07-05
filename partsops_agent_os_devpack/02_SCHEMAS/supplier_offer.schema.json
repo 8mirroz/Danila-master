@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SupplierOffer",
+  "type": "object",
+  "required": [
+    "offer_id",
+    "supplier_id",
+    "line_id",
+    "part_name",
+    "purchase_price",
+    "sale_price",
+    "stock_qty",
+    "delivery_days",
+    "source_ref"
+  ],
+  "properties": {
+    "offer_id": {
+      "type": "string"
+    },
+    "supplier_id": {
+      "type": "string"
+    },
+    "line_id": {
+      "type": "string"
+    },
+    "part_name": {
+      "type": "string"
+    },
+    "brand": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "article": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "purchase_price": {
+      "type": "number"
+    },
+    "sale_price": {
+      "type": "number"
+    },
+    "stock_qty": {
+      "type": "integer"
+    },
+    "delivery_days": {
+      "type": "integer"
+    },
+    "match_score": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "risk_level": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_ref": {
+      "type": "string"
+    }
+  }
+}

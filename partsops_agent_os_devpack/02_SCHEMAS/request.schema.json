@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PartRequest",
+  "type": "object",
+  "required": [
+    "request_id",
+    "source",
+    "status",
+    "customer",
+    "parts"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "customer": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "phone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "vehicle": {
+      "type": "object",
+      "properties": {
+        "vin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "make": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "year": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "parts": {
+      "type": "array",
+      "items": {
+        "$ref": "part_line.schema.json"
+      }
+    },
+    "constraints": {
+      "type": "object"
+    }
+  }
+}

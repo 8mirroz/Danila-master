@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentRun",
+  "type": "object",
+  "required": [
+    "run_id",
+    "agent_name",
+    "status",
+    "started_at"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cost_usd": {
+      "type": "number"
+    },
+    "tokens": {
+      "type": "integer"
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "ended_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
