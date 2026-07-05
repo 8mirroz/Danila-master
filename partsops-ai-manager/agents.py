@@ -464,20 +464,26 @@ def process_intake_request(text: str, priority: str = "normal", vehicle_context:
         if not extracted_parts:
             extracted_parts = [{"name": "Неизвестная деталь", "quantity": 1}]
 
-        # Extract VIN for testing if present
-        vin_pattern = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b", re.IGNORECASE)
-        vin_matches = vin_pattern.findall(text)
-        vehicle_vin = vin_matches[0].upper() if vin_matches else None
+        # Extract VIN for testing if present (use vehicle_context if masked)
+        vehicle_vin = vehicle_context.get("vin") if vehicle_context else None
+        
+        if not vehicle_vin:
+            vin_pattern = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b", re.IGNORECASE)
+            vin_matches = vin_pattern.findall(text)
+            vehicle_vin = vin_matches[0].upper() if vin_matches else None
+            
         vin_validity = "valid" if vehicle_vin else "unknown"
 
-        vehicle_make = None
-        vehicle_model = None
-        if "bmw" in raw_lower or "x5" in raw_lower:
-            vehicle_make = "BMW"
-            vehicle_model = "X5"
-        elif "toyota" in raw_lower or "camry" in raw_lower:
-            vehicle_make = "Toyota"
-            vehicle_model = "Camry"
+        vehicle_make = vehicle_context.get("make") if vehicle_context and vehicle_context.get("make") != "Unknown" else None
+        vehicle_model = vehicle_context.get("model") if vehicle_context and vehicle_context.get("model") != "Unknown" else None
+        
+        if not vehicle_make:
+            if "bmw" in raw_lower or "x5" in raw_lower:
+                vehicle_make = "BMW"
+                vehicle_model = "X5"
+            elif "toyota" in raw_lower or "camry" in raw_lower:
+                vehicle_make = "Toyota"
+                vehicle_model = "Camry"
 
         # Match parts in testing mode
         matched_parts = []
