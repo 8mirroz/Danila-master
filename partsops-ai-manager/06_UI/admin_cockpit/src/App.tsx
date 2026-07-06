@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { 
   AppFrame, 
@@ -20,8 +20,12 @@ import { AuditTimeline } from './components/AuditTimeline';
 import { CompletedOrdersHistory } from './components/CompletedOrdersHistory';
 import { RightPanel } from './components/RightPanel';
 import { KanbanBoard } from './components/KanbanBoard';
+import { EvidenceGatesWidget } from './components/EvidenceGatesWidget';
+import { InvoicePreview } from './components/InvoicePreview';
+import { LLMCostPanel } from './components/LLMCostPanel';
 import { apiFetch } from './lib/api';
-
+import { ChevronStepper } from './components/ChevronStepper';
+import { SuppliersPage } from './components/SuppliersPage';
 
 type Request = {
   id: number;
@@ -38,19 +42,6 @@ type Request = {
   vehicle_make?: string;
   vehicle_model?: string;
 };
-
-type Supplier = {
-  supplier_id: string;
-  name: string;
-  contact_person: string;
-  phone: string;
-  email: string;
-  city: string;
-  specialization: string;
-  reliability_score: number;
-  avg_delivery_days: number;
-};
-
 
 const overviewMetrics = [
   { label: 'Уверенность системы', value: '94%', delta: '+4 п.', tone: 'emerald' as const },
@@ -89,27 +80,17 @@ const urgentCases = [
 
 function App() {
   const [selectedReq, setSelectedReq] = useState<Request | null>(null);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [activeNav, setActiveNav] = useState<string>('dashboard');
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [activeStep, setActiveStep] = useState<number>(2); // Default to Normalization Review (Step 2)
   const [fetchTrigger, setFetchTrigger] = useState(0);
-  const [searchSupplierQuery, setSearchSupplierQuery] = useState('');
+  // const [searchSupplierQuery, setSearchSupplierQuery] = useState(''); // disabled
   const [searchGlobalQuery, setSearchGlobalQuery] = useState('');
+  // const [supplierViewMode, setSupplierViewMode] = useState<'table' | 'cards'>('cards'); // disabled - using full page view
   
   // Requests state hoisted from RightPanel
   const [requests, setRequests] = useState<Request[]>([]);
-  const [dashboardView, setDashboardView] = useState<'overview' | 'kanban'>('overview');
-  
-  // Supplier selection and import modal states
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  const [showSupplierImportModal, setShowSupplierImportModal] = useState(false);
-  const [supplierItems, setSupplierItems] = useState<any[]>([]);
-  const [supplierItemsLoading, setSupplierItemsLoading] = useState(false);
-  
-  // Local session state for imports
-  const [localSupplierMessage, setLocalSupplierMessage] = useState<string | null>(null);
   const [localOrderMessage, setLocalOrderMessage] = useState<string | null>(null);
   const [normalizedParts, setNormalizedParts] = useState<Array<{ name: string; quantity: number }>>([]);
   
@@ -128,53 +109,9 @@ function App() {
     }
   };
 
-  const fetchSuppliers = async () => {
-    try {
-      const res = await fetch('http://localhost:8000/api/suppliers');
-      if (res.ok) {
-        const data = await res.json();
-        setSuppliers(data);
-      }
-    } catch (error) {
-      console.error('Error fetching suppliers', error);
-      // Fallback fallback suppliers for offline demo
-      setSuppliers([
-        { supplier_id: 'SUPP-001', name: 'EuroParts GmbH', contact_person: 'Dieter Becker', phone: '', email: 'becker@europarts.de', city: 'Munich', specialization: 'Brakes, Suspension', reliability_score: 0.96, avg_delivery_days: 2 },
-        { supplier_id: 'SUPP-002', name: 'Nordic Auto Feeds', contact_person: 'Astrid Lind', phone: '', email: 'lind@nordicauto.no', city: 'Oslo', specialization: 'Steering systems', reliability_score: 0.89, avg_delivery_days: 4 },
-        { supplier_id: 'SUPP-003', name: 'Orient Parts Express', contact_person: 'Li Wei', phone: '', email: 'wei@orientparts.cn', city: 'Shanghai', specialization: 'Electronics, Alternates', reliability_score: 0.76, avg_delivery_days: 7 },
-      ]);
-    }
-  };
-
   useEffect(() => {
-    void fetchSuppliers();
     void fetchRequests();
   }, [fetchTrigger]);
-
-  useEffect(() => {
-    if (selectedSupplier) {
-      const fetchSupplierItems = async () => {
-        setSupplierItemsLoading(true);
-        try {
-          const res = await fetch(`http://localhost:8000/api/suppliers/${selectedSupplier.supplier_id}/items`);
-          if (res.ok) {
-            const data = await res.json();
-            setSupplierItems(data);
-          } else {
-            setSupplierItems([]);
-          }
-        } catch (e) {
-          console.error("Error fetching supplier items", e);
-          setSupplierItems([]);
-        } finally {
-          setSupplierItemsLoading(false);
-        }
-      };
-      void fetchSupplierItems();
-    } else {
-      setSupplierItems([]);
-    }
-  }, [selectedSupplier]);
 
   // When request changes, reset parts and selected offers
   useEffect(() => {
@@ -182,7 +119,7 @@ function App() {
       try {
         const parsed = JSON.parse(selectedReq.parts_json || '[]');
         setNormalizedParts(parsed);
-      } catch (e) {
+      } catch {
         setNormalizedParts([]);
       }
       setSelectedOffers({});
@@ -200,18 +137,15 @@ function App() {
     const idToTransition = reqId || selectedReq?.request_id;
     if (!idToTransition) return;
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/requests/${idToTransition}/transition`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            target_state: targetState,
-            reason,
-            actor_id: 'admin',
-          }),
-        },
-      );
+      const res = await apiFetch(`/api/requests/${idToTransition}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_state: targetState,
+          reason,
+          actor_id: 'admin',
+        }),
+      });
 
       if (res.ok) {
         const updated = await res.json();
@@ -246,7 +180,7 @@ function App() {
     if (!selectedReq) return;
     try {
       // call backend correction API if available
-      const res = await fetch(`http://localhost:8000/api/requests/${selectedReq.request_id}/correction`, {
+      const res = await apiFetch(`/api/requests/${selectedReq.request_id}/correction`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -258,43 +192,17 @@ function App() {
       if (res.ok) {
         alert("Normalization confirmed and saved to Golden Dataset.");
       }
-    } catch (e) {
-      console.warn("Could not save golden correction to backend", e);
+    } catch {
+      console.warn("Could not save golden correction to backend");
     }
-    
+   
     // update parts json in selected req locally
     setSelectedReq(prev => prev ? { ...prev, parts_json: JSON.stringify(normalizedParts) } : null);
     // advance step to Offer Comparison (step 3)
     setActiveStep(3);
   };
 
-  // Supplier import handler
-  const handleImportSuppliers = (text: string) => {
-    try {
-      const parsed = JSON.parse(text);
-      const items = Array.isArray(parsed) ? parsed : [parsed];
-      
-      const newSuppliers: Supplier[] = items.map((item: any, index: number) => ({
-        supplier_id: item.supplier_id || `SUPP-LOCAL-${Date.now()}-${index}`,
-        name: item.name || 'Unnamed Supplier',
-        contact_person: item.contact_person || 'N/A',
-        phone: item.phone || '',
-        email: item.email || '',
-        city: item.city || 'N/A',
-        specialization: item.specialization || 'General Sourcing',
-        reliability_score: Number(item.reliability_score) || 0.85,
-        avg_delivery_days: Number(item.avg_delivery_days) || 3,
-      }));
-
-      setSuppliers(prev => [...newSuppliers, ...prev]);
-      setLocalSupplierMessage(`Successfully imported ${newSuppliers.length} suppliers into local session catalog.`);
-      setTimeout(() => setLocalSupplierMessage(null), 5000);
-    } catch (e) {
-      alert("Error parsing JSON supplier feed. Make sure it is a valid JSON array or object.");
-    }
-  };
-
-  // Order manual import handler
+  // Order manual import handler (text/JSON)
   const handleImportOrders = async (text: string) => {
     try {
       // Try to parse as JSON first, if fails, treat as raw text request
@@ -308,7 +216,7 @@ function App() {
         };
       } catch {}
 
-      const res = await fetch('http://localhost:8000/api/requests', {
+      const res = await apiFetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -323,7 +231,7 @@ function App() {
         alert("Backend failed to intake the request. Adding local simulation draft.");
         throw new Error("Local fallback");
       }
-    } catch (e) {
+    } catch {
       // Local fallback simulation
       const mockId = `REQ-LOCAL-${Math.floor(1000 + Math.random() * 9000)}`;
       const mockReq: Request = {
@@ -338,16 +246,30 @@ function App() {
       setSelectedReq(mockReq);
       setLocalOrderMessage(`Intake offline. Added local draft ${mockId} to active triage queue.`);
       setTimeout(() => setLocalOrderMessage(null), 5000);
-      // We trigger fetch to let right panel update if backend is alive, otherwise we handle session storage if we want
     }
   };
 
-  const filteredSuppliers = suppliers.filter(
-    (supplier) =>
-      supplier.name.toLowerCase().includes(searchSupplierQuery.toLowerCase()) ||
-      supplier.specialization.toLowerCase().includes(searchSupplierQuery.toLowerCase()) ||
-      supplier.city.toLowerCase().includes(searchSupplierQuery.toLowerCase())
-  );
+  // File upload handler for Dropzone - uploads file AND imports from artifact
+  const handleFileUpload = async (file: File): Promise<string> => {
+    const { uploadAttachment, importFromArtifact } = await import('./lib/api');
+    const result = await uploadAttachment(file);
+    const artifactId = result.artifact_id;
+   
+    // Now import the artifact to create a request
+    try {
+      const importResult = await importFromArtifact(artifactId, 'FILE_UPLOAD', 'File Upload Client', 'normal');
+      const request = importResult.request;
+      setLocalOrderMessage(`Successfully imported order ${request.request_id} from file ${file.name}.`);
+      setFetchTrigger(prev => prev + 1);
+      setTimeout(() => setLocalOrderMessage(null), 5000);
+      return artifactId;
+    } catch (error) {
+      console.error('Import from artifact failed:', error);
+      setLocalOrderMessage(`File uploaded but import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setTimeout(() => setLocalOrderMessage(null), 5000);
+      return artifactId;
+    }
+  };
 
   // Left Nav tabs config
   const navItems = [
@@ -404,7 +326,8 @@ function App() {
       quantity: part.quantity,
       best_match: chosenOffer ? {
         name: chosenOffer.item.name,
-        price: chosenOffer.item.price
+        price: chosenOffer.item.price,
+        price_deviation_from_median: chosenOffer.price_deviation_from_median,
       } : undefined
     };
   });
@@ -436,7 +359,7 @@ function App() {
         {/* If a request is active and we're not on general pages, show request workflow */}
         {selectedReq && ['matching', 'pricing', 'audit'].includes(activeNav) ? (
           <div className="p-4 max-w-6xl mx-auto space-y-4">
-            
+           
             {/* Header context card */}
             <WorkspaceHeader 
               title={selectedReq.customer_name + " - План закупки запчастей"}
@@ -456,6 +379,8 @@ function App() {
             />
 
             {/* Stepper Steps Gate */}
+            <ChevronStepper status={selectedReq.status} />
+
             <StepGate 
               currentStep={activeStep}
               steps={steps}
@@ -464,7 +389,7 @@ function App() {
 
             {/* Sub-workspace views dependent on active step */}
             <div className="space-y-4">
-              
+             
               {/* Step 2: Normalization Review */}
               {activeStep === 2 && (
                 <SectionCard 
@@ -508,19 +433,11 @@ function App() {
                     Изучите ценовые аномалии и проверьте целостность цепочки аудита SHA-256. Требуется явное одобрение администратора/специалиста для разблокировки ценового листа перед подготовкой черновика коммерческого предложения.
                   </p>
 
-                  <div className="bg-slate-50 border border-[var(--border-default)] rounded-md p-4 mb-4 text-xs space-y-2">
-                    <div className="flex justify-between border-b border-[var(--border-subtle)] pb-2">
-                      <span className="text-[var(--text-muted)] font-semibold">Проверка целостности сортировки</span>
-                      <span className="text-green-700 font-bold"><i className="fas fa-check-circle"></i> ПРОЙДЕНО</span>
-                    </div>
-                    <div className="flex justify-between border-b border-[var(--border-subtle)] pb-2">
-                      <span className="text-[var(--text-muted)] font-semibold">Уровень защиты перс. данных</span>
-                      <span className="text-green-700 font-bold"><i className="fas fa-check-circle"></i> 100% БЕЗОПАСНО</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)] font-semibold">Кандидаты предложений загружены</span>
-                      <span className="font-bold text-[var(--text-primary)]">{Object.keys(selectedOffers).length} из {normalizedParts.length} деталей сопоставлено</span>
-                    </div>
+                  <div className="mb-4">
+                    <EvidenceGatesWidget 
+                      requestId={selectedReq.request_id}
+                      refreshTrigger={fetchTrigger}
+                    />
                   </div>
 
                   {Object.keys(selectedOffers).length < normalizedParts.length && (
@@ -567,15 +484,23 @@ function App() {
 
               {/* Step 5: Pricing Draft */}
               {activeStep === 5 && (
-                <PricingCalculator 
-                  parts={formattedPartsWithBestMatch}
-                  requestId={selectedReq.request_id}
-                  isApproved={selectedReq.status === 'APPROVED'}
-                  onDraftInvoice={(data) => {
-                    alert(`Черновик счета создан! Номер счета: ${data.invoice_number}`);
-                    setFetchTrigger(prev => prev + 1);
-                  }}
-                />
+                <div className="space-y-4">
+                  <PricingCalculator 
+                    parts={formattedPartsWithBestMatch}
+                    requestId={selectedReq.request_id}
+                    isApproved={selectedReq.status === 'APPROVED'}
+                    onDraftInvoice={(data) => {
+                      alert(`Черновик счета создан! Номер счета: ${data.invoice_number}`);
+                      setFetchTrigger(prev => prev + 1);
+                    }}
+                  />
+                  <InvoicePreview 
+                    requestId={selectedReq.request_id}
+                    onSent={() => {
+                      setFetchTrigger(prev => prev + 1);
+                    }}
+                  />
+                </div>
               )}
             </div>
 
@@ -597,47 +522,47 @@ function App() {
         ) : (
           /* General navigation pages when no active request is being stepped */
           <div className="p-4 max-w-6xl mx-auto space-y-4">
-            
+           
             {/* Nav: Dashboard (Overview Panel) */}
             {activeNav === 'dashboard' && (
               <>
-                <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl border border-indigo-950/40">
+                <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-50/50 via-slate-50 to-indigo-50/40 p-6 text-slate-900 shadow-sm border border-slate-200/50">
                   {/* Decorative glowing background elements */}
-                  <div className="absolute -right-24 -top-24 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
-                  <div className="absolute -left-24 -bottom-24 h-48 w-48 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
-                  
+                  <div className="absolute -right-24 -top-24 h-48 w-48 rounded-full bg-teal-500/5 blur-3xl pointer-events-none" />
+                  <div className="absolute -left-24 -bottom-24 h-48 w-48 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />
+                 
                   <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 relative z-10 w-full">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-indigo-200 font-extrabold uppercase tracking-widest bg-indigo-500/20 border border-indigo-500/30 px-2.5 py-0.5 rounded-full backdrop-blur-md">
+                        <span className="text-[9px] text-teal-800 font-extrabold uppercase tracking-widest bg-teal-500/10 border border-teal-500/20 px-2.5 py-0.5 rounded-full backdrop-blur-md">
                           Система активна
                         </span>
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-teal-500 animate-pulse" />
                       </div>
-                      <h2 className="text-xl font-extrabold text-white tracking-tight sm:text-2xl font-sans">
+                      <h2 className="text-xl font-extrabold text-slate-900 tracking-tight sm:text-2xl font-sans">
                         Операционная панель PartsOps
                       </h2>
-                      <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+                      <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
                         Интеллектуальное управление закупками на базе ИИ-агентов LangGraph и верификации цепочек поставок.
                       </p>
                     </div>
 
                     {/* Integrated Premium Quick Actions Toolbelt */}
-                    <div className="flex flex-wrap items-center gap-2 bg-white/5 p-1.5 rounded-2xl border border-white/10 backdrop-blur-md w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center gap-2 bg-slate-500/5 p-1.5 rounded-2xl border border-slate-200/40 backdrop-blur-md w-full sm:w-auto">
                       <button
                         onClick={() => setActiveNav('orders')}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-100 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all duration-200 animate-fadeIn"
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                         title="Импортировать спецификации деталей"
                       >
-                        <i className="fas fa-file-arrow-up text-blue-400"></i>
+                        <i className="fas fa-file-arrow-up text-teal-600"></i>
                         <span>Импорт заказов</span>
                       </button>
                       <button
                         onClick={() => setActiveNav('suppliers')}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-100 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all duration-200 animate-fadeIn"
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                         title="Открыть базу поставщиков"
                       >
-                        <i className="fas fa-truck-field text-emerald-400"></i>
+                        <i className="fas fa-truck-field text-indigo-600"></i>
                         <span>Поставщики</span>
                       </button>
                       <button
@@ -645,24 +570,24 @@ function App() {
                           setFetchTrigger(prev => prev + 1);
                           alert("Синхронизация с ERP успешно запущена!");
                         }}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-100 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all duration-200 animate-fadeIn"
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                         title="Запустить синхронизацию с ERP"
                       >
-                        <i className="fas fa-rotate text-amber-400"></i>
+                        <i className="fas fa-rotate text-amber-500"></i>
                         <span>Синхронизация</span>
                       </button>
                       <button
                         onClick={() => {
                           alert("Кэш очищен, сессия обновлена.");
                         }}
-                        className="flex items-center justify-center h-8.5 w-8.5 rounded-xl text-slate-300 hover:text-red-400 bg-white/5 hover:bg-white/10 border border-white/5 transition-all duration-200"
+                        className="flex items-center justify-center h-8.5 w-8.5 rounded-xl text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 border border-slate-200 transition-all duration-200"
                         title="Очистить локальный кэш"
                       >
                         <i className="fas fa-trash-can text-[11px]"></i>
                       </button>
                       <button
                         onClick={() => setActiveNav('orders')}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold text-white bg-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/90 border-none transition-all duration-200 shadow-md hover:shadow-lg active:scale-95"
+                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold text-white bg-teal-600 hover:bg-teal-500 border-none transition-all duration-200 shadow-[0_4px_14px_rgba(0,180,157,0.2)] hover:shadow-[0_6px_20px_rgba(0,180,157,0.3)] hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]"
                       >
                         <i className="fas fa-plus"></i>
                         <span>Новый запрос</span>
@@ -681,20 +606,27 @@ function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   {/* Operational workflow lanes */}
                   <SectionCard title="Нагрузка по этапам процесса" icon="fa-network-wired" className="lg:col-span-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
-                      {workflowLanes.map(lane => (
-                        <div key={lane.title} className="bg-[var(--surface-2)] border border-[var(--border-default)] rounded-md p-3.5 flex flex-col justify-between">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-bold text-[var(--text-primary)]">{lane.title}</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                              lane.tone === 'cyan' ? 'bg-cyan-50 border-cyan-200 text-cyan-700' :
-                              lane.tone === 'violet' ? 'bg-violet-50 border-violet-200 text-violet-700' :
-                              lane.tone === 'amber' ? 'bg-amber-50 border-amber-200 text-amber-700' :
-                              'bg-green-50 border-green-200 text-green-700'
-                            }`}>{lane.count} задач</span>
+                    <div className="flex flex-col lg:flex-row items-stretch justify-between gap-3 lg:gap-2 mt-1">
+                      {workflowLanes.map((lane, idx) => (
+                        <React.Fragment key={lane.title}>
+                          <div className="flex-1 bg-[var(--surface-2)] border border-[var(--border-default)] rounded-xl p-3.5 flex flex-col justify-between hover:border-teal-500/30 hover:shadow-sm transition-all duration-300">
+                            <div className="flex justify-between items-start gap-2 mb-1.5">
+                              <span className="text-xs font-bold text-[var(--text-primary)] leading-tight">{lane.title}</span>
+                              <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                                lane.tone === 'cyan' ? 'bg-cyan-50 border-cyan-200 text-cyan-700' :
+                                lane.tone === 'violet' ? 'bg-violet-50 border-violet-200 text-violet-700' :
+                                lane.tone === 'amber' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              }`}>{lane.count}</span>
+                            </div>
+                            <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed mt-1">{lane.summary}</p>
                           </div>
-                          <p className="text-[11px] text-[var(--text-secondary)] mt-1">{lane.summary}</p>
-                        </div>
+                          {idx < workflowLanes.length - 1 && (
+                            <div className="hidden lg:flex items-center justify-center text-slate-300 text-sm select-none">
+                              <i className="fas fa-chevron-right"></i>
+                            </div>
+                          )}
+                        </React.Fragment>
                       ))}
                     </div>
                   </SectionCard>
@@ -702,78 +634,42 @@ function App() {
                   {/* Urgent Cases list */}
                   <SectionCard title="Приоритетные инциденты" icon="fa-circle-radiation">
                     <div className="space-y-3 mt-1">
-                      {urgentCases.map(c => (
-                        <div key={c.id} className="border border-[var(--border-default)] hover:border-[var(--text-secondary)] transition-all bg-[var(--surface-1)] rounded p-3 flex flex-col gap-1.5 shadow-sm">
-                          <div className="flex justify-between items-center">
-                            <strong className="text-xs font-bold text-[var(--text-primary)]">{c.id}</strong>
-                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                      {urgentCases.map(c => {
+                        const isAmber = c.tone === 'amber';
+                       
+                        let cardStyle = "";
+                        let icon = "";
+                        if (isAmber) {
+                          cardStyle = "border-l-4 border-l-amber-500 bg-amber-50/30 hover:border-amber-300";
+                          icon = "fa-circle-exclamation text-amber-500";
+                        } else if (c.tone === 'emerald') {
+                          cardStyle = "border-l-4 border-l-emerald-500 bg-emerald-50/30 hover:border-emerald-300";
+                          icon = "fa-circle-check text-emerald-500";
+                        } else {
+                          cardStyle = "border-l-4 border-l-rose-500 bg-rose-50/30 hover:border-rose-300";
+                          icon = "fa-triangle-exclamation text-rose-500";
+                        }
+                       
+                        return (
+                          <div 
+                            key={c.id} 
+                            className={`border border-y-[var(--border-default)] border-r-[var(--border-default)] rounded-r-xl p-3 flex flex-col gap-1.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${cardStyle}`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <strong className="text-xs font-mono font-extrabold text-[var(--text-primary)]">{c.id}</strong>
+                              <i className={`fas ${icon} text-[11px] animate-pulse`}></i>
+                            </div>
+                            <p className="text-[11px] font-bold text-[var(--text-primary)] leading-tight">{c.title}</p>
+                            <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{c.detail}</p>
                           </div>
-                          <p className="text-[11px] font-semibold text-[var(--text-primary)] leading-tight">{c.title}</p>
-                          <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{c.detail}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </SectionCard>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {/* AI Agent Monitor */}
-                  <SectionCard title="Активность ИИ-агентов LangGraph" icon="fa-robot" className="lg:col-span-2">
-                    <div className="space-y-3 mt-1">
-                      <div className="flex items-center justify-between p-2.5 border border-[var(--border-subtle)] bg-[var(--surface-2)] rounded-lg text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                          </span>
-                          <span className="font-bold text-[var(--text-primary)]">Triage & Normalization Agent</span>
-                        </div>
-                        <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-mono font-bold uppercase">Ожидание</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2.5 border border-[var(--border-subtle)] bg-[var(--surface-2)] rounded-lg text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                          </span>
-                          <span className="font-bold text-[var(--text-primary)]">Offer Parsing & Matcher</span>
-                        </div>
-                        <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded font-mono font-bold uppercase">Анализ OEM</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2.5 border border-[var(--border-subtle)] bg-[var(--surface-2)] rounded-lg text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="relative flex h-2 w-2">
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
-                          </span>
-                          <span className="font-bold text-[var(--text-primary)]">SLA & Margin Guard</span>
-                        </div>
-                        <span className="text-[10px] text-[var(--text-muted)] bg-[var(--surface-1)] border border-[var(--border-default)] px-1.5 py-0.5 rounded font-mono font-bold uppercase">Спящий режим</span>
-                      </div>
-                    </div>
-                  </SectionCard>
-
-                  {/* System Status Block */}
-                  <SectionCard title="Состояние системы" icon="fa-heartbeat">
-                    <div className="space-y-3.5 mt-1 text-xs">
-                      <div className="flex justify-between items-center border-b border-[var(--border-subtle)] pb-2">
-                        <span className="text-[var(--text-secondary)]">Всего запросов в системе</span>
-                        <span className="font-mono font-bold text-[var(--text-primary)]">{requests.length}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-[var(--border-subtle)] pb-2">
-                        <span className="text-[var(--text-secondary)]">Срочные инциденты</span>
-                        <span className="font-bold text-red-500 flex items-center gap-1.5">
-                          <i className="fas fa-circle-exclamation"></i>
-                          <span>{requests.filter(r => r.priority?.toLowerCase() === 'high' || r.priority?.toLowerCase() === 'высокий').length}</span>
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[var(--text-secondary)]">Аптайм API шлюза</span>
-                        <span className="text-emerald-500 font-bold flex items-center gap-1">
-                          <i className="fas fa-circle text-[8px] animate-pulse"></i> 99.98%
-                        </span>
-                      </div>
-                    </div>
-                  </SectionCard>
+                <div className="grid grid-cols-1 gap-4">
+                  <LLMCostPanel />
                 </div>
               </>
             )}
@@ -801,230 +697,13 @@ function App() {
               </div>
             )}
 
-            {/* Nav: Supplier Catalog & Imports */}
+
+            {/* Nav: Supplier Catalog - Full Page View */}
             {activeNav === 'suppliers' && (
-              <div className="space-y-4">
-                {/* Header toolbar: search + import button */}
-                <div className="flex flex-wrap items-center gap-3 justify-between">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="relative flex-1 max-w-sm">
-                      <i className="fas fa-magnifying-glass absolute left-3 top-2.5 text-[var(--text-muted)] text-xs"></i>
-                      <input
-                        type="text"
-                        placeholder="Поиск по поставщику, бренду, специализации..."
-                        value={searchSupplierQuery}
-                        onChange={(e) => setSearchSupplierQuery(e.target.value)}
-                        className="w-full bg-[var(--surface-1)] border border-[var(--border-default)] rounded-xl pl-9 pr-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] font-sans"
-                      />
-                    </div>
-                    <span className="text-[11px] text-[var(--text-muted)] font-semibold whitespace-nowrap">
-                      {filteredSuppliers.length} поставщиков
-                    </span>
-                  </div>
-                  <ActionButton
-                    variant="primary"
-                    icon="fa-file-import"
-                    onClick={() => setShowSupplierImportModal(!showSupplierImportModal)}
-                  >
-                    Импортировать поставщика
-                  </ActionButton>
-                </div>
-
-                {/* Inline import panel (shown/hidden by toggle) */}
-                {showSupplierImportModal && (
-                  <div className="panel-card-tight p-5 border border-[var(--accent-primary)]/30 bg-[var(--surface-2)]">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">
-                        <i className="fas fa-file-import text-[var(--accent-primary)]"></i> Импорт каталога поставщиков
-                      </h3>
-                      <button
-                        onClick={() => setShowSupplierImportModal(false)}
-                        className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors text-sm w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--surface-3)]"
-                      >
-                        <i className="fas fa-xmark"></i>
-                      </button>
-                    </div>
-                    {localSupplierMessage && (
-                      <InlineAlert type="success" message={localSupplierMessage} />
-                    )}
-                    <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
-                      Импортируйте новые справочники поставщиков или обновляйте действующие соглашения об уровне обслуживания (SLA) путем загрузки файлов.
-                    </p>
-                    <Dropzone
-                      title="Перетащите файл каталога поставщиков"
-                      description="Принимает массивы JSON с метаданными поставщиков, категориями специализации, логами надежности и скоростью доставки по SLA."
-                      onImport={handleImportSuppliers}
-                    />
-                  </div>
-                )}
-
-                {/* Full-width suppliers table */}
-                <div className="panel-card-tight overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-[var(--border-strong)] bg-[var(--surface-2)]">
-                          {["ID", "Название и адрес", "Контакт", "Специализация", "Надёжность", "Ср. доставка", "E-mail", ""].map((h) => (
-                            <th key={h} className="px-4 py-3 text-left font-bold uppercase tracking-wider text-[10px] text-[var(--text-muted)] whitespace-nowrap">
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredSuppliers.map((s) => {
-                          const isSelected = selectedSupplier?.supplier_id === s.supplier_id;
-                          return (
-                            <>
-                              <tr
-                                key={s.supplier_id}
-                                onClick={() => setSelectedSupplier(isSelected ? null : s)}
-                                className={`border-b border-[var(--border-subtle)] cursor-pointer transition-all text-xs ${
-                                  isSelected
-                                    ? 'bg-emerald-50/60 border-l-2 border-l-emerald-500'
-                                    : 'hover:bg-[var(--surface-2)]'
-                                }`}
-                              >
-                                <td className="px-4 py-3 font-mono text-[10px] font-bold text-[var(--text-muted)]">
-                                  {s.supplier_id}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="font-bold text-[var(--text-primary)]">{s.name}</div>
-                                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
-                                    <i className="fas fa-location-dot mr-1 text-[8px]"></i>{s.city}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-[var(--text-secondary)] font-medium">{s.contact_person}</td>
-                                <td className="px-4 py-3">
-                                  <div className="flex flex-wrap gap-1">
-                                    {s.specialization.split(',').map((spec: string) => (
-                                      <span key={spec} className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-semibold">
-                                        {spec.trim()}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-1.5">
-                                    <div className="w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full ${s.reliability_score >= 0.9 ? 'bg-emerald-500' : s.reliability_score >= 0.8 ? 'bg-amber-400' : 'bg-red-400'}`}
-                                        style={{ width: `${s.reliability_score * 100}%` }}
-                                      />
-                                    </div>
-                                    <span className={`text-[10px] font-bold ${s.reliability_score >= 0.9 ? 'text-emerald-700' : s.reliability_score >= 0.8 ? 'text-amber-600' : 'text-red-600'}`}>
-                                      {(s.reliability_score * 100).toFixed(0)}%
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                    s.avg_delivery_days <= 1 ? 'bg-emerald-50 text-emerald-700' :
-                                    s.avg_delivery_days <= 3 ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'
-                                  }`}>
-                                    {s.avg_delivery_days} дн.
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-[var(--text-muted)] text-[11px]">
-                                  <a href={`mailto:${s.email || ''}`} className="hover:text-[var(--accent-primary)] transition-colors" onClick={(e) => e.stopPropagation()}>
-                                    {s.email || '—'}
-                                  </a>
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                  <i className={`fas fa-chevron-${isSelected ? 'up' : 'down'} text-[10px] text-[var(--text-muted)]`}></i>
-                                </td>
-                              </tr>
-
-                              {/* Expanded supplier card with catalog items */}
-                              {isSelected && (
-                                <tr key={`${s.supplier_id}-expanded`} className="bg-[var(--surface-2)] border-b border-[var(--border-strong)]">
-                                  <td colSpan={8} className="px-5 py-5">
-                                    <div className="space-y-4">
-                                      {/* Supplier Info Card */}
-                                      <div className="bg-[var(--surface-1)] border border-[var(--border-default)] rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 shadow-sm">
-                                        <div>
-                                          <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] mb-1">Контакт</p>
-                                          <p className="text-xs font-semibold text-[var(--text-primary)]">{s.contact_person || '—'}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] mb-1">Телефон</p>
-                                          <p className="text-xs font-semibold text-[var(--text-primary)]">{s.phone || '—'}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] mb-1">E-mail</p>
-                                          <p className="text-xs font-semibold text-[var(--accent-primary)]">{s.email || '—'}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] mb-1">Специализация</p>
-                                          <p className="text-xs font-semibold text-[var(--text-primary)]">{s.specialization}</p>
-                                        </div>
-                                      </div>
-
-                                      {/* Catalog items table */}
-                                      <div>
-                                        <h4 className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-widest mb-2 flex items-center gap-2">
-                                          <i className="fas fa-boxes-stacked text-[var(--accent-primary)]"></i>
-                                          Каталог позиций поставщика
-                                          {supplierItemsLoading && <i className="fas fa-spinner animate-spin text-[var(--accent-primary)]"></i>}
-                                        </h4>
-                                        {supplierItemsLoading ? (
-                                          <div className="text-xs text-[var(--text-muted)] py-4 text-center">Загрузка позиций...</div>
-                                        ) : supplierItems.length === 0 ? (
-                                          <div className="text-xs text-[var(--text-muted)] py-4 text-center">Позиции каталога не найдены.</div>
-                                        ) : (
-                                          <div className="overflow-x-auto rounded-xl border border-[var(--border-default)]">
-                                            <table className="w-full text-xs">
-                                              <thead>
-                                                <tr className="bg-[var(--surface-2)] border-b border-[var(--border-default)]">
-                                                  {["Артикул", "Наименование", "OEM №", "Бренд", "Цена", "Склад", "Доставка", "Категория"].map((h) => (
-                                                    <th key={h} className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[9px] text-[var(--text-muted)] whitespace-nowrap">
-                                                      {h}
-                                                    </th>
-                                                  ))}
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                {supplierItems.map((item) => (
-                                                  <tr key={item.catalog_id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--surface-1)] transition-all">
-                                                    <td className="px-3 py-2 font-mono text-[10px] text-[var(--text-muted)] font-bold">{item.catalog_id}</td>
-                                                    <td className="px-3 py-2 font-semibold text-[var(--text-primary)] max-w-xs">{item.name}</td>
-                                                    <td className="px-3 py-2 font-mono text-[10px] text-[var(--text-muted)]">{item.oem_number || '—'}</td>
-                                                    <td className="px-3 py-2">
-                                                      <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold">{item.brand}</span>
-                                                    </td>
-                                                    <td className="px-3 py-2 font-bold text-[var(--text-primary)]">
-                                                      {item.price.toLocaleString('ru-RU')} ₽
-                                                    </td>
-                                                    <td className="px-3 py-2">
-                                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${item.stock_qty > 10 ? 'bg-emerald-50 text-emerald-700' : item.stock_qty > 0 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
-                                                        {item.stock_qty} шт.
-                                                      </span>
-                                                    </td>
-                                                    <td className="px-3 py-2 text-[var(--text-secondary)]">{item.delivery_days} дн.</td>
-                                                    <td className="px-3 py-2">
-                                                      <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase">{item.category}</span>
-                                                    </td>
-                                                  </tr>
-                                                ))}
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+              <div className="h-full">
+                <SuppliersPage />
               </div>
             )}
-
             {/* Nav: Order Intake */}
             {activeNav === 'orders' && (
               <div className="max-w-2xl mx-auto space-y-4">
@@ -1041,6 +720,7 @@ function App() {
                     title="Перетащите файл запроса на закупку"
                     description="Загружайте текстовые документы, листы предложений клиентов или экспорт писем для автоматической регистрации новых запросов в очереди приема LangGraph."
                     onImport={handleImportOrders}
+                    onFileUpload={handleFileUpload}
                   />
                 </SectionCard>
               </div>

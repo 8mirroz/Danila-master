@@ -1,0 +1,67 @@
+import os
+from dotenv import load_dotenv
+
+# Load env variables
+load_dotenv()
+
+class Settings:
+    @property
+    def TESTING(self) -> bool:
+        return os.environ.get("TESTING") == "1"
+
+    @property
+    def DATABASE_URL(self) -> str:
+        env_url = os.environ.get("DATABASE_URL")
+        if env_url and env_url.startswith(("postgresql://", "postgres://")):
+            return env_url
+        if self.TESTING:
+            return "sqlite:///test_database.db"
+        return env_url or "sqlite:///database.db"
+
+    @property
+    def DB_POOL_SIZE(self) -> int:
+        try:
+            return int(os.environ.get("DB_POOL_SIZE", "10"))
+        except ValueError:
+            return 10
+
+    @property
+    def DB_MAX_OVERFLOW(self) -> int:
+        try:
+            return int(os.environ.get("DB_MAX_OVERFLOW", "20"))
+        except ValueError:
+            return 20
+
+    @property
+    def DB_POOL_RECYCLE_SECONDS(self) -> int:
+        try:
+            return int(os.environ.get("DB_POOL_RECYCLE_SECONDS", "1800"))
+        except ValueError:
+            return 1800
+
+    @property
+    def MAX_UPLOAD_SIZE_MB(self) -> int:
+        try:
+            return int(os.environ.get("MAX_UPLOAD_SIZE_MB", "15"))
+        except ValueError:
+            return 15
+
+    @property
+    def UPLOAD_ALLOWED_EXTENSIONS(self) -> list[str]:
+        raw = os.environ.get("UPLOAD_ALLOWED_EXTENSIONS") or "pdf,xlsx,csv,jpg,jpeg,png"
+        return [ext.strip().lower().lstrip('.') for ext in raw.split(",") if ext.strip()]
+
+    @property
+    def UPLOAD_DIR(self) -> str:
+        return os.environ.get("UPLOAD_DIR") or "08_DATA/uploads"
+
+    @property
+    def ENABLE_STRICT_UPLOAD_VALIDATION(self) -> bool:
+        return os.environ.get("ENABLE_STRICT_UPLOAD_VALIDATION", "true").lower() in ("true", "1", "yes")
+
+    @property
+    def ENABLE_STRICT_TENANT_ENFORCEMENT(self) -> bool:
+        return os.environ.get("ENABLE_STRICT_TENANT_ENFORCEMENT", "true").lower() in ("true", "1", "yes")
+
+# Global singleton
+settings = Settings()

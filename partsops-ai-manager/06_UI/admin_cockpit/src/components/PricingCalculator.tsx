@@ -8,7 +8,14 @@ type MatchItem = {
 };
 
 type PricingCalculatorProps = {
-  parts: Array<{ name: string; quantity: number; best_match?: MatchItem['item'] & { price: number } }>;
+  parts: Array<{ 
+    name: string; 
+    quantity: number; 
+    best_match?: MatchItem['item'] & { 
+      price: number;
+      price_deviation_from_median?: number;
+    } 
+  }>;
   onDraftInvoice: (invoiceData: any) => void;
   requestId: string;
   isApproved: boolean; // Gated pricing step
@@ -205,9 +212,15 @@ export const PricingCalculator = ({
         <div className="border-b border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3 font-bold text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">
           Спецификация коммерческого предложения
         </div>
-        <DataTable headers={["Деталь", "Кол-во", "Выбранное предложение", "Закупка", "Итого (закупка)"]}>
+        <DataTable headers={["Деталь", "Кол-во", "Выбранное предложение", "Закупка", "Итого (закупка)", "Отклонение от медианы"]}>
           {parts.map((p, idx) => {
             const price = p.best_match?.price || 0;
+            const deviation = p.best_match?.price_deviation_from_median;
+            const deviationText = deviation !== undefined ? `${(deviation * 100).toFixed(1)}%` : '—';
+            const isAnomaly = deviation !== undefined && Math.abs(deviation) > 0.20;
+            const medianPrice = deviation !== undefined && deviation !== -1 ? Math.round(price / (deviation + 1)) : null;
+            const tooltipText = medianPrice ? `90-day median: ${medianPrice.toLocaleString()} ₽` : 'Медианная цена отсутствует';
+            
             return (
               <tr key={idx} className="border-b border-[var(--border-subtle)] text-xs">
                 <td className="px-4 py-2.5 font-semibold text-[var(--text-primary)]">{p.name}</td>
@@ -215,6 +228,16 @@ export const PricingCalculator = ({
                 <td className="px-4 py-2.5 text-[var(--text-muted)] italic">{p.best_match?.name || 'Аналог не подобран'}</td>
                 <td className="px-4 py-2.5 text-[var(--text-secondary)] font-mono">{price.toLocaleString()} ₽</td>
                 <td className="px-4 py-2.5 font-bold text-[var(--text-primary)] font-mono">{(price * p.quantity).toLocaleString()} ₽</td>
+                <td className="px-4 py-2.5 text-[var(--text-secondary)] font-mono">
+                  <span 
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      isAnomaly ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-slate-100 text-slate-700'
+                    }`}
+                    title={tooltipText}
+                  >
+                    {deviationText}
+                  </span>
+                </td>
               </tr>
             );
           })}

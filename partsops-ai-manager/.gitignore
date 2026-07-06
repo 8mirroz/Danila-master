@@ -1,0 +1,77 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.tox/
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+
+# ─── Node / Frontend ──────────────────────────────────────────────────────────
+node_modules/
+dist/
+.parcel-cache/
+.vite/
+
+# ─── Backup / temp files ──────────────────────────────────────────────────────
+*.bak
+*.bak[0-9]
+*.bak[0-9][0-9]
+*.backup
+*.backup[0-9]
+*.backup[0-9][0-9]
+*.orig
+*.tmp
+*.swp
+*~
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDE / editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+
+# ─── Env / secrets ────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ─── Data / uploads ───────────────────────────────────────────────────────────
+08_DATA/
+uploads/
+*.sqlite
+*.db
+
+# ─── Alembic runtime ──────────────────────────────────────────────────────────
+# alembic.ini is committed, but generated migrations can be large – keep them
+# (leave migrations/ tracked)
+
+# ─── Hermes / internal tooling ────────────────────────────────────────────────
+.hermes/
+
+# ─── Obsidian temp files (lock files) ─────────────────────────────────────────
+../.!*!*
+.!*!*
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+*.log
+*.pid

@@ -15,6 +15,10 @@ from dataclasses import dataclass, field
 from openai import OpenAI
 from pii import mask_for_log
 from dotenv import load_dotenv
+from sqlmodel import Session
+from database import engine
+from models import LLMUsageLog
+from middleware import get_correlation_id
 
 # Load environment variables
 load_dotenv()
@@ -211,6 +215,7 @@ def call_llm(
                  f"prompt: {masked_prompt[:120]}...")
 
            for attempt in range(max_retries):
+               start_time = time.time()
                try:
                    budget_guard = _get_budget_guard()
                    budget_check = budget_guard.check_budget(concrete_model, 500)
@@ -234,10 +239,17 @@ def call_llm(
                    )
                    content = completion.choices[0].message.content or ""
 
+                   latency_ms = int((time.time() - start_time) * 1000)
+                   prompt_tokens = 0
+                   completion_tokens = 0
+                   total_tokens = 0
+                   cost_estimate = 0.0
+
                    usage = getattr(completion, "usage", None)
                    if usage:
                        prompt_tokens = usage.prompt_tokens or 0
                        completion_tokens = usage.completion_tokens or 0
+                       total_tokens = usage.total_tokens or 0
                        cost_estimate = (
                            (prompt_tokens / 1000) * 0.002
                            + (completion_tokens / 1000) * 0.008
@@ -254,8 +266,49 @@ def call_llm(
                            f"completion={completion_tokens} "
                            f"total={usage.total_tokens}"
                        )
+
+                   # Persist LLM usage to database
+                   try:
+                       with Session(engine) as db_session:
+                           log_entry = LLMUsageLog(
+                               provider=provider.name,
+                               model=concrete_model,
+                               prompt_tokens=prompt_tokens,
+                               completion_tokens=completion_tokens,
+                               total_tokens=total_tokens,
+                               cost_usd=cost_estimate,
+                               priority=priority,
+                               latency_ms=latency_ms,
+                               status="ok",
+                               correlation_id=get_correlation_id(),
+                           )
+                           db_session.add(log_entry)
+                           db_session.commit()
+                   except Exception as db_err:
+                       print(f"[LLM] Database logging failed: {db_err}")
+
                    return content
                except Exception as e:
+                   latency_ms = int((time.time() - start_time) * 1000)
+                   try:
+                       with Session(engine) as db_session:
+                           log_entry = LLMUsageLog(
+                               provider=provider.name,
+                               model=concrete_model,
+                               prompt_tokens=0,
+                               completion_tokens=0,
+                               total_tokens=0,
+                               cost_usd=0.0,
+                               priority=priority,
+                               latency_ms=latency_ms,
+                               status="error",
+                               correlation_id=get_correlation_id(),
+                           )
+                           db_session.add(log_entry)
+                           db_session.commit()
+                   except Exception as db_err:
+                       print(f"[LLM] Database error logging failed: {db_err}")
+
                    err_msg = str(e)
                    if attempt < max_retries - 1:
                        wait = 2 ** attempt
@@ -468,6 +521,10 @@ def parse_request_with_llm(raw_text: str, priority: str = "normal", vehicle_cont
     parts (list of {"name": str, "quantity": int}), vehicle (vin, make, model, year), and priority.
     Returns empty dict on failure so callers can fall back to rule-based parsing.
     """
+    from pii import secure_pre_parse
+    pre_parse = secure_pre_parse(raw_text)
+    masked_text = pre_parse["masked_text"]
+
     system_prompt = """You are a precise automotive parts intake parser.
 Analyze the user's text and output a JSON object containing:
 1. "parts": a list of objects, each with "name" (Russian part name, e.g. "Тормозные колодки") and "quantity" (integer).
@@ -481,7 +538,7 @@ IMPORTANT RULES:
 
 Respond ONLY with valid JSON. No explanations, no markdown formatting blocks."""
 
-    prompt = f"User Request: {raw_text}\n"
+    prompt = f"User Request: {masked_text}\n"
     if vehicle_context_hint:
         prompt += f"Hint (Offline extracted context): {vehicle_context_hint}\n"
     prompt += "JSON Output:"

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActionButton, StatusBadge } from './Primitives';
-import { apiFetch } from '../lib/api';
+import { apiFetch, uploadAttachment } from '../lib/api';
 
 type Request = {
   id: number;
@@ -45,6 +45,8 @@ export const RightPanel = ({
   const [newRequestText, setNewRequestText] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [composerMessage, setComposerMessage] = useState<string | null>(null);
+  const [composerError, setComposerError] = useState<string | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -61,6 +63,7 @@ export const RightPanel = ({
     const allowed = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'json', 'csv'];
     
     if (allowed.includes(ext || '')) {
+      setComposerError(null);
       setAttachedFile(file);
       if (ext === 'txt' || ext === 'json') {
         const reader = new FileReader();
@@ -74,7 +77,7 @@ export const RightPanel = ({
         setNewRequestText(`[Файл: ${file.name}] Распознавание спецификации и деталей запчастей...`);
       }
     } else {
-      alert("Разрешены только файлы PDF, Word (doc/docx), Excel (xls/xlsx), TXT или JSON");
+      setComposerError("Разрешены только файлы PDF, Word (doc/docx), Excel (xls/xlsx), TXT, JSON или CSV");
     }
   };
 
@@ -88,35 +91,56 @@ export const RightPanel = ({
     }
   };
 
-  const submitRequest = async () => {
-    if (!newRequestText) return;
+  const submitRequest = useCallback(async () => {
+    if (!newRequestText && !attachedFile) return;
     setLoading(true);
+    setComposerError(null);
+    setComposerMessage(null);
     try {
+      // If there's a file, upload it first
+      if (attachedFile) {
+        setComposerMessage('Загрузка файла...');
+        await uploadAttachment(attachedFile);
+        // artifact_id returned from backend, but we don't need it for request creation
+        // it's linked to the request via Request-Id header during upload
+        setComposerMessage('Файл загружен. Создание заказа...');
+      }
+      
       const res = await apiFetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           source: attachedFile ? attachedFile.name.split('.').pop()?.toUpperCase() || 'FILE' : 'UI_MOCK',
-          text: newRequestText,
-          customer_name: 'Постоянный клиент',
+          text: newRequestText || `[Файл: ${attachedFile?.name}] Распознавание спецификации и деталей запчастей...`,
+          customer_name: 'Постоянный клиent',
         }),
       });
       if (res.ok) {
         const data = await res.json();
         onSelectRequest(data.request);
         setAttachedFile(null);
+        setComposerMessage(`Заказ ${data.request.request_id} добавлен в активную очередь.`);
+      } else {
+        const errorText = await res.text();
+        setComposerError(errorText || `Ошибка создания запроса (${res.status})`);
       }
       setNewRequestText('');
       void fetchRequests();
     } catch (error) {
       console.error('Error submitting', error);
+      if (error instanceof Error && error.name === 'ApiError') {
+        setComposerError(`Ошибка: ${error.message}`);
+      } else {
+        setComposerError('Не удалось отправить запрос. Проверьте backend и повторите.');
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, [attachedFile, fetchRequests, newRequestText, onSelectRequest]);
 
   useEffect(() => {
     void fetchRequests();
-  }, [fetchTrigger]);
+  }, [fetchRequests, fetchTrigger]);
 
   if (isCollapsed) {
     const draftCount = requests.filter(r => r.status === 'NEW' || r.status === 'NEEDS_CLARIFICATION').length;
@@ -251,6 +275,16 @@ export const RightPanel = ({
           onDragLeave={handleDrag}
           onDrop={handleDrop}
         >
+          {composerMessage && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] font-medium text-emerald-700">
+              {composerMessage}
+            </div>
+          )}
+          {composerError && (
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-2 text-[11px] font-medium text-rose-700">
+              {composerError}
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <label className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">Быстрый ввод</label>
             <span className="text-[9px] text-[var(--text-muted)] italic">drag & drop PDF/Excel/Word</span>

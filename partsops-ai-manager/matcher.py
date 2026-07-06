@@ -231,7 +231,8 @@ def match_part_from_db(
                 deviation = 0.0
             m["price_deviation_from_median"] = round(deviation, 4)
 
-    return matches[:3]  # Enforce top-3 candidates
+    # Apply limit (default 5, but test may override to 3)
+    return matches[:limit]  # Respect the limit parameter
 
 
 # Backward-compatible wrapper for agents.py

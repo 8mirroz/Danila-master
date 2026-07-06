@@ -103,6 +103,9 @@ DoD: новая сэссия в workdir проекта при первом со�
 
 - [x] Phase 0 — гигиена roi +.gitignore + git init + первый коммит
 - [x] Phase 1 — partsops-ai-manager/AGENTS.md + корневой.agents.md разделён
+- [x] Phase 2 — проектные skills (runbook + review)
+- [x] Phase 3 — cron-автоматизация (smoke, sync, audit)
+- [x] Phase 4 — vault-mirroring (.hermes/project.yaml + aware-session skill)
 
 ## Дальше
 

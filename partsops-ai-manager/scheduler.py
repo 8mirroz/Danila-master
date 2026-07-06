@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from typing import Callable, Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 
@@ -119,7 +119,7 @@ class Scheduler:
         return False
 
     def list_jobs(self) -> List[Dict]:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         return [
             {
                 "job_id": j.id,

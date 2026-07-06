@@ -78,3 +78,35 @@ Redesigned left navigation rail to premium glassmorphism dark-green style
 ## 🧠 Durable Fact | 2026-07-05T02:23:33+03:00
 
 Перенос Канбан-доски в боковое меню навигации и премиум-редизайн шапки дашборда
+
+## 🧠 Durable Fact | 2026-07-05T04:44:48+03:00
+
+Phase 9 Client Portal MVP — доведение проекта до финального состояния
+
+## 🧠 Durable Fact | 2026-07-05T04:53:50+03:00
+
+Полный раздел поставщиков — карточки, детали, таблица категорий
+
+## 🧠 Durable Fact | 2026-07-05T06:18:03+03:00
+
+Карточка поставщика - полноэкранная страница с вкладками
+
+## 🧠 Durable Fact | 2026-07-06T04:52:56+03:00
+
+Learning: добавлены Code Hygiene Rules, исправлен порт Vite, добавлена секция Frontend Vite-проверки
+
+## 🧠 Durable Fact | 2026-07-06T05:50:35+03:00
+
+Рефакторинг структуры проекта, улучшение безопасности Multi-Tenancy, openpyxl парсинг и маскирование PII
+
+## 🧠 Durable Fact | 2026-07-06T06:11:45+03:00
+
+Установка и настройка NASM и Codex MCP
+
+## 🧠 Durable Fact | 2026-07-06T06:13:37+03:00
+
+Удаление NASM, установка и настройка Taste Skill и подключение к Codex
+
+## 🧠 Durable Fact | 2026-07-06T07:13:33+03:00
+
+Production Stabilization Program: PostgreSQL migration track, zero-trust RBAC, secure upload pipeline

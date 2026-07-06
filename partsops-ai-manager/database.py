@@ -1,11 +1,27 @@
-import os
 from sqlmodel import SQLModel, create_engine, Session
+from settings import settings
 
-import os
-sqlite_file_name = "test_database.db" if os.environ.get("TESTING") == "1" else "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
+db_url = settings.DATABASE_URL
 
-engine = create_engine(sqlite_url, echo=False)
+# Normalize postgres:// to postgresql:// for SQLAlchemy
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+if db_url.startswith("postgresql://"):
+    engine = create_engine(
+        db_url,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_recycle=settings.DB_POOL_RECYCLE_SECONDS,
+        pool_pre_ping=True,
+        echo=False
+    )
+else:
+    engine = create_engine(
+        db_url,
+        connect_args={"check_same_thread": False} if "sqlite" in db_url else {},
+        echo=False
+    )
 
 def init_db():
     # Import all models so SQLModel.metadata knows about them

@@ -4,7 +4,7 @@ This module provides the Supplier SQLModel table and mock seed data
 for the MVP (Phase 1) testing cycle.
 """
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from sqlmodel import SQLModel, Field
 import json
 
@@ -22,7 +22,65 @@ class Supplier(SQLModel, table=True):
     reliability_score: float = Field(default=0.0)  # 0.0 – 1.0
     avg_delivery_days: int = Field(default=3)
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    status: str = Field(default="active", index=True)
+    rating_manual: Optional[float] = Field(default=None)
+    rating_auto: float = Field(default=0.0)
+    account_owner: str = ""
+    payment_terms: str = ""
+    delivery_terms: str = ""
+    currency_default: str = "RUB"
+    notes_internal: str = ""
+    last_feed_at: Optional[datetime] = None
+    last_sync_status: str = "synced"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class SupplierTable(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    table_id: str = Field(index=True, unique=True)
+    supplier_id: str = Field(index=True)
+    name: str
+    source_type: str = "excel"
+    filename: str = ""
+    version: int = 1
+    status: str = Field(default="active", index=True)
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    uploaded_by: str = "seed"
+    row_count: int = 0
+    mapped_columns_json: str = "{}"
+    validation_summary_json: str = "{}"
+    is_active: bool = Field(default=True, index=True)
+
+
+class SupplierTableRow(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    table_id: str = Field(index=True)
+    supplier_id: str = Field(index=True)
+    row_key: str = Field(index=True)
+    part_name: str
+    oem_number: str = ""
+    brand: str = ""
+    price: float = 0.0
+    currency: str = "RUB"
+    stock_qty: int = 0
+    delivery_days: int = 0
+    category: str = ""
+    raw_payload_json: str = "{}"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class SupplierActivityLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    event_id: str = Field(index=True, unique=True)
+    supplier_id: str = Field(index=True)
+    table_id: Optional[str] = Field(default=None, index=True)
+    event_type: str = Field(index=True)
+    actor_id: str = "system"
+    payload_json: str = "{}"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class SupplierCatalogItem(SQLModel, table=True):
@@ -69,6 +127,8 @@ SEED_SUPPLIERS = [
         email="ivanov@autoalliance.ru", city="Москва",
         specialization="BMW,Audi,Mercedes",
         reliability_score=0.92, avg_delivery_days=2,
+        rating_auto=0.92, rating_manual=4.8, account_owner="Ops North",
+        payment_terms="Net 14", delivery_terms="EXW Moscow", notes_internal="Стабильный премиум-поставщик",
     ),
     Supplier(
         supplier_id="SUP-002", name="ООО «ЕвроПарт»",
@@ -76,6 +136,8 @@ SEED_SUPPLIERS = [
         email="petrova@europart.ru", city="Санкт-Петербург",
         specialization="BMW,Volkswagen,Skoda",
         reliability_score=0.87, avg_delivery_days=3,
+        rating_auto=0.87, rating_manual=4.4, account_owner="Ops West",
+        payment_terms="Net 21", delivery_terms="FCA SPB",
     ),
     Supplier(
         supplier_id="SUP-003", name="ИП Смирнов (JapanAuto)",
@@ -83,6 +145,8 @@ SEED_SUPPLIERS = [
         email="smirnov@japanauto.ru", city="Новосибирск",
         specialization="Toyota,Honda,Nissan",
         reliability_score=0.78, avg_delivery_days=5,
+        status="pending", rating_auto=0.78, rating_manual=3.9, account_owner="Ops East",
+        payment_terms="Prepaid", delivery_terms="DAP NSK", last_sync_status="stale",
     ),
     Supplier(
         supplier_id="SUP-004", name="ООО «ТехСнаб»",
@@ -90,6 +154,8 @@ SEED_SUPPLIERS = [
         email="kozlov@techsnab.ru", city="Екатеринбург",
         specialization="Универсальные,Масла,Фильтры",
         reliability_score=0.95, avg_delivery_days=1,
+        rating_auto=0.95, rating_manual=4.9, account_owner="Ops Core",
+        payment_terms="Net 7", delivery_terms="Pickup",
     ),
     Supplier(
         supplier_id="SUP-005", name="ООО «МоторХаус»",
@@ -97,6 +163,8 @@ SEED_SUPPLIERS = [
         email="nikitin@motorhouse.ru", city="Краснодар",
         specialization="BMW,Mercedes,Porsche",
         reliability_score=0.83, avg_delivery_days=4,
+        status="active", rating_auto=0.83, rating_manual=4.2, account_owner="Ops South",
+        payment_terms="Net 10", delivery_terms="CPT Krasnodar",
     ),
 ]
 
@@ -177,6 +245,8 @@ def seed_database(session) -> dict:
 
     added_suppliers = 0
     added_catalog = 0
+    added_tables = 0
+    added_rows = 0
 
     for sup in SEED_SUPPLIERS:
         existing = session.exec(
@@ -206,18 +276,108 @@ def seed_database(session) -> dict:
             session.add(PriceHistoryLedger(
                 catalog_id=item.catalog_id,
                 price=round(item.price * 0.95, 2),
-                recorded_at=datetime.utcnow() - timedelta(days=60)
+                recorded_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=60)
             ))
             session.add(PriceHistoryLedger(
                 catalog_id=item.catalog_id,
                 price=round(item.price * 0.98, 2),
-                recorded_at=datetime.utcnow() - timedelta(days=30)
+                recorded_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
             ))
             session.add(PriceHistoryLedger(
                 catalog_id=item.catalog_id,
                 price=item.price,
-                recorded_at=datetime.utcnow()
+                recorded_at=datetime.now(timezone.utc).replace(tzinfo=None)
+            ))
+
+    table_cache: dict[str, SupplierTable] = {}
+    suppliers = session.exec(select(Supplier)).all()
+    for sup in suppliers:
+        table_id = f"TBL-{sup.supplier_id}"
+        existing_table = session.exec(
+            select(SupplierTable).where(SupplierTable.table_id == table_id)
+        ).first()
+        if not existing_table:
+            supplier_items = session.exec(
+                select(SupplierCatalogItem).where(SupplierCatalogItem.supplier_id == sup.supplier_id)
+            ).all()
+            existing_table = SupplierTable(
+                table_id=table_id,
+                supplier_id=sup.supplier_id,
+                name=f"Основной прайс {sup.name}",
+                filename=f"{sup.supplier_id.lower()}-catalog.xlsx",
+                source_type="excel",
+                version=1,
+                status="active",
+                uploaded_by="seed",
+                row_count=len(supplier_items),
+                mapped_columns_json=json.dumps({
+                    "part_name": "part_name",
+                    "oem_number": "oem_number",
+                    "brand": "brand",
+                    "price": "price",
+                    "stock_qty": "stock_qty",
+                    "delivery_days": "delivery_days",
+                }, ensure_ascii=False),
+                validation_summary_json=json.dumps({
+                    "valid_rows": len(supplier_items),
+                    "warnings": [] if sup.status == "active" else ["stale_feed"],
+                }, ensure_ascii=False),
+            )
+            session.add(existing_table)
+            added_tables += 1
+        table_cache[sup.supplier_id] = existing_table
+
+    session.flush()
+
+    for item in session.exec(select(SupplierCatalogItem)).all():
+        table = table_cache.get(item.supplier_id)
+        if not table:
+            continue
+        row_key = f"{table.table_id}:{item.catalog_id}"
+        existing_row = session.exec(
+            select(SupplierTableRow).where(SupplierTableRow.row_key == row_key)
+        ).first()
+        if not existing_row:
+            session.add(SupplierTableRow(
+                table_id=table.table_id,
+                supplier_id=item.supplier_id,
+                row_key=row_key,
+                part_name=item.part_name,
+                oem_number=item.oem_number,
+                brand=item.brand,
+                price=item.price,
+                currency=item.currency,
+                stock_qty=item.stock_qty,
+                delivery_days=item.delivery_days,
+                category=item.category,
+                raw_payload_json=json.dumps(item.model_dump(exclude={"id"}), ensure_ascii=False, default=str),
+            ))
+            added_rows += 1
+
+    for sup in suppliers:
+        existing_activity = session.exec(
+            select(SupplierActivityLog).where(
+                SupplierActivityLog.supplier_id == sup.supplier_id,
+                SupplierActivityLog.event_type == "supplier_seeded",
+            )
+        ).first()
+        if not existing_activity:
+            session.add(SupplierActivityLog(
+                event_id=f"SUPLOG-{sup.supplier_id}-SEEDED",
+                supplier_id=sup.supplier_id,
+                event_type="supplier_seeded",
+                actor_id="system",
+                payload_json=json.dumps({
+                    "status": sup.status,
+                    "rating_auto": sup.rating_auto,
+                    "last_sync_status": sup.last_sync_status,
+                }, ensure_ascii=False),
             ))
 
     session.commit()
-    return {"added_suppliers": added_suppliers, "added_catalog": added_catalog}
+    return {
+        "added_suppliers": added_suppliers,
+        "added_catalog": added_catalog,
+        "added_tables": added_tables,
+        "added_rows": added_rows,
+    }

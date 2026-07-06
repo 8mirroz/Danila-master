@@ -19,7 +19,7 @@ import json
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -163,7 +163,7 @@ def sync_invoice_draft(
             erp_document_type="SalesInvoice",
             idempotency_key=idempotency_key,
             status="PENDING",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         session.add(sync_log)
         session.flush()
@@ -173,8 +173,8 @@ def sync_invoice_draft(
     erp_payload = {
         "doctype": "Sales Invoice",
         "customer": invoice.customer_name,
-        "posting_date": datetime.utcnow().strftime("%Y-%m-%d"),
-        "due_date": datetime.utcnow().strftime("%Y-%m-%d"),
+        "posting_date": datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d"),
+        "due_date": datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d"),
         "currency": "RUB",
         "items": [
             {
@@ -201,14 +201,14 @@ def sync_invoice_draft(
     result = _attempt_erp_sync(sync_log, erp_payload, dry_run)
     
     # Update sync log
-    sync_log.last_attempt_at = datetime.utcnow()
+    sync_log.last_attempt_at = datetime.now(timezone.utc).replace(tzinfo=None)
     sync_log.attempt_count += 1
     
     if result["success"]:
         sync_log.status = "SUCCESS"
         sync_log.erp_document_name = result.get("erp_document_name", f"DRY-{invoice.invoice_number}")
         sync_log.erp_response_json = json.dumps(result, ensure_ascii=False)
-        sync_log.succeeded_at = datetime.utcnow()
+        sync_log.succeeded_at = datetime.now(timezone.utc).replace(tzinfo=None)
     else:
         if sync_log.attempt_count >= MAX_RETRY_ATTEMPTS:
             sync_log.status = "DLQ"
@@ -386,9 +386,9 @@ def process_payment_webhook(
         status="SUCCESS",
         attempt_count=1,
         erp_response_json=json.dumps(payload, ensure_ascii=False),
-        created_at=datetime.utcnow(),
-        last_attempt_at=datetime.utcnow(),
-        succeeded_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        last_attempt_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        succeeded_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     session.add(sync_log)
     
@@ -417,7 +417,7 @@ def process_payment_webhook(
     except StateMachineError:
         new_state = old_state
     
-    request.updated_at = datetime.utcnow()
+    request.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(request)
     
     # Emit events
@@ -516,13 +516,13 @@ def retry_sync_entry(
     result = _attempt_erp_sync(sync_log, erp_payload, dry_run)
     
     sync_log.attempt_count += 1
-    sync_log.last_attempt_at = datetime.utcnow()
+    sync_log.last_attempt_at = datetime.now(timezone.utc).replace(tzinfo=None)
     
     if result["success"]:
         sync_log.status = "SUCCESS"
         sync_log.erp_document_name = result.get("erp_document_name")
         sync_log.erp_response_json = json.dumps(result, ensure_ascii=False)
-        sync_log.succeeded_at = datetime.utcnow()
+        sync_log.succeeded_at = datetime.now(timezone.utc).replace(tzinfo=None)
     else:
         if sync_log.attempt_count >= MAX_RETRY_ATTEMPTS:
             sync_log.status = "DLQ"

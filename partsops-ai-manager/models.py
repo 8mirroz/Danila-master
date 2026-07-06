@@ -148,6 +148,10 @@ class PartRequest(SQLModel, table=True):
     audit_chain_complete: bool = Field(default=False)
     raw_input_ref: Optional[str] = None           # blob reference to original text
 
+    # Client Portal (Phase 9) — публичный токен для отслеживания заявки клиентом
+    tracking_token: Optional[str] = Field(default=None, index=True, unique=True)
+    tracking_token_expires_at: Optional[datetime] = None
+
 
 # ──────────────────────────────────────────────
 # EVENT STORE (append-only log)
@@ -196,6 +200,7 @@ class EventType(str, Enum):
     GOLDEN_SAMPLE_CREATED = "GOLDEN_SAMPLE_CREATED"
     PII_MASKED = "PII_MASKED"
     IDEMPOTENCY_HIT = "IDEMPOTENCY_HIT"
+    SLA_BREACHED = "SLA_BREACHED"
 
 
 # ──────────────────────────────────────────────
@@ -428,7 +433,7 @@ class LLMUsageLog(SQLModel, table=True):
     priority: str = Field(default="normal")
     latency_ms: Optional[int] = None
     status: str = Field(default="ok")  # ok|blocked|error
-    error: Optional[str] = None
+    correlation_id: Optional[str] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

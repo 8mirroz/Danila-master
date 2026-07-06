@@ -161,9 +161,14 @@ export const AuditTimeline = ({ requestId }: AuditTimelineProps) => {
         <InlineAlert 
           type={integrity.valid ? 'success' : 'danger'}
           message={
-            integrity.valid 
-              ? 'Целостность цепочки событий: ПОДТВЕРЖДЕНА (хеш-код SHA-256 не изменен)' 
-              : `Внимание! Цепочка событий нарушена на ID события: ${integrity.broken_at_event_id}`
+            <div className="flex items-center gap-2">
+              <i className={`fas ${integrity.valid ? 'fa-lock text-green-700 text-sm' : 'fa-lock-open text-red-700 text-sm animate-pulse'}`}></i>
+              <span>
+                {integrity.valid 
+                  ? 'Целостность цепочки событий: ПОДТВЕРЖДЕНА (хеш-код SHA-256 не изменен)' 
+                  : `Внимание! Цепочка событий нарушена на ID события: ${integrity.broken_at_event_id}`}
+              </span>
+            </div>
           }
         />
       )}
@@ -282,7 +287,26 @@ export const AuditTimeline = ({ requestId }: AuditTimelineProps) => {
 
               {event.payload && Object.keys(event.payload).length > 0 && (
                 <div className="mt-2 max-h-36 overflow-y-auto rounded-[16px] border border-[var(--border-default)] bg-[var(--surface-2)] p-2.5 font-mono text-[11px] leading-relaxed text-[var(--text-secondary)] shadow-inner">
-                  <pre className="whitespace-pre-wrap">{JSON.stringify(event.payload, null, 2)}</pre>
+                  {event.event_type === 'STATE_CHANGED' ? (
+                    <div className="space-y-1 font-sans">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 line-through font-mono">
+                          {event.payload.from}
+                        </span>
+                        <i className="fas fa-arrow-right text-[var(--text-muted)] text-[10px]"></i>
+                        <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 font-mono">
+                          {event.payload.to}
+                        </span>
+                      </div>
+                      {event.payload.reason && (
+                        <div className="text-[10px] text-[var(--text-secondary)] mt-1">
+                          <strong>Причина:</strong> {event.payload.reason}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap">{JSON.stringify(event.payload, null, 2)}</pre>
+                  )}
                 </div>
               )}
 

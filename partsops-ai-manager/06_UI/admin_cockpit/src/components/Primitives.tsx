@@ -540,16 +540,20 @@ interface DropzoneProps {
   title: string;
   description: string;
   onImport: (text: string) => void;
+  onFileUpload?: (file: File) => Promise<string>; // returns artifact_id
   acceptLabel?: string;
 }
 export const Dropzone: React.FC<DropzoneProps> = ({
   title,
   description,
   onImport,
+  onFileUpload,
   acceptLabel = "Разрешены файлы JSON или TXT",
 }) => {
   const [dragActive, setDragActive] = React.useState(false);
   const [pasteText, setPasteText] = React.useState('');
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -561,13 +565,27 @@ export const Dropzone: React.FC<DropzoneProps> = ({
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
+      await handleFile(file);
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      await handleFile(file);
+    }
+  };
+
+  const handleFile = async (file: File) => {
+    if (!onFileUpload) {
+      // Fallback to text reading for backward compatibility
       const reader = new FileReader();
       reader.onload = (event) => {
         if (event.target?.result) {
@@ -575,6 +593,32 @@ export const Dropzone: React.FC<DropzoneProps> = ({
         }
       };
       reader.readAsText(file);
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    
+    try {
+      // Simulate progress for UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90));
+      }, 100);
+      
+      const artifactId = await onFileUpload(file);
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      // Pass artifact reference to onImport
+      onImport(`[Файл: ${file.name}] Артефакт загружен: ${artifactId}. Распознавание спецификации и деталей запчастей...`);
+    } catch (error) {
+      console.error('File upload error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Ошибка загрузки файла';
+      onImport(`[ОШИБКА загрузки ${file.name}]: ${errorMsg}`);
+    } finally {
+      setUploading(false);
+      setTimeout(() => setUploadProgress(0), 500);
     }
   };
 
@@ -585,31 +629,65 @@ export const Dropzone: React.FC<DropzoneProps> = ({
         onDragOver={handleDrag}
         onDragLeave={handleDrag}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
+        className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${
           dragActive
-            ? 'border-[var(--accent-primary)] bg-blue-50/50'
-            : 'border-[var(--border-strong)] hover:border-[var(--text-muted)] bg-[var(--surface-2)]'
+            ? 'border-[var(--accent-primary)] bg-[var(--state-selected)] shadow-[0_0_12px_rgba(0,180,157,0.1)]'
+            : 'border-[var(--border-strong)] hover:border-[var(--accent-primary)]/50 bg-[var(--surface-2)]'
         }`}
       >
-        <i className="fas fa-cloud-arrow-up text-2xl text-[var(--text-muted)] mb-3"></i>
+        <i className="fas fa-cloud-arrow-up text-2xl text-[var(--accent-primary)] mb-3 animate-bounce"></i>
         <strong className="text-xs text-[var(--text-primary)] font-semibold block mb-1">{title}</strong>
         <p className="text-[11px] text-[var(--text-secondary)] max-w-xs leading-relaxed">{description}</p>
         <span className="text-[9px] text-[var(--text-muted)] font-mono mt-3 uppercase tracking-wider block">{acceptLabel}</span>
+        
+        {/* File input for click-to-upload */}
+        <input
+          type="file"
+          className="hidden"
+          id="dropzone-file-input"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.json,.csv"
+          onChange={handleFileSelect}
+          disabled={uploading}
+        />
+        <label
+          htmlFor="dropzone-file-input"
+          className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-2)] cursor-pointer transition-all"
+        >
+          <i className="fas fa-paperclip"></i>
+          Или выберите файл
+        </label>
       </div>
 
+      {/* Upload progress */}
+      {uploading && (
+        <div className="w-full">
+          <div className="flex justify-between text-[10px] text-[var(--text-muted)] mb-1">
+            <span>Загрузка файла...</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="w-full h-2 bg-[var(--surface-3)] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[var(--accent-primary)] transition-all duration-300 ease-out"
+              style={{ width: `${uploadProgress}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
-        <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold block">Или вставьте сырой текст</label>
+        <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-extrabold block">Или вставьте сырой текст</label>
         <textarea
           rows={4}
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
           placeholder="Вставьте JSON поставщиков или текст запроса клиента..."
-          className="w-full border border-[var(--border-default)] rounded-md p-2.5 bg-[var(--surface-1)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] font-mono"
+          className="w-full border border-[var(--border-default)] rounded-xl p-3 bg-[var(--surface-1)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]/20 font-mono shadow-inner transition-all duration-200"
+          disabled={uploading}
         />
         <ActionButton 
           variant="primary" 
           icon="fa-paper-plane"
-          disabled={!pasteText.trim()}
+          disabled={!pasteText.trim() || uploading}
           onClick={() => {
             onImport(pasteText);
             setPasteText('');
@@ -810,7 +888,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 // 17. InlineAlert
 // ==========================================
 interface InlineAlertProps {
-  message: string;
+  message: string | React.ReactNode;
   type?: 'warning' | 'danger' | 'success' | 'info';
 }
 export const InlineAlert: React.FC<InlineAlertProps> = ({

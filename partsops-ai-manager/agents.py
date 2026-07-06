@@ -12,6 +12,7 @@ from langgraph.graph import StateGraph, END
 from database import engine
 from sqlmodel import Session as SyncSession
 from matcher import match_part_from_db
+from models import PartRequest
 from pricing import compute_price, check_margin_guard, PricingContext
 from llm import call_llm, parse_request_with_llm, resolve_model
 
@@ -427,6 +428,61 @@ workflow.add_edge("pricing_guard", END)
 
 # Compile the swarm graph
 intake_app = workflow.compile()
+
+
+def gates_checker_node(state: IntakeState) -> Dict:
+    """Evaluate all 7 protective gates to determine if auto-advance is allowed."""
+    from policy_engine import policy_engine
+    
+    trace = list(state.get("agent_trace", []))
+    trace.append("Gates Checker: Evaluating all 7 protective gates")
+    
+    temp_req = PartRequest(
+        request_id=state.get("request_id", "TEMP-REQ"),
+        tenant_id=state.get("tenant_id", "default"),
+        parts_json=json.dumps(state.get("extracted_parts", [])),
+        pricing_evidence_json=json.dumps(state.get("pricing_evidence", {})),
+        customer_name=state.get("customer_name") or "John Doe",
+        customer_phone_masked=state.get("customer_phone") or "",
+        customer_email_masked=state.get("customer_email") or "",
+        vehicle_vin_masked=state.get("vehicle_vin") or "",
+    )
+    
+    with SyncSession(engine) as session:
+        auto_advance = policy_engine.auto_advance_policy(temp_req, session)
+        
+    trace.append(f"Gates Checker: auto_advance_allowed={auto_advance}")
+    return {
+        "auto_advance_allowed": auto_advance,
+        "agent_trace": trace
+    }
+
+
+# Build full pipeline graph (Phase 8)
+full_workflow = StateGraph(IntakeState)
+full_workflow.add_node("classifier", intake_classifier_node)
+full_workflow.add_node("vin_inspector", vin_inspector_node)
+full_workflow.add_node("extractor", parts_extractor_node)
+full_workflow.add_node("scatter_gather", supplier_scatter_gather_node)
+full_workflow.add_node("pricing_guard", pricing_guard_node)
+full_workflow.add_node("gates_checker", gates_checker_node)
+
+full_workflow.set_entry_point("classifier")
+full_workflow.add_conditional_edges(
+    "classifier",
+    route_after_classifier,
+    {
+        END: END,
+        "vin_inspector": "vin_inspector"
+    }
+)
+full_workflow.add_edge("vin_inspector", "extractor")
+full_workflow.add_edge("extractor", "scatter_gather")
+full_workflow.add_edge("scatter_gather", "pricing_guard")
+full_workflow.add_edge("pricing_guard", "gates_checker")
+full_workflow.add_edge("gates_checker", END)
+
+full_pipeline_graph = full_workflow.compile()
 
 
 def process_intake_request(text: str, priority: str = "normal", vehicle_context: dict = None) -> dict:

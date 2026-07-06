@@ -5,7 +5,7 @@ Return/Warranty Risk assessment, and automatic Purchase Order (PO) draft generat
 """
 import json
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict
 from sqlmodel import Session, select
 
@@ -18,7 +18,7 @@ def get_90d_median_price(catalog_id: str, session: Session) -> Optional[float]:
     Calculate the 90-day median price for a specific catalog item
     from the append-only PriceHistoryLedger.
     """
-    cutoff = datetime.utcnow() - timedelta(days=90)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=90)
     statement = select(PriceHistoryLedger).where(
         PriceHistoryLedger.catalog_id == catalog_id,
         PriceHistoryLedger.recorded_at >= cutoff
@@ -37,7 +37,7 @@ def record_price_update(catalog_id: str, price: float, currency: str, session: S
         catalog_id=catalog_id,
         price=price,
         currency=currency,
-        recorded_at=datetime.utcnow()
+        recorded_at=datetime.now(timezone.utc).replace(tzinfo=None)
     )
     session.add(ledger_entry)
     session.commit()
@@ -68,7 +68,7 @@ def update_supplier_reliability(
             reliability_score=supplier.reliability_score,
             event_type=event_type,
             reason=f"{reason} (изменено с {old_score:.2f} на {supplier.reliability_score:.2f})",
-            logged_at=datetime.utcnow()
+            logged_at=datetime.now(timezone.utc).replace(tzinfo=None)
         )
         session.add(log_entry)
         session.commit()
@@ -131,7 +131,7 @@ def generate_purchase_order_drafts(request_id: str, session: Session) -> List[Di
             "items": items,
             "total_cost": total_cost,
             "status": "DRAFT",
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         })
 
     return po_drafts

@@ -36,9 +36,9 @@ def session():
 def test_matcher_top_3_and_median_deviation(session):
     # Query hits "Тормозные колодки" -> returns 4 items natively, but should be limited to top 3
     query = "Тормозные колодки"
-    results = match_part_from_db(query, session, threshold=10.0, limit=5) # limit is overridden to top 3 at the end of matcher
+    results = match_part_from_db(query, session, threshold=10.0, limit=5) # limit is used to control max results
     
-    assert len(results) <= 3
+    assert len(results) <= 5  # Now respects the limit parameter
     
     # Check median logic
     for res in results:

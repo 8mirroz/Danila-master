@@ -66,6 +66,11 @@ try:
         quote_policy_check_job,
         supplier_match_job,
         supplier_validate_job,
+        auto_advance_job,
+        sla_watchdog_job,
+        supplier_recalc_job,
+        golden_regression_job,
+        price_snapshot_job,
     )
 
     def _init_registry() -> None:
@@ -88,6 +93,11 @@ try:
         register_job("quote_policy_check", quote_policy_check_job.run)
         register_job("supplier_match", supplier_match_job.run)
         register_job("supplier_validate", supplier_validate_job.run)
+        register_job("auto_advance", auto_advance_job.run)
+        register_job("sla_watchdog", sla_watchdog_job.run)
+        register_job("supplier_recalc", supplier_recalc_job.run)
+        register_job("golden_regression", golden_regression_job.run)
+        register_job("price_snapshot", price_snapshot_job.run)
 
     _init_registry()
 except Exception as exc:  # noqa: BLE001

@@ -2,12 +2,13 @@
 PartsOps AI Manager v3 — Role-Based Access Control (RBAC) & Multi-tenancy.
 
 Security rule:
-- X-Tenant-ID and X-User-Role are trusted only with a valid Bearer token.
-- When PARTSOPS_API_TOKEN is not configured, the app runs in local-dev mode.
+- Zero-trust tenant boundary: tenant_id is extracted from secure signed claims when available.
+- Master API token remains supported for backward-compatible/admin tools.
 """
 from __future__ import annotations
 
 import hmac
+import hashlib
 import os
 from dataclasses import dataclass
 from typing import Optional, List
@@ -42,17 +43,34 @@ def _parse_bearer_token(authorization: Optional[str]) -> Optional[str]:
     return value.strip()
 
 
-def _is_authenticated(authorization: Optional[str]) -> bool:
-    expected = _get_api_token()
-    provided = _parse_bearer_token(authorization)
-    return bool(expected and provided and hmac.compare_digest(provided, expected))
-
-
 def _normalize_role(role: Optional[str]) -> str:
     normalized = (role or DEFAULT_ROLE).lower()
     if normalized not in ALLOWED_ROLES:
         raise HTTPException(status_code=403, detail=f"Некорректная роль: {normalized}")
     return normalized
+
+
+def create_signed_token(tenant_id: str, role: str, secret: str) -> str:
+    """Generate a secure signed token encoding tenant and role claims."""
+    payload = f"{tenant_id}:{role}"
+    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{signature}"
+
+
+def verify_signed_token(token: str, secret: str) -> Optional[tuple[str, str]]:
+    """Decode and verify signed claims token."""
+    try:
+        parts = token.split(":")
+        if len(parts) != 3:
+            return None
+        tenant_id, role, signature = parts
+        payload = f"{tenant_id}:{role}"
+        expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if hmac.compare_digest(signature, expected_sig):
+            return tenant_id, role
+    except Exception:
+        pass
+    return None
 
 
 def get_current_principal(
@@ -61,29 +79,51 @@ def get_current_principal(
     authorization: Optional[str] = Header(default=None),
 ) -> CurrentPrincipal:
     """
-    Resolve request principal.
-
-    In production-like mode (PARTSOPS_API_TOKEN set), tenant and role headers are
-    accepted only after token validation. This prevents trivial tenant/role spoofing.
-    In local dev/test mode (no token), headers remain usable for demos.
+    Resolve request principal with zero-trust boundary check.
     """
     token_configured = _get_api_token() is not None
-    authenticated = _is_authenticated(authorization)
+    provided_token = _parse_bearer_token(authorization)
 
-    if token_configured and not authenticated:
-        # Keep unauthenticated reads inside default tenant and lowest operational role.
-        return CurrentPrincipal(
-            tenant_id=DEFAULT_TENANT,
-            role=DEFAULT_ROLE,
-            authenticated=False,
-            auth_mode="token",
-        )
+    if token_configured:
+        if not provided_token:
+            # Keep unauthenticated reads inside default tenant and lowest operational role.
+            return CurrentPrincipal(
+                tenant_id=DEFAULT_TENANT,
+                role=DEFAULT_ROLE,
+                authenticated=False,
+                auth_mode="token",
+            )
 
+        secret = _get_api_token()
+
+        # 1. First priority: verify as a secure signed token
+        claims = verify_signed_token(provided_token, secret)
+        if claims:
+            tenant_id, role = claims
+            return CurrentPrincipal(
+                tenant_id=tenant_id,
+                role=_normalize_role(role),
+                authenticated=True,
+                auth_mode="token",
+            )
+
+        # 2. Second priority: master token fallback (backward compatibility)
+        if hmac.compare_digest(provided_token, secret):
+            return CurrentPrincipal(
+                tenant_id=(x_tenant_id or DEFAULT_TENANT),
+                role=_normalize_role(x_user_role),
+                authenticated=True,
+                auth_mode="token",
+            )
+
+        raise HTTPException(status_code=403, detail="Неверная подпись токена")
+
+    # Local dev mode (no token configured on server)
     return CurrentPrincipal(
         tenant_id=(x_tenant_id or DEFAULT_TENANT),
         role=_normalize_role(x_user_role),
-        authenticated=authenticated,
-        auth_mode="token" if token_configured else "dev",
+        authenticated=False,
+        auth_mode="dev",
     )
 
 
@@ -92,7 +132,7 @@ def require_privileged_access(
 ) -> bool:
     """Require authentication when PARTSOPS_API_TOKEN is configured."""
     if principal.auth_mode == "token" and not principal.authenticated:
-        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <PARTS...KEN>")
+        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <token>")
     return True
 
 
@@ -100,6 +140,9 @@ def get_privileged_tenant(
     principal: CurrentPrincipal = Depends(get_current_principal),
 ) -> str:
     """Return the safe tenant for the current request."""
+    # Ensure unauthenticated token access is blocked for privileged endpoints
+    if principal.auth_mode == "token" and not principal.authenticated:
+        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <token>")
     return principal.tenant_id
 
 
@@ -113,7 +156,7 @@ def get_current_role(
     principal: CurrentPrincipal = Depends(get_current_principal),
 ) -> str:
     if principal.auth_mode == "token" and not principal.authenticated:
-        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <PARTS...KEN>")
+        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <token>")
     return principal.role
 
 
@@ -123,7 +166,7 @@ class RoleChecker:
 
     def __call__(self, principal: CurrentPrincipal = Depends(get_current_principal)) -> str:
         if principal.auth_mode == "token" and not principal.authenticated:
-            raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <PARTS...KEN>")
+            raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <token>")
         if principal.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=403,

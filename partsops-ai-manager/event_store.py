@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -73,7 +73,7 @@ def emit_event(
         event_type=event_type,
         actor_type=actor_type,
         actor_id=actor_id,
-        occurred_at=datetime.utcnow(),
+        occurred_at=datetime.now(timezone.utc).replace(tzinfo=None),
         payload_json=json.dumps(payload or {}, ensure_ascii=False, default=str),
         evidence_refs_json=json.dumps(evidence_refs or [], ensure_ascii=False, default=str),
         previous_event_hash=_get_last_event_hash(request_id, session, tenant_id),
@@ -157,3 +157,25 @@ def emit_state_change(
         tenant_id=tenant_id,
         commit=commit,
     )
+
+def append_request_event(
+    session: Session,
+    request_id: str,
+    tenant_id: str,
+    event_type: str,
+    actor_type: str = "system",
+    actor_id: str = "system",
+    payload: Optional[dict] = None,
+) -> RequestEvent:
+    """Alias for emit_event with tenant_id required."""
+    return emit_event(
+        session=session,
+        request_id=request_id,
+        event_type=event_type,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        payload=payload,
+        tenant_id=tenant_id,
+        commit=False,
+    )
+

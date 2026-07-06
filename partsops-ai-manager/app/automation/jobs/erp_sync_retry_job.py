@@ -21,6 +21,7 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
 
     retried = 0
     skipped = 0
+    from erp_adapter import retry_sync_entry
     for sync_id in sync_ids:
         log = session.exec(
             select(ERPSyncLog).where(ERPSyncLog.tenant_id == context.tenant_id)
@@ -29,21 +30,21 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
         if not log or not log.request_id:
             skipped += 1
             continue
-        row = session.exec(
-            select(PartRequest).where(PartRequest.tenant_id == context.tenant_id)
-            .where(PartRequest.request_id == log.request_id)
-        ).first()
-        if not row:
-            skipped += 1
-            continue
-        append_request_event(
-            session=session,
-            request_id=log.request_id,
-            tenant_id=context.tenant_id,
-            event_type=EventType.ERP_SYNC_FAILED,
-            actor_type="automation",
-            actor_id=context.actor_id,
-            payload={"sync_id": sync_id, "retry": True},
-        )
-        retried += 1
+        
+        # Real retry execution
+        res = retry_sync_entry(log, session, dry_run=False)
+        if res["status"] == "SUCCESS":
+            retried += 1
+        else:
+            append_request_event(
+                session=session,
+                request_id=log.request_id,
+                tenant_id=context.tenant_id,
+                event_type=EventType.ERP_SYNC_FAILED,
+                actor_type="automation",
+                actor_id=context.actor_id,
+                payload={"sync_id": sync_id, "retry": True, "error": log.last_error},
+            )
+            retried += 1
+            
     return {"ok": True, "retried": retried, "skipped": skipped}

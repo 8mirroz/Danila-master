@@ -33,7 +33,7 @@ curl -s -H "Authorization: Bearer test-token" -H "X-Tenant-ID: default" http://l
 Frontend (через Vite):
 ```bash
 cd partsops-ai-manager/06_UI/admin_cockpit
-npm install && npm run dev -- --port 3000
+npm install && npm run dev
 ```
 
 ## Обязательные non-negotiables
@@ -46,6 +46,32 @@ npm install && npm run dev -- --port 3000
 6. **События в Event Store emit'ятся атомарно с основной операцией.** End-of-request не означает end-of-record.
 7. **PII — до агент-слоя.** Все совпадения с PHI/PII/обиды проходят через `pii.*` функции перед логированием.
 8. **Тесты — с фикстурами тестовой БД в памяти.** Никаких изменений в `database.db` в продакшене из кода тестов.
+
+## 🛡️ Agent Safety Rules (выучены на опыте)
+
+### Работа с файлами
+- **view_file output ≠ file content** — вывод `view_file` содержит `<N>: ` префиксы перед каждой строкой. Этот вывод **НИКОГДА** не должен напрямую использоваться как содержимое для `write_to_file` / `replace_file_content`. Брать только чистый контент.
+- **Синтаксис перед перезапуском**: выполнить `python3 -m py_compile main.py` ДО `kill` старого процесса.
+- **Порядок hot-patch**: `patch → validate → kill → start`. Никогда `kill → patch → start`.
+- **Запрещены `.bak`, `.bak2`, `.backup` файлы** — использовать `git stash` или git-ветки.
+
+### CORS / порты
+- Frontend Vite: default порт **5173**, может занять **5174** если 5173 занят. Проверять: `ps aux | grep vite`.
+- CORS origins: хранить только в `.env` → `PARTSOPS_CORS_ORIGINS`. **Не хардкодить в `main.py`**.
+- Диагностика «фронт не работает»:
+  1. `ps aux | grep vite` → узнать реальный порт
+  2. `grep CORS .env` → сравнить с портом
+  3. `curl http://localhost:8000/` → проверить бэкенд
+
+### TypeScript / Vite
+- После любого рефакторинга TSX: `npx tsc --noEmit -p tsconfig.app.json`.
+- Закомментированная переменная не должна иметь живых ссылок в коде.
+- `TS2304` (Cannot find name) — **блокирует Vite runtime** → белый экран.
+- `TS6133` (noUnusedLocals) — не блокирует runtime, но нежелателен.
+
+### main.py — монолит
+- Файл `main.py` содержит ~74KB и 38 эндпоинтов. **Не добавлять новые эндпоинты в main.py**.
+- Новая логика → `routers/` и `services/`. Использовать существующую структуру как точку входа.
 
 ## Структура кода
 
@@ -124,6 +150,11 @@ python3 -m pytest tests/ --cov=. --cov-report=term-missing
 - ❌ Не коммить `.env`, `*.db`, `__pycache__/`.
 - ❌ Не трогай `DM obs/` — это Obsidian vault, синхронизируется скриптом.
 - ❌ Не добавляй node_modules/ или сборки frontend в main репо.
+
+## Frontend Vite-проверки
+- После изменений в `06_UI/admin_cockpit/src/`: `npx tsc --noEmit -p tsconfig.app.json`.
+- Vite dev-server: default порт 5173 (не 3000).
+- `TS6133` (noUnusedLocals) не блокирует Vite runtime, но `TS2304` — блокирует трансформацию → белый экран.
 
 ## Obsidian
 

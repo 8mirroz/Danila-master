@@ -209,6 +209,79 @@ class PolicyEngine:
             return "reject_invalid"
         return "continue_extraction"
 
+    def auto_advance_policy(
+        self,
+        request: PartRequest,
+        session: Session,
+    ) -> bool:
+        """
+        Проверяет, подходит ли заявка для авто-продвижения:
+        - min_match_score >= 70.0
+        - margin <= 50%
+        - min_supplier_reliability >= 0.80
+        - require_all_gates: все гейты (кроме OPERATOR_APPROVAL и ERP_SYNC_VALID) должны возвращать passed = True
+        """
+        if not request.parts_json:
+            return False
+        try:
+            parts = json.loads(request.parts_json)
+        except Exception:
+            return False
+            
+        if not parts:
+            return False
+            
+        # Check matching score
+        for part in parts:
+            score = part.get("match_score", 0.0)
+            if score < 70.0:
+                return False
+                
+        # Check pricing & margin
+        if not request.pricing_evidence_json:
+            return False
+        try:
+            evidence = json.loads(request.pricing_evidence_json)
+        except Exception:
+            return False
+            
+        line_items = evidence.get("line_items", [])
+        if not line_items:
+            return False
+            
+        for item in line_items:
+            margin = item.get("margin", 0.0)
+            if margin < 0.10 or margin > 0.50:
+                return False
+                
+        # Check supplier reliability
+        for item in line_items:
+            reliability = item.get("supplier_reliability", 1.0)
+            if reliability < 0.80:
+                return False
+                
+        # Check gates (PII_SAFE, EVENT_CHAIN_VALID, MATCH_CONFIDENCE, PRICING_POLICY, DELIVERY_SAFE)
+        payload_to_check = {
+            "customer_name": request.customer_name or "",
+            "customer_phone": request.customer_phone_masked or "",
+            "customer_email": request.customer_email_masked or "",
+            "vehicle_vin": request.vehicle_vin_masked or "",
+            "parts_json": request.parts_json or "[]",
+        }
+        
+        if not EvidenceGates.gate_pii_safe(payload_to_check)["passed"]:
+            return False
+        if not EvidenceGates.gate_event_chain_valid(request.request_id, session, request.tenant_id)["passed"]:
+            return False
+        if not EvidenceGates.gate_match_confidence(request)["passed"]:
+            return False
+        if not EvidenceGates.gate_pricing_policy(request)["passed"]:
+            return False
+        if not EvidenceGates.gate_delivery_safe(payload_to_check)["passed"]:
+            return False
+            
+        return True
+
 
 # Singleton-экземпляр
 policy_engine = PolicyEngine()
