@@ -9,7 +9,7 @@ Phase 1: Runtime Foundation
 - Audit Timeline endpoint
 - ERP Sync Log
 """
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
@@ -676,6 +676,97 @@ def get_invoices(
         }
         for invoice in invoices
     ]
+
+
+# ──────────────────────────────────────────────
+# ERP Sync & Webhooks (Phase 4)
+# ──────────────────────────────────────────────
+
+@app.post("/api/erp/sync/{request_id}")
+def manual_erp_sync(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+    role: str = Depends(RoleChecker(["admin", "finance", "manager"])),
+):
+    """Manually trigger invoice draft synchronization to ERPNext."""
+    from erp_adapter import sync_invoice_draft
+    result = sync_invoice_draft(request_id, session, tenant_id=tenant_id)
+    if result["status"] == "ERROR":
+        raise HTTPException(status_code=400, detail=result["reason"])
+    return result
+
+
+@app.post("/api/erp/webhook")
+async def erp_webhook(
+    request: Request,
+    session: Session = Depends(get_session),
+    x_signature_sha256: Optional[str] = Header(default=None),
+):
+    """Incoming webhook from ERPNext with HMAC-SHA256 verification."""
+    from erp_adapter import verify_webhook_signature, process_payment_webhook
+    
+    body_bytes = await request.body()
+    if not x_signature_sha256 or not verify_webhook_signature(body_bytes, x_signature_sha256):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+    
+    try:
+        payload = json.loads(body_bytes.decode("utf-8"))
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        
+    result = process_payment_webhook(payload, session)
+    if result["status"] == "ERROR":
+        raise HTTPException(status_code=400, detail=result["reason"])
+        
+    return result
+
+
+@app.get("/api/erp/outbox")
+def get_erp_outbox(
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+    role: str = Depends(RoleChecker(["admin", "finance"])),
+):
+    """Get pending, retrying, and DLQ entries from the ERP sync log."""
+    from erp_adapter import get_pending_outbox, get_dlq_entries
+    from models import ERPSyncLog
+    
+    pending = get_pending_outbox(session, tenant_id=tenant_id)
+    dlq = get_dlq_entries(session, tenant_id=tenant_id)
+    
+    # Also fetch recent successes
+    successes = session.exec(
+        select(ERPSyncLog).where(
+            ERPSyncLog.tenant_id == tenant_id,
+            ERPSyncLog.status == "SUCCESS"
+        ).order_by(ERPSyncLog.succeeded_at.desc()).limit(20)
+    ).all()
+    
+    return {
+        "pending": pending,
+        "dlq": dlq,
+        "recent_successes": successes,
+    }
+
+
+@app.post("/api/erp/outbox/process")
+def process_pending_outbox(
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+    role: str = Depends(RoleChecker(["admin", "finance"])),
+):
+    """Manually trigger processing of all pending outbox entries."""
+    from erp_adapter import get_pending_outbox, retry_sync_entry
+    
+    pending = get_pending_outbox(session, tenant_id=tenant_id)
+    processed = []
+    
+    for entry in pending:
+        res = retry_sync_entry(entry, session)
+        processed.append(res)
+        
+    return {"processed_count": len(processed), "results": processed}
 
 
 @app.post("/api/pricing/preview/{request_id}")

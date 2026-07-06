@@ -99,9 +99,16 @@ DoD: новая сэссия в workdir проекта при первом со�
 
 ---
 
-## Что **не** делаем на этой фазе
+## Current status
 
-Сознательно оставляем за скоупом:
+- [x] Phase 0 — гигиена roi +.gitignore + git init + первый коммит
+- [x] Phase 1 — partsops-ai-manager/AGENTS.md + корневой.agents.md разделён
+
+## Дальше
+
+Стартуй Phase 2 (skills) или Phase 3 (cron) — в любом Николай.
+
+---
 - Рефактор `main.py` в routers/services (вариант 4 из твоего вопроса).
 - Реальный file-upload backend (вариант 2) — это самостоятельная задача после Phase 1–2.
 - Любые supplements к `partsops_bot/` — это отдельный git, hermes обвязку под него делаем только в Phase 0 (решить судьбу).
