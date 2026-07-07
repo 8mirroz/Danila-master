@@ -46,45 +46,127 @@ class ProviderConfig:
         return [self.default_model]
 
 
+# ──────────────────────────────────────────────
+# OpenRouter Free Model Pool (актуально 2026-07)
+# Все модели с pricing.prompt=0 и pricing.completion=0
+# Источник: https://openrouter.ai/api/v1/models
+# ──────────────────────────────────────────────
+_OPENROUTER_FREE_POOL: List[str] = [
+    # Топ-7 по context + качеству — все 100% бесплатные
+    "meta-llama/llama-3.3-70b-instruct:free",        # 70B, ctx=131072, лучшее качество
+    "openai/gpt-oss-120b:free",                       # 120B, ctx=131072, OpenAI OSS
+    "openai/gpt-oss-20b:free",                        # 20B, ctx=131072, быстрый
+    "qwen/qwen3-coder:free",                          # ctx=1M, отлично для JSON
+    "google/gemma-4-31b-it:free",                     # 31B, ctx=262144, Google
+    "nvidia/nemotron-3-super-120b-a12b:free",         # 120B, ctx=1M, NVIDIA
+    "meta-llama/llama-3.2-3b-instruct:free",          # 3B, ctx=131072, быстрый fallback
+]
+
+
 def _load_providers() -> List[ProviderConfig]:
-    """Build provider list from env vars. Order = fallback priority."""
+    """Build provider list from env vars. Order = fallback priority.
+    
+    Приоритет:
+    1. OpenRouter (бесплатные модели, 7 штук в пуле) — если есть OR ключ
+    2. NVIDIA NIM (быстрые модели вперёд, исправленный порядок)
+    3. Ollama (локальный, если запущен)
+    4. LM Studio (локальный fallback)
+    5. MOCK (только при TESTING=1, <1ms, детерминированный)
+    """
     providers: List[ProviderConfig] = []
 
-    # 1. NVIDIA NIM (primary cloud)
+    # 1. OpenRouter FREE — самый широкий пул бесплатных моделей
+    or_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if or_key:
+        # Модель по умолчанию из env или первая в пуле
+        or_default = os.environ.get(
+            "OPENROUTER_MODEL",
+            _OPENROUTER_FREE_POOL[0],
+        )
+        providers.append(ProviderConfig(
+            name="openrouter",
+            base_url="https://openrouter.ai/api/v1",
+            api_key=or_key,
+            default_model=or_default,
+            model_pool=_OPENROUTER_FREE_POOL,
+            timeout_seconds=25,
+            max_retries=2,
+        ))
+
+    # 2. NVIDIA NIM — исправленный порядок (быстрые вперёд!)
     nim_key = os.environ.get("NVIDIA_API_KEY", "")
     if nim_key:
         providers.append(ProviderConfig(
             name="nvidia_nim",
             base_url="https://integrate.api.nvidia.com/v1",
             api_key=nim_key,
-            default_model="google/gemma-4-31b-it",
+            default_model="mistralai/mistral-large-3-675b-instruct-2512",
             model_pool=[
-                "google/gemma-4-31b-it",       # #1 32s, free, reliable
-                "meta/llama-3.1-70b-instruct",  # #2 7s, proven
-                "deepseek-ai/deepseek-v4-flash",# #3 15s, proven
-                "meta/llama-3.3-70b-instruct",  # #4 53s, proven
-                "mistralai/mistral-large-3-675b-instruct-2512",  # #5 1.5s
+                "mistralai/mistral-large-3-675b-instruct-2512",  # #1 ~1.5s ✅
+                "meta/llama-3.1-70b-instruct",                  # #2 ~7s  ✅
+                "meta/llama-3.3-70b-instruct",                  # #3 ~8s  ✅
+                "deepseek-ai/deepseek-v4-flash",                # #4 ~15s ⚠️
+                "google/gemma-4-31b-it",                        # #5 ~32s ❌ последний
             ],
-            timeout_seconds=12,
+            timeout_seconds=20,
+            max_retries=2,
         ))
 
-    # 2. LM Studio (local inference)
-    lm_url = os.environ.get("LM_STUDIO_URL", "http://localhost:1234/v1")
-    providers.append(ProviderConfig(
-        name="lm_studio",
-        base_url=lm_url,
-        api_key="lm-studio",  # LM Studio doesn't require real key
-        default_model=os.environ.get("LM_STUDIO_MODEL", "llama-3.1-8b-instruct"),
-    ))
-
-    # 3. OpenRouter (cloud reserve)
-    or_key = os.environ.get("OPENROUTER_API_KEY", "")
-    if or_key:
+    # 3. Ollama (локальный inference — если установлен)
+    ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/v1")
+    ollama_model = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
+    if os.environ.get("OLLAMA_ENABLED", "").lower() in ("1", "true", "yes"):
         providers.append(ProviderConfig(
-            name="openrouter",
-            base_url="https://openrouter.ai/api/v1",
-            api_key=or_key,
-            default_model=os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free"),
+            name="ollama",
+            base_url=ollama_url,
+            api_key="ollama",  # Ollama не требует ключа
+            default_model=ollama_model,
+            model_pool=[
+                ollama_model,
+                "llama3.2:3b",   # быстрый fallback если основная не скачана
+            ],
+            timeout_seconds=60,  # CPU inference медленнее
+            max_retries=1,
+        ))
+
+    # 4. LM Studio (локальный inference — если запущен)
+    lm_url = os.environ.get("LM_STUDIO_URL", "http://localhost:1234/v1")
+    lm_model = os.environ.get("LM_STUDIO_MODEL", "llama-3.1-8b-instruct")
+    # Включаем только если явно указан нестандартный URL или флаг LM_STUDIO_ENABLED
+    lm_enabled = (
+        os.environ.get("LM_STUDIO_ENABLED", "").lower() in ("1", "true", "yes")
+        or os.environ.get("LM_STUDIO_URL", "") not in ("", "http://localhost:1234/v1")
+    )
+    if lm_enabled:
+        providers.append(ProviderConfig(
+            name="lm_studio",
+            base_url=lm_url,
+            api_key="lm-studio",
+            default_model=lm_model,
+            timeout_seconds=120,
+            max_retries=1,
+        ))
+
+    # 5. MOCK provider — только для TESTING=1 (детерминированный, <1ms)
+    if os.environ.get("TESTING") == "1":
+        providers.append(ProviderConfig(
+            name="mock",
+            base_url="http://mock.local/v1",
+            api_key="mock",
+            default_model="mock-model",
+            timeout_seconds=5,
+            max_retries=1,
+        ))
+
+    # Fallback: если вообще нет провайдеров — добавить LM Studio как last resort
+    if not providers:
+        providers.append(ProviderConfig(
+            name="lm_studio",
+            base_url="http://localhost:1234/v1",
+            api_key="lm-studio",
+            default_model="llama-3.1-8b-instruct",
+            timeout_seconds=120,
+            max_retries=1,
         ))
 
     return providers
@@ -95,19 +177,25 @@ PROVIDERS: List[ProviderConfig] = _load_providers()
 # Model alias mapping (from budget_guard ModelRouter pool to actual per-provider model names)
 _MODEL_ALIASES: Dict[str, Dict[str, str]] = {
     "default": {
-        "nvidia_nim": "google/gemma-4-31b-it",
-        "lm_studio": "llama-3.1-8b-instruct",
-        "openrouter": "meta-llama/llama-3.1-8b-instruct:free",
+        "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
+        "nvidia_nim": "mistralai/mistral-large-3-675b-instruct-2512",
+        "ollama":     "qwen2.5:7b",
+        "lm_studio":  "llama-3.1-8b-instruct",
+        "mock":       "mock-model",
     },
     "fast": {
-        "nvidia_nim": "google/gemma-4-31b-it",
-        "lm_studio": "llama-3.1-8b-instruct",
-        "openrouter": "meta-llama/llama-3.1-8b-instruct:free",
+        "openrouter": "meta-llama/llama-3.2-3b-instruct:free",  # 3B — самый быстрый
+        "nvidia_nim": "mistralai/mistral-large-3-675b-instruct-2512",
+        "ollama":     "llama3.2:3b",
+        "lm_studio":  "llama-3.1-8b-instruct",
+        "mock":       "mock-model",
     },
     "reasoning": {
-        "nvidia_nim": "google/gemma-4-31b-it",
-        "lm_studio": "llama-3.1-8b-instruct",  # fallback — local can't do 70B reasoning
-        "openrouter": "deepseek/deepseek-r1-distill-llama-70b",
+        "openrouter": "meta-llama/llama-3.3-70b-instruct:free",  # 70B для рассуждений
+        "nvidia_nim": "meta/llama-3.3-70b-instruct",
+        "ollama":     "qwen2.5:7b",
+        "lm_studio":  "llama-3.1-8b-instruct",
+        "mock":       "mock-model",
     },
 }
 
@@ -127,14 +215,21 @@ _clients: Dict[str, OpenAI] = {}
 
 def _get_client(provider: ProviderConfig) -> OpenAI:
     """Cached OpenAI-compatible client for a provider."""
+    if provider.name == "mock":
+        # MOCK provider — не создаём настоящий HTTP клиент
+        return None  # type: ignore
     if provider.name not in _clients:
-        # Build httpx client that avoids SOCKS5 proxy deadlock:
-        # NVIDIA NIM API doesn't need the local SOCKS proxy.
-        # Strip ALL_PROXY/ALL_PROXY so the OpenAI SDK uses HTTP/HTTPS proxies only.
         import httpx
         proxy_url = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
+        # OpenRouter требует заголовок HTTP-Referer для идентификации
+        default_headers = {}
+        if provider.name == "openrouter":
+            default_headers = {
+                "HTTP-Referer": "https://partsops.local",
+                "X-Title": "PartsOps AI Manager",
+            }
         http_client = httpx.Client(
-            proxy=proxy_url,  # Use HTTP proxy, not SOCKS5
+            proxy=proxy_url,
             timeout=provider.timeout_seconds,
         ) if proxy_url else None
         _clients[provider.name] = OpenAI(
@@ -142,6 +237,7 @@ def _get_client(provider: ProviderConfig) -> OpenAI:
             api_key=provider.api_key,
             timeout=provider.timeout_seconds,
             http_client=http_client,
+            default_headers=default_headers if default_headers else None,
         )
     return _clients[provider.name]
 
@@ -171,6 +267,44 @@ def _get_model_router():
     return _model_router
 
 
+def _mock_llm_response(prompt: str, response_format: Optional[dict] = None) -> str:
+    """
+    Детерминированная заглушка LLM для TESTING=1.
+    Возвращает корректный JSON или текст в зависимости от response_format.
+    Не делает сетевых вызовов. Время ответа <1ms.
+    """
+    import json as _json
+
+    # Если запрошен JSON-объект — возвращаем разумный дефолт
+    if response_format and response_format.get("type") == "json_object":
+        prompt_lower = prompt.lower()
+
+        # Определяем контекст запроса
+        if "spam" in prompt_lower or "is_spam" in prompt_lower or "classify" in prompt_lower:
+            return _json.dumps({"is_spam": False, "confidence": 0.95, "reason": "mock: valid parts query"})
+
+        if "vin" in prompt_lower or "vehicle" in prompt_lower:
+            return _json.dumps({
+                "vin": None, "make": None, "model": None, "year": None,
+                "vin_validity": "unknown"
+            })
+
+        if "parts" in prompt_lower or "part" in prompt_lower or "колодк" in prompt_lower:
+            return _json.dumps({
+                "parts": [{"name": "Тормозные колодки", "quantity": 1}],
+                "vehicle": {"vin": None, "make": None, "model": None, "year": None},
+                "priority": "normal",
+            })
+
+        # Универсальный JSON-ответ
+        return _json.dumps({"result": "ok", "mock": True})
+
+    # Plain text ответ
+    return "Mock LLM response: OK. [TESTING=1 deterministic stub]"
+
+
+
+
 def call_llm(
     prompt: str,
     system_prompt: str = "You are an AI assistant for automotive parts supply chain.",
@@ -180,6 +314,7 @@ def call_llm(
     priority: str = "normal",
     max_retries: int = 3,
 ) -> str:
+
     """
     Call LLM with automatic provider fallback and retry.
     
@@ -205,6 +340,12 @@ def call_llm(
     for provider in PROVIDERS:
        if not provider.enabled:
            continue
+
+       # ── MOCK shortcut: для TESTING=1 — отвечаем детерминированной заглушкой (<1ms) ──
+       if provider.name == "mock":
+           mock_response = _mock_llm_response(prompt, response_format)
+           print(f"[LLM] MOCK provider — returned deterministic stub in <1ms")
+           return mock_response
 
        client = _get_client(provider)
        provider_models = provider.get_models()

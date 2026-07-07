@@ -1,0 +1,89 @@
+# LLM Provider Config — PartsOps AI Manager
+# Актуально: 2026-07  |  Источник: https://openrouter.ai/api/v1/models
+# ──────────────────────────────────────────────────────────────────────
+
+providers:
+
+  # ═══════════════════════════════════════════════
+  # 1. OpenRouter FREE — ПРИОРИТЕТ #1
+  # Требует: OPENROUTER_API_KEY (бесплатная регистрация)
+  # URL: https://openrouter.ai/settings/keys
+  # ═══════════════════════════════════════════════
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+    timeout_seconds: 25
+    max_retries: 2
+    env_key: OPENROUTER_API_KEY
+    free_model_pool:
+      - id: meta-llama/llama-3.3-70b-instruct:free    # 70B, ctx=131k, лучшее качество
+      - id: openai/gpt-oss-120b:free                   # 120B, ctx=131k
+      - id: openai/gpt-oss-20b:free                    # 20B, ctx=131k, быстрый
+      - id: qwen/qwen3-coder:free                      # ctx=1M, отлично для JSON
+      - id: google/gemma-4-31b-it:free                 # 31B, ctx=262k
+      - id: nvidia/nemotron-3-super-120b-a12b:free     # 120B, ctx=1M
+      - id: meta-llama/llama-3.2-3b-instruct:free      # 3B, быстрый fallback
+
+    # Всего бесплатных моделей в OpenRouter (2026-07): 26
+    # Полный список: https://openrouter.ai/api/v1/models (filter pricing=0)
+
+  # ═══════════════════════════════════════════════
+  # 2. NVIDIA NIM — ПРИОРИТЕТ #2
+  # Исправленный порядок (быстрые вперёд!)
+  # ═══════════════════════════════════════════════
+  nvidia_nim:
+    base_url: https://integrate.api.nvidia.com/v1
+    timeout_seconds: 20
+    env_key: NVIDIA_API_KEY
+    model_pool:
+      - mistralai/mistral-large-3-675b-instruct-2512   # ~1.5s ✅ ПЕРВЫЙ
+      - meta/llama-3.1-70b-instruct                    # ~7s  ✅
+      - meta/llama-3.3-70b-instruct                    # ~8s  ✅
+      - deepseek-ai/deepseek-v4-flash                  # ~15s ⚠️
+      - google/gemma-4-31b-it                          # ~32s ❌ ПОСЛЕДНИЙ
+
+  # ═══════════════════════════════════════════════
+  # 3. Ollama — локальный, ПРИОРИТЕТ #3
+  # brew install ollama && ollama pull qwen2.5:7b
+  # ═══════════════════════════════════════════════
+  ollama:
+    base_url: http://localhost:11434/v1
+    timeout_seconds: 60
+    env_key: OLLAMA_ENABLED   # Включить: OLLAMA_ENABLED=1
+    models: [qwen2.5:7b, llama3.2:3b, mistral:7b]
+
+  # ═══════════════════════════════════════════════
+  # 4. LM Studio — локальный, ПРИОРИТЕТ #4
+  # Включить: LM_STUDIO_ENABLED=1
+  # ═══════════════════════════════════════════════
+  lm_studio:
+    base_url: http://localhost:1234/v1
+    timeout_seconds: 120
+    env_key: LM_STUDIO_ENABLED
+
+  # ═══════════════════════════════════════════════
+  # 5. MOCK — только при TESTING=1 (<1ms, без сети)
+  # ═══════════════════════════════════════════════
+  mock:
+    enabled_when: TESTING=1
+    latency: "<1ms"
+
+model_aliases:
+  fast:
+    openrouter: meta-llama/llama-3.2-3b-instruct:free
+    nvidia_nim: mistralai/mistral-large-3-675b-instruct-2512
+    ollama: llama3.2:3b
+  default:
+    openrouter: meta-llama/llama-3.3-70b-instruct:free
+    nvidia_nim: mistralai/mistral-large-3-675b-instruct-2512
+    ollama: qwen2.5:7b
+  reasoning:
+    openrouter: meta-llama/llama-3.3-70b-instruct:free
+    nvidia_nim: meta/llama-3.3-70b-instruct
+    ollama: qwen2.5:7b
+
+# Как получить OpenRouter ключ (бесплатно, 2 минуты):
+# 1. https://openrouter.ai/settings/keys
+# 2. Sign up (email или GitHub)
+# 3. Create API Key
+# 4. В .env: OPENROUTER_API_KEY=sk-or-v1-...
+# Лимиты: ~200 req/min на бесплатные модели

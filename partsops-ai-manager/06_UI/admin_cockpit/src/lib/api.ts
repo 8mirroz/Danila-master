@@ -124,3 +124,10 @@ export async function importFromArtifact(
 
   return data as { request: any };
 }
+
+export function createEventSource(tenantId?: string): EventSource {
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  const url = `${baseUrl}/api/events/stream${tenantId ? `?tenant_id=${tenantId}` : ''}`;
+  const es = new EventSource(url);
+  return es;
+}

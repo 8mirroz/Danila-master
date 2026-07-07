@@ -308,17 +308,24 @@ class TestProviderStatus:
         from llm import get_provider_status
         status = get_provider_status()
         assert isinstance(status, list)
-        # LM Studio is always present
+        assert len(status) > 0, "At least one provider must be present"
+        # В TESTING=1 среде mock провайдер всегда добавляется
         names = [s["name"] for s in status]
-        assert "lm_studio" in names
+        import os
+        if os.environ.get("TESTING") == "1":
+            assert "mock" in names, "MOCK provider must be present when TESTING=1"
+        # Проверяем что каждый провайдер имеет нужные поля
+        for s in status:
+            assert "name" in s
+            assert "base_url" in s
+            assert "enabled" in s
 
     def test_reload_providers(self):
         from llm import reload_providers, PROVIDERS
-        old_len = len(PROVIDERS)
         reload_providers()
-        # After reload, LM Studio should still be present
         from llm import PROVIDERS as new_providers
-        assert any(p.name == "lm_studio" for p in new_providers)
+        assert len(new_providers) > 0, "After reload, at least one provider must exist"
+
 
     def test_resolve_model_alias(self):
         from llm import resolve_model

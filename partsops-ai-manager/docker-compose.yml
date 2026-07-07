@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PARTSOPS_API_TOKEN=${PARTSOPS_API_TOKEN:-test-token}
+      - PARTSOPS_CORS_ORIGINS=${PARTSOPS_CORS_ORIGINS:-http://localhost:5173,http://localhost:5176}
+      - TESTING=1
+    volumes:
+      - ./partsops-ai-manager:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_PARTSOPS_TENANT_ID=default
+      - VITE_PARTSOPS_API_TOKEN=test-token
+
+  # Optional: PostgreSQL for production-like testing
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=partsops
+      - POSTGRES_USER=partsops
+      - POSTGRES_PASSWORD=partsops
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    profiles:
+      - postgres
+
+volumes:
+  postgres_data:

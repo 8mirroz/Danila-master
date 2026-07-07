@@ -80,6 +80,6 @@ def test_token_required_for_tenant_access():
     assert create_resp.status_code == 200
     req_id = create_resp.json()["request"]["request_id"]
 
-    # Trying to read from tenant-a without token returns 404 (because it defaults to default tenant)
+    # Trying to read from tenant-a without token returns 401 (unauthorized because PARTSOPS_API_TOKEN is configured)
     read_resp = client_unauthorized.get(f"/api/requests/{req_id}", headers={"X-Tenant-ID": "tenant-a"})
-    assert read_resp.status_code == 404
+    assert read_resp.status_code == 401

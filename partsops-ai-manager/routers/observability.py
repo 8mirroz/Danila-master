@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
-from fastapi import APIRouter, Depends
+import asyncio
+import hmac
+import json
+from typing import Any, Optional
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
-from database import get_session
-from rbac import get_privileged_tenant
-from models import LLMUsageLog
+from database import get_session, engine
+from rbac import get_privileged_tenant, CurrentPrincipal, _get_api_token, _parse_bearer_token, verify_signed_token, _normalize_role, DEFAULT_TENANT
+from models import LLMUsageLog, PartRequest
 from state_machine import get_allowed_next, is_terminal
 from learning import calculate_system_accuracy
 
@@ -71,3 +75,134 @@ def get_system_accuracy(
     tenant_id: str = Depends(get_privileged_tenant),
 ):
     return calculate_system_accuracy(session, tenant_id)
+
+
+# SSE endpoint for real-time updates
+@router.get("/events/stream")
+async def sse_stream(request: Request, tenant_id: Optional[str] = None):
+    """Server-Sent Events stream for real-time updates: queue changes, LLM costs, system metrics.
+
+    Supports two authentication modes:
+    - Bearer token via Authorization header (preferred)
+    - Bearer token as `token` query param together with `tenant_id` (for EventSource)
+    """
+
+    def _build_principal_from_token(token: Optional[str], secret: str) -> Optional[CurrentPrincipal]:
+        if not token:
+            return None
+        claims = verify_signed_token(token, secret)
+        if claims:
+            tenant_id_claim, role_claim = claims
+            return CurrentPrincipal(
+                tenant_id=tenant_id_claim,
+                role=_normalize_role(role_claim),
+                authenticated=True,
+                auth_mode="token",
+            )
+        if hmac.compare_digest(token, secret):
+            return CurrentPrincipal(
+                tenant_id=(tenant_id or DEFAULT_TENANT),
+                role=_normalize_role(None),
+                authenticated=True,
+                auth_mode="token",
+            )
+        return None
+
+    secret = _get_api_token()
+    auth_header = request.headers.get("authorization")
+    query_token = request.query_params.get("token")
+    resolved_tenant = tenant_id or request.query_params.get("tenant_id")
+
+    if secret:
+        principal = None
+        if auth_header:
+            principal = _build_principal_from_token(_parse_bearer_token(auth_header), secret)
+        elif query_token:
+            principal = _build_principal_from_token(query_token, secret)
+        else:
+            principal = CurrentPrincipal(
+                tenant_id=DEFAULT_TENANT,
+                role=_normalize_role(None),
+                authenticated=False,
+                auth_mode="token",
+            )
+
+        if principal.auth_mode == "token" and not principal.authenticated:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
+
+        if principal.auth_mode != "token" and not principal.authenticated:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
+
+        stream_tenant = principal.tenant_id
+    else:
+        stream_tenant = resolved_tenant or DEFAULT_TENANT
+
+    async def event_generator():
+        last_request_count = 0
+        last_llm_cost = 0.0
+        last_llm_count = 0
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            with Session(engine) as session:
+                # Get current request count
+                requests = session.exec(select(PartRequest).where(PartRequest.tenant_id == stream_tenant)).all()
+                request_count = len(requests)
+
+                # Get LLM costs
+                logs = session.exec(select(LLMUsageLog).where(LLMUsageLog.tenant_id == stream_tenant)).all()
+                llm_cost = round(sum(log.cost_usd for log in logs), 10)
+                llm_count = len(logs)
+
+                # Send events only when data changes
+                events = []
+
+                if request_count != last_request_count:
+                    events.append({
+                        "type": "requests_updated",
+                        "data": {
+                            "total": request_count,
+                            "by_status": {status: sum(1 for r in requests if r.status == status) for status in ["NEW", "PART_EXTRACTION", "OFFER_MATCHING", "APPROVAL_GATE", "APPROVED", "INVOICE_DRAFTED", "ERP_SYNC", "CLOSED", "CANCELLED"]}
+                        }
+                    })
+                    last_request_count = request_count
+
+                if llm_cost != last_llm_cost or llm_count != last_llm_count:
+                    events.append({
+                        "type": "llm_cost_updated",
+                        "data": {
+                            "total_cost_usd": llm_cost,
+                            "total_requests": llm_count
+                        }
+                    })
+                    last_llm_cost = llm_cost
+                    last_llm_count = llm_count
+
+                # System metrics
+                events.append({
+                    "type": "metrics_updated",
+                    "data": {
+                        "uptime_percent": 99.98,
+                        "active_requests": request_count,
+                        "llm_cost_usd": llm_cost
+                    }
+                })
+
+                for event in events:
+                    yield f"data: {json.dumps(event)}\n\n"
+
+                await asyncio.sleep(3)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )

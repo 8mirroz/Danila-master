@@ -160,7 +160,13 @@ def test_request_gates_endpoint():
         session.add(req)
         session.commit()
         
-    response = client.get("/api/requests/REQ-GATES-1/gates")
+    import os
+    token = os.getenv("PARTSOPS_API_TOKEN", "")
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    
+    response = client.get("/api/requests/REQ-GATES-1/gates", headers=headers)
     assert response.status_code == 200
     res = response.json()
     assert res["request_id"] == "REQ-GATES-1"

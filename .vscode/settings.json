@@ -175,5 +175,6 @@
   "codeWebChat.editFormatInstructionsTruncated": "Whenever proposing a changed file, use markdown code block syntax and put the file path in a comment at the top. Use ellipsis comments only where unchanged code is intentionally omitted.",
 
   "codeWebChat.commitMessageInstructions": "Write a concise imperative commit message. One sentence. No bullet points.",
-  "codeWebChat.includePromptsInCommitMessages": false
+  "codeWebChat.includePromptsInCommitMessages": false,
+  "css.lint.unknownAtRules": "ignore"
 }

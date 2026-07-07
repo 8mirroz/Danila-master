@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import '@fortawesome/fontawesome-free/css/all.min.css';
-import { 
-  AppFrame, 
-  TopCommandBar, 
-  LeftNavRail, 
-  WorkspaceHeader, 
-  StepGate, 
-  SectionCard, 
-  MetricTile, 
-  ActionButton, 
-  Dropzone, 
-  ReviewPanel, 
-  EmptyState, 
+import {
+  AppFrame,
+  TopCommandBar,
+  LeftNavRail,
+  WorkspaceHeader,
+  StepGate,
+  SectionCard,
+  MetricTile,
+  ActionButton,
+  Dropzone,
+  ReviewPanel,
+  EmptyState,
   InlineAlert,
 } from './components/Primitives';
 import { SupplierMatrix } from './components/SupplierMatrix';
@@ -23,9 +23,10 @@ import { KanbanBoard } from './components/KanbanBoard';
 import { EvidenceGatesWidget } from './components/EvidenceGatesWidget';
 import { InvoicePreview } from './components/InvoicePreview';
 import { LLMCostPanel } from './components/LLMCostPanel';
-import { apiFetch } from './lib/api';
+import { apiFetch, createEventSource } from './lib/api';
 import { ChevronStepper } from './components/ChevronStepper';
 import { SuppliersPage } from './components/SuppliersPage';
+import { CommandPalette } from './components/CommandPalette';
 
 type Request = {
   id: number;
@@ -83,19 +84,43 @@ function App() {
   const [activeNav, setActiveNav] = useState<string>('dashboard');
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
-  const [activeStep, setActiveStep] = useState<number>(2); // Default to Normalization Review (Step 2)
+  const [activeStep, setActiveStep] = useState<number>(2);
   const [fetchTrigger, setFetchTrigger] = useState(0);
-  // const [searchSupplierQuery, setSearchSupplierQuery] = useState(''); // disabled
   const [searchGlobalQuery, setSearchGlobalQuery] = useState('');
-  // const [supplierViewMode, setSupplierViewMode] = useState<'table' | 'cards'>('cards'); // disabled - using full page view
-  
-  // Requests state hoisted from RightPanel
+
   const [requests, setRequests] = useState<Request[]>([]);
   const [localOrderMessage, setLocalOrderMessage] = useState<string | null>(null);
   const [normalizedParts, setNormalizedParts] = useState<Array<{ name: string; quantity: number }>>([]);
-  
-  // Track selected catalog offer per part: record of partName -> MatchItem
   const [selectedOffers, setSelectedOffers] = useState<Record<string, any>>({});
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [suppliersForPalette, setSuppliersForPalette] = useState<any[]>([]);
+
+  const fetchSuppliersForPalette = async () => {
+    try {
+      const res = await apiFetch('/api/suppliers');
+      if (res.ok) {
+        const data = await res.json();
+        setSuppliersForPalette(data);
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers for palette', error);
+    }
+  };
+
+  useEffect(() => {
+    void fetchSuppliersForPalette();
+  }, [fetchTrigger]);
+
+  const resolveDropTarget = (req: Request, columnStatuses: string[]) => {
+    const currentStatus = req.status;
+    const validStates = columnStatuses;
+    if (validStates.includes(currentStatus)) return null;
+    if (validStates.includes('PART_EXTRACTION') && ['NEW', 'NORMALIZING', 'PARSING', 'VIN_CHECK'].includes(currentStatus)) return 'PART_EXTRACTION';
+    if (validStates.includes('MATCHING') && currentStatus !== 'MATCHING') return 'MATCHING';
+    if (validStates.includes('READY_FOR_APPROVAL')) return 'READY_FOR_APPROVAL';
+    if (validStates.includes('APPROVED') && currentStatus !== 'APPROVED') return 'APPROVED';
+    return validStates[0] || null;
+  };
 
   const fetchRequests = async () => {
     try {
@@ -113,7 +138,41 @@ function App() {
     void fetchRequests();
   }, [fetchTrigger]);
 
-  // When request changes, reset parts and selected offers
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+      if (e.key === 'Escape') {
+        setIsCommandPaletteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID || 'default';
+    const es = createEventSource(tenantId);
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'requests_updated' || data.type === 'llm_cost_updated' || data.type === 'metrics_updated') {
+          setFetchTrigger((prev) => prev + 1);
+        }
+      } catch (e) {
+        console.warn('SSE message parse error:', e);
+      }
+    };
+    es.onerror = (err) => {
+      console.warn('SSE connection error:', err);
+    };
+    return () => {
+      es.close();
+    };
+  }, []);
+
   useEffect(() => {
     if (selectedReq) {
       try {
@@ -123,14 +182,13 @@ function App() {
         setNormalizedParts([]);
       }
       setSelectedOffers({});
-      // Auto transition active step to Normalization Review
       setActiveStep(2);
     }
   }, [selectedReq]);
 
   const handleSelectRequest = (req: Request) => {
     setSelectedReq(req);
-    setActiveNav('matching'); // auto route to workflow canvas
+    setActiveNav('matching');
   };
 
   const handleStateTransition = async (targetState: string, reason: string, reqId?: string) => {
@@ -140,23 +198,15 @@ function App() {
       const res = await apiFetch(`/api/requests/${idToTransition}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_state: targetState,
-          reason,
-          actor_id: 'admin',
-        }),
+        body: JSON.stringify({ target_state: targetState, reason, actor_id: 'admin' }),
       });
-
       if (res.ok) {
         const updated = await res.json();
         alert(`Статус запроса ${idToTransition} успешно обновлен на ${updated.new_state}`);
         setFetchTrigger((prev) => prev + 1);
         if (selectedReq && selectedReq.request_id === idToTransition) {
           setSelectedReq((prev) => (prev ? { ...prev, status: updated.new_state } : null));
-          // If approved, advance to step 5 (Pricing Draft)
-          if (targetState === 'APPROVED') {
-            setActiveStep(5);
-          }
+          if (targetState === 'APPROVED') setActiveStep(5);
         }
       } else {
         const err = await res.json();
@@ -164,49 +214,38 @@ function App() {
       }
     } catch (error) {
       console.error(error);
-      alert("API error during transition. Simulating local transition for demo.");
-      setRequests(prev => prev.map(r => r.request_id === idToTransition ? { ...r, status: targetState } : r));
+      alert('API error during transition. Simulating local transition for demo.');
+      setRequests((prev) => prev.map((r) => (r.request_id === idToTransition ? { ...r, status: targetState } : r)));
       if (selectedReq && selectedReq.request_id === idToTransition) {
-        setSelectedReq((prev) => prev ? { ...prev, status: targetState } : null);
-        if (targetState === 'APPROVED') {
-          setActiveStep(5);
-        }
+        setSelectedReq((prev) => (prev ? { ...prev, status: targetState } : null));
+        if (targetState === 'APPROVED') setActiveStep(5);
       }
     }
   };
 
-  // Local parts correction handler
   const handleConfirmNormalization = async () => {
     if (!selectedReq) return;
     try {
-      // call backend correction API if available
       const res = await apiFetch(`/api/requests/${selectedReq.request_id}/correction`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source_text: selectedReq.customer_name + " parts order",
+          source_text: selectedReq.customer_name + ' parts order',
           corrected_parts_json: JSON.stringify(normalizedParts),
-          correction_reason_tags: ["operator_review"],
-        })
+          correction_reason_tags: ['operator_review'],
+        }),
       });
-      if (res.ok) {
-        alert("Normalization confirmed and saved to Golden Dataset.");
-      }
+      if (res.ok) alert('Normalization confirmed and saved to Golden Dataset.');
     } catch {
-      console.warn("Could not save golden correction to backend");
+      console.warn('Could not save golden correction to backend');
     }
-   
-    // update parts json in selected req locally
-    setSelectedReq(prev => prev ? { ...prev, parts_json: JSON.stringify(normalizedParts) } : null);
-    // advance step to Offer Comparison (step 3)
+    setSelectedReq((prev) => (prev ? { ...prev, parts_json: JSON.stringify(normalizedParts) } : null));
     setActiveStep(3);
   };
 
-  // Order manual import handler (text/JSON)
   const handleImportOrders = async (text: string) => {
     try {
-      // Try to parse as JSON first, if fails, treat as raw text request
-      let payload = { source: 'UI_UPLOAD', text: text, customer_name: 'Direct Upload Client' };
+      let payload = { source: 'UI_UPLOAD', text, customer_name: 'Direct Upload Client' };
       try {
         const parsed = JSON.parse(text);
         payload = {
@@ -225,14 +264,13 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         setLocalOrderMessage(`Successfully added order ${data.request.request_id} to the live triage queue.`);
-        setFetchTrigger(prev => prev + 1);
+        setFetchTrigger((prev) => prev + 1);
         setTimeout(() => setLocalOrderMessage(null), 5000);
       } else {
-        alert("Backend failed to intake the request. Adding local simulation draft.");
-        throw new Error("Local fallback");
+        alert('Backend failed to intake the request. Adding local simulation draft.');
+        throw new Error('Local fallback');
       }
     } catch {
-      // Local fallback simulation
       const mockId = `REQ-LOCAL-${Math.floor(1000 + Math.random() * 9000)}`;
       const mockReq: Request = {
         id: Date.now(),
@@ -249,18 +287,15 @@ function App() {
     }
   };
 
-  // File upload handler for Dropzone - uploads file AND imports from artifact
   const handleFileUpload = async (file: File): Promise<string> => {
     const { uploadAttachment, importFromArtifact } = await import('./lib/api');
     const result = await uploadAttachment(file);
     const artifactId = result.artifact_id;
-   
-    // Now import the artifact to create a request
     try {
       const importResult = await importFromArtifact(artifactId, 'FILE_UPLOAD', 'File Upload Client', 'normal');
       const request = importResult.request;
       setLocalOrderMessage(`Successfully imported order ${request.request_id} from file ${file.name}.`);
-      setFetchTrigger(prev => prev + 1);
+      setFetchTrigger((prev) => prev + 1);
       setTimeout(() => setLocalOrderMessage(null), 5000);
       return artifactId;
     } catch (error) {
@@ -271,7 +306,6 @@ function App() {
     }
   };
 
-  // Left Nav tabs config
   const navItems = [
     { id: 'dashboard', label: 'Панель управления', icon: 'fa-chart-pie' },
     { id: 'kanban', label: 'Канбан-доска', icon: 'fa-table-columns' },
@@ -282,502 +316,444 @@ function App() {
     { id: 'audit', label: 'Аудит и логи', icon: 'fa-shield-halved' },
   ];
 
-  // Steps list for active workflow
-  const steps = [
-    "Каталог поставщиков",
-    "Импорт заказов",
-    "Анализ нормализации",
-    "Сравнение предложений",
-    "Согласование",
-    "Черновик цены"
-  ];
+  const steps = ['Каталог поставщиков', 'Импорт заказов', 'Анализ нормализации', 'Сравнение предложений', 'Согласование', 'Черновик цены'];
 
   const handleStepClick = (stepIdx: number) => {
     setActiveStep(stepIdx);
-    // Align active navigation tab with step views for seamless layout transition
     if (stepIdx === 0) setActiveNav('suppliers');
     else if (stepIdx === 1) setActiveNav('orders');
-    else if (stepIdx === 2) setActiveNav('matching'); // Normalization Review
-    else if (stepIdx === 3) setActiveNav('matching'); // Offer Comparison
-    else if (stepIdx === 4) setActiveNav('matching'); // Approval Gate
-    else if (stepIdx === 5) setActiveNav('pricing');  // Pricing Draft
+    else if (stepIdx === 2) setActiveNav('matching');
+    else if (stepIdx === 3) setActiveNav('matching');
+    else if (stepIdx === 4) setActiveNav('matching');
+    else if (stepIdx === 5) setActiveNav('pricing');
   };
 
-  // Synchronize left nav clicks to steps when a request is active
   const handleNavChange = (navId: string) => {
     setActiveNav(navId);
     if (selectedReq) {
       if (navId === 'suppliers') setActiveStep(0);
       else if (navId === 'orders') setActiveStep(1);
       else if (navId === 'matching') {
-        if (activeStep < 2 || activeStep > 4) {
-          setActiveStep(3); // default to matching matrix
-        }
-      }
-      else if (navId === 'pricing') setActiveStep(5);
+        if (activeStep < 2 || activeStep > 4) setActiveStep(3);
+      } else if (navId === 'pricing') setActiveStep(5);
     }
   };
 
-  // Selected offers mapper to construct best matches for Pricing Calculator
-  const formattedPartsWithBestMatch = normalizedParts.map(part => {
+  const formattedPartsWithBestMatch = normalizedParts.map((part) => {
     const chosenOffer = selectedOffers[part.name];
     return {
       name: part.name,
       quantity: part.quantity,
-      best_match: chosenOffer ? {
-        name: chosenOffer.item.name,
-        price: chosenOffer.item.price,
-        price_deviation_from_median: chosenOffer.price_deviation_from_median,
-      } : undefined
+      best_match: chosenOffer
+        ? {
+            name: chosenOffer.item.name,
+            price: chosenOffer.item.price,
+            price_deviation_from_median: chosenOffer.price_deviation_from_median,
+          }
+        : undefined,
     };
   });
 
   return (
-    <AppFrame>
-      {/* Top Header Bar */}
-      <TopCommandBar 
-        searchQuery={searchGlobalQuery}
-        onSearchChange={setSearchGlobalQuery}
-        onResetActive={() => {
-          setSelectedReq(null);
-          setActiveNav('dashboard');
-        }}
-      />
-
-      <div className="flex-1 flex flex-row overflow-hidden relative">
-        {/* Left persistent nav rail */}
-        <LeftNavRail 
-          activeTab={activeNav}
-          onChangeTab={handleNavChange}
-          items={navItems}
-          isCollapsed={leftCollapsed}
-          onToggleCollapse={() => setLeftCollapsed(!leftCollapsed)}
+      <AppFrame>
+        <TopCommandBar
+          searchQuery={searchGlobalQuery}
+          onSearchChange={setSearchGlobalQuery}
+          onResetActive={() => {
+            setSelectedReq(null);
+            setActiveNav('dashboard');
+          }}
         />
-
-        {/* Center workspace canvas */}
-        <main className="flex-1 h-full overflow-y-auto bg-[var(--bg-app)]">
-        {/* If a request is active and we're not on general pages, show request workflow */}
-        {selectedReq && ['matching', 'pricing', 'audit'].includes(activeNav) ? (
-          <div className="p-4 max-w-6xl mx-auto space-y-4">
-           
-            {/* Header context card */}
-            <WorkspaceHeader 
-              title={selectedReq.customer_name + " - План закупки запчастей"}
-              requestId={selectedReq.request_id}
-              status={selectedReq.status}
-              priority={selectedReq.priority || 'Normal'}
-              customerName={selectedReq.customer_name}
-              customerPhone={selectedReq.customer_phone_masked}
-              customerEmail={selectedReq.customer_email_masked}
-              vin={selectedReq.vehicle_vin_masked}
-              vehicleMake={selectedReq.vehicle_make}
-              vehicleModel={selectedReq.vehicle_model}
-              onBack={() => {
-                setSelectedReq(null);
-                setActiveNav('dashboard');
-              }}
-            />
-
-            {/* Stepper Steps Gate */}
-            <ChevronStepper status={selectedReq.status} />
-
-            <StepGate 
-              currentStep={activeStep}
-              steps={steps}
-              onStepClick={handleStepClick}
-            />
-
-            {/* Sub-workspace views dependent on active step */}
-            <div className="space-y-4">
-             
-              {/* Step 2: Normalization Review */}
-              {activeStep === 2 && (
-                <SectionCard 
-                  title="Шаг 2: Анализ нормализации и корректировка данных" 
-                  icon="fa-square-check"
-                  headerActions={
-                    <span className="text-[10px] font-bold text-[var(--accent-primary)] uppercase bg-blue-50 px-2 py-0.5 border border-blue-200 rounded">
-                      Защита перс. данных активна
-                    </span>
-                  }
-                >
-                  <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
-                    Проверьте детали, распознанные агентом приема LangGraph. Вы можете редактировать названия, изменять количество и подтверждать совпадения перед подбором.
-                  </p>
-                  <ReviewPanel 
-                    items={normalizedParts}
-                    onChange={setNormalizedParts}
-                    onConfirm={handleConfirmNormalization}
-                  />
-                </SectionCard>
-              )}
-
-              {/* Step 3: Offer Comparison */}
-              {activeStep === 3 && (
-                <SupplierMatrix 
-                  parts={normalizedParts}
-                  selectedOffers={selectedOffers}
-                  onSelectOffer={(partName, offer) => {
-                    setSelectedOffers(prev => ({
-                      ...prev,
-                      [partName]: offer
-                    }));
+        <div className="flex-1 flex flex-row overflow-hidden relative">
+          <LeftNavRail
+            activeTab={activeNav}
+            onChangeTab={handleNavChange}
+            items={navItems}
+            isCollapsed={leftCollapsed}
+            onToggleCollapse={() => setLeftCollapsed(!leftCollapsed)}
+          />
+          <main className="flex-1 h-full overflow-y-auto bg-[var(--bg-app)]">
+            {selectedReq && ['matching', 'pricing'].includes(activeNav) ? (
+              <div className="p-4 max-w-6xl mx-auto space-y-4">
+                <WorkspaceHeader
+                  title={`${selectedReq.customer_name} - План закупки запчастей`}
+                  requestId={selectedReq.request_id}
+                  status={selectedReq.status}
+                  priority={selectedReq.priority || 'Normal'}
+                  customerName={selectedReq.customer_name}
+                  customerPhone={selectedReq.customer_phone_masked}
+                  customerEmail={selectedReq.customer_email_masked}
+                  vin={selectedReq.vehicle_vin_masked}
+                  vehicleMake={selectedReq.vehicle_make}
+                  vehicleModel={selectedReq.vehicle_model}
+                  onBack={() => {
+                    setSelectedReq(null);
+                    setActiveNav('dashboard');
                   }}
                 />
-              )}
-
-              {/* Step 4: Approval Gate */}
-              {activeStep === 4 && (
-                <SectionCard title="Шаг 4: Контроль операционного согласования" icon="fa-key">
-                  <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
-                    Изучите ценовые аномалии и проверьте целостность цепочки аудита SHA-256. Требуется явное одобрение администратора/специалиста для разблокировки ценового листа перед подготовкой черновика коммерческого предложения.
-                  </p>
-
-                  <div className="mb-4">
-                    <EvidenceGatesWidget 
-                      requestId={selectedReq.request_id}
-                      refreshTrigger={fetchTrigger}
-                    />
-                  </div>
-
-                  {Object.keys(selectedOffers).length < normalizedParts.length && (
-                    <InlineAlert 
-                      type="warning"
-                      message="Некоторые детали не имеют выбранных предложений поставщиков. Настоятельно рекомендуется сравнить и выбрать варианты для всех позиций перед согласованием."
+                <ChevronStepper status={selectedReq.status} />
+                <StepGate currentStep={activeStep} steps={steps} onStepClick={handleStepClick} />
+                <div className="space-y-4">
+                  {activeStep === 2 && (
+                    <SectionCard
+                      title="Шаг 2: Анализ нормализации и корректировка данных"
+                      icon="fa-square-check"
+                      headerActions={
+                        <span className="text-[10px] font-bold text-[var(--accent-primary)] uppercase bg-blue-50 px-2 py-0.5 border border-blue-200 rounded">
+                          Защита перс. данных активна
+                        </span>
+                      }
+                    >
+                      <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
+                        Проверьте детали, распознанные агентом приема LangGraph. Вы можете редактировать названия, изменять количество и подтверждать совпадения перед подбором.
+                      </p>
+                      <ReviewPanel
+                        items={normalizedParts}
+                        onChange={setNormalizedParts}
+                        onConfirm={handleConfirmNormalization}
+                      />
+                    </SectionCard>
+                  )}
+                  {activeStep === 3 && (
+                    <SupplierMatrix
+                      parts={normalizedParts}
+                      selectedOffers={selectedOffers}
+                      onSelectOffer={(partName, offer) =>
+                        setSelectedOffers((prev) => ({
+                          ...prev,
+                          [partName]: offer,
+                        }))
+                      }
                     />
                   )}
-
-                  <div className="flex flex-col md:flex-row gap-3 pt-3 border-t border-[var(--border-subtle)] justify-end">
-                    <ActionButton 
-                      variant="secondary"
-                      icon="fa-shuffle"
-                      onClick={() => {
-                        const reason = prompt('Укажите причину переработки:');
-                        if (reason !== null) handleStateTransition('MANUAL_REVIEW', reason || 'Требуется ручное уточнение');
-                      }}
-                    >
-                      Уточнить / Переработать
-                    </ActionButton>
-                    <ActionButton 
-                      variant="primary"
-                      icon="fa-circle-check"
-                      onClick={() => {
-                        const reason = prompt('Укажите примечания к согласованию:');
-                        if (reason !== null) handleStateTransition('APPROVED', reason || 'Согласовано администратором закупок');
-                      }}
-                    >
-                      Явно одобрить закупку
-                    </ActionButton>
-                    <ActionButton 
-                      variant="danger"
-                      icon="fa-trash-can"
-                      onClick={() => {
-                        const reason = prompt('Укажите причину отмены:');
-                        if (reason !== null) handleStateTransition('CANCELLED', reason || 'Запрос отклонен');
-                      }}
-                    >
-                      Отменить / Отклонить запрос
-                    </ActionButton>
-                  </div>
-                </SectionCard>
-              )}
-
-              {/* Step 5: Pricing Draft */}
-              {activeStep === 5 && (
-                <div className="space-y-4">
-                  <PricingCalculator 
-                    parts={formattedPartsWithBestMatch}
-                    requestId={selectedReq.request_id}
-                    isApproved={selectedReq.status === 'APPROVED'}
-                    onDraftInvoice={(data) => {
-                      alert(`Черновик счета создан! Номер счета: ${data.invoice_number}`);
-                      setFetchTrigger(prev => prev + 1);
-                    }}
-                  />
-                  <InvoicePreview 
-                    requestId={selectedReq.request_id}
-                    onSent={() => {
-                      setFetchTrigger(prev => prev + 1);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Audit timeline with side-by-side Completed Orders History */}
-            {activeNav === 'audit' && (
-              <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-4">
-                <CompletedOrdersHistory 
-                  selectedRequestId={selectedReq.request_id}
-                  onSelectRequest={(req) => {
-                    setSelectedReq(req);
-                    setActiveNav('audit');
-                  }}
-                  fetchTrigger={fetchTrigger}
-                />
-                <AuditTimeline requestId={selectedReq.request_id} />
-              </div>
-            )}
-          </div>
-        ) : (
-          /* General navigation pages when no active request is being stepped */
-          <div className="p-4 max-w-6xl mx-auto space-y-4">
-           
-            {/* Nav: Dashboard (Overview Panel) */}
-            {activeNav === 'dashboard' && (
-              <>
-                <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-50/50 via-slate-50 to-indigo-50/40 p-6 text-slate-900 shadow-sm border border-slate-200/50">
-                  {/* Decorative glowing background elements */}
-                  <div className="absolute -right-24 -top-24 h-48 w-48 rounded-full bg-teal-500/5 blur-3xl pointer-events-none" />
-                  <div className="absolute -left-24 -bottom-24 h-48 w-48 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />
-                 
-                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 relative z-10 w-full">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-teal-800 font-extrabold uppercase tracking-widest bg-teal-500/10 border border-teal-500/20 px-2.5 py-0.5 rounded-full backdrop-blur-md">
-                          Система активна
-                        </span>
-                        <span className="h-1.5 w-1.5 rounded-full bg-teal-500 animate-pulse" />
-                      </div>
-                      <h2 className="text-xl font-extrabold text-slate-900 tracking-tight sm:text-2xl font-sans">
-                        Операционная панель PartsOps
-                      </h2>
-                      <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
-                        Интеллектуальное управление закупками на базе ИИ-агентов LangGraph и верификации цепочек поставок.
+                  {activeStep === 4 && (
+                    <SectionCard title="Шаг 4: Контроль операционного согласования" icon="fa-key">
+                      <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
+                        Изучите ценовые аномалии и проверьте целостность цепочки аудита SHA-256. Требуется явное одобрение администратора/специалиста для разблокировки ценового листа перед подготовкой черновика коммерческого предложения.
                       </p>
-                    </div>
-
-                    {/* Integrated Premium Quick Actions Toolbelt */}
-                    <div className="flex flex-wrap items-center gap-2 bg-slate-500/5 p-1.5 rounded-2xl border border-slate-200/40 backdrop-blur-md w-full sm:w-auto">
-                      <button
-                        onClick={() => setActiveNav('orders')}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                        title="Импортировать спецификации деталей"
-                      >
-                        <i className="fas fa-file-arrow-up text-teal-600"></i>
-                        <span>Импорт заказов</span>
-                      </button>
-                      <button
-                        onClick={() => setActiveNav('suppliers')}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                        title="Открыть базу поставщиков"
-                      >
-                        <i className="fas fa-truck-field text-indigo-600"></i>
-                        <span>Поставщики</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setFetchTrigger(prev => prev + 1);
-                          alert("Синхронизация с ERP успешно запущена!");
+                      <div className="mb-4">
+                        <EvidenceGatesWidget requestId={selectedReq.request_id} refreshTrigger={fetchTrigger} />
+                      </div>
+                      {Object.keys(selectedOffers).length < normalizedParts.length && (
+                        <InlineAlert
+                          type="warning"
+                          message="Некоторые детали не имеют выбранных предложений поставщиков. Настоятельно рекомендуется сравнить и выбрать варианты для всех позиций перед согласованием."
+                        />
+                      )}
+                      <div className="flex flex-col md:flex-row gap-3 pt-3 border-t border-[var(--border-subtle)] justify-end">
+                        <ActionButton
+                          variant="secondary"
+                          icon="fa-shuffle"
+                          onClick={() => {
+                            const reason = prompt('Укажите причину переработки:');
+                            if (reason !== null) handleStateTransition('MANUAL_REVIEW', reason || 'Требуется ручное уточнение');
+                          }}
+                        >
+                          Уточнить / Переработать
+                        </ActionButton>
+                        <ActionButton
+                          variant="primary"
+                          icon="fa-circle-check"
+                          onClick={() => {
+                            const reason = prompt('Укажите примечания к согласованию:');
+                            if (reason !== null) handleStateTransition('APPROVED', reason || 'Согласовано администратором закупок');
+                          }}
+                        >
+                          Явно одобрить закупку
+                        </ActionButton>
+                        <ActionButton
+                          variant="danger"
+                          icon="fa-trash-can"
+                          onClick={() => {
+                            const reason = prompt('Укажите причину отмены:');
+                            if (reason !== null) handleStateTransition('CANCELLED', reason || 'Запрос отклонен');
+                          }}
+                        >
+                          Отменить / Отклонить запрос
+                        </ActionButton>
+                      </div>
+                    </SectionCard>
+                  )}
+                  {activeStep === 5 && (
+                    <div className="space-y-4">
+                      <PricingCalculator
+                        parts={formattedPartsWithBestMatch}
+                        requestId={selectedReq.request_id}
+                        isApproved={selectedReq.status === 'APPROVED'}
+                        onDraftInvoice={(data) => {
+                          alert(`Черновик счета создан! Номер счета: ${data.invoice_number}`);
+                          setFetchTrigger((prev) => prev + 1);
                         }}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                        title="Запустить синхронизацию с ERP"
-                      >
-                        <i className="fas fa-rotate text-amber-500"></i>
-                        <span>Синхронизация</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          alert("Кэш очищен, сессия обновлена.");
-                        }}
-                        className="flex items-center justify-center h-8.5 w-8.5 rounded-xl text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 border border-slate-200 transition-all duration-200"
-                        title="Очистить локальный кэш"
-                      >
-                        <i className="fas fa-trash-can text-[11px]"></i>
-                      </button>
-                      <button
-                        onClick={() => setActiveNav('orders')}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold text-white bg-teal-600 hover:bg-teal-500 border-none transition-all duration-200 shadow-[0_4px_14px_rgba(0,180,157,0.2)] hover:shadow-[0_6px_20px_rgba(0,180,157,0.3)] hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]"
-                      >
-                        <i className="fas fa-plus"></i>
-                        <span>Новый запрос</span>
-                      </button>
+                      />
+                      <InvoicePreview requestId={selectedReq.request_id} onSent={() => setFetchTrigger((prev) => prev + 1)} />
                     </div>
-                  </div>
-                </section>
-
-                {/* Metrics scale */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {overviewMetrics.map(m => (
-                    <MetricTile key={m.label} label={m.label} value={m.value} delta={m.delta} tone={m.tone} />
-                  ))}
+                  )}
                 </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {/* Operational workflow lanes */}
-                  <SectionCard title="Нагрузка по этапам процесса" icon="fa-network-wired" className="lg:col-span-2">
-                    <div className="flex flex-col lg:flex-row items-stretch justify-between gap-3 lg:gap-2 mt-1">
-                      {workflowLanes.map((lane, idx) => (
-                        <React.Fragment key={lane.title}>
-                          <div className="flex-1 bg-[var(--surface-2)] border border-[var(--border-default)] rounded-xl p-3.5 flex flex-col justify-between hover:border-teal-500/30 hover:shadow-sm transition-all duration-300">
-                            <div className="flex justify-between items-start gap-2 mb-1.5">
-                              <span className="text-xs font-bold text-[var(--text-primary)] leading-tight">{lane.title}</span>
-                              <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border shrink-0 ${
-                                lane.tone === 'cyan' ? 'bg-cyan-50 border-cyan-200 text-cyan-700' :
-                                lane.tone === 'violet' ? 'bg-violet-50 border-violet-200 text-violet-700' :
-                                lane.tone === 'amber' ? 'bg-amber-50 border-amber-200 text-amber-700' :
-                                'bg-emerald-50 border-emerald-200 text-emerald-700'
-                              }`}>{lane.count}</span>
-                            </div>
-                            <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed mt-1">{lane.summary}</p>
+              </div>
+            ) : (
+              <div className="p-4 max-w-6xl mx-auto space-y-4">
+                {activeNav === 'dashboard' && (
+                  <>
+                    <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-50/50 via-slate-50 to-indigo-50/40 p-6 text-slate-900 shadow-sm border border-slate-200/50">
+                      <div className="absolute -right-24 -top-24 h-48 w-48 rounded-full bg-teal-500/5 blur-3xl pointer-events-none" />
+                      <div className="absolute -left-24 -bottom-24 h-48 w-48 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />
+                      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 relative z-10 w-full">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] text-teal-800 font-extrabold uppercase tracking-widest bg-teal-500/10 border border-teal-500/20 px-2.5 py-0.5 rounded-full backdrop-blur-md">
+                              Система активна
+                            </span>
+                            <span className="h-1.5 w-1.5 rounded-full bg-teal-500 animate-pulse" />
                           </div>
-                          {idx < workflowLanes.length - 1 && (
-                            <div className="hidden lg:flex items-center justify-center text-slate-300 text-sm select-none">
-                              <i className="fas fa-chevron-right"></i>
-                            </div>
-                          )}
-                        </React.Fragment>
+                          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight sm:text-2xl font-sans">
+                            Операционная панель PartsOps
+                          </h2>
+                          <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
+                            Интеллектуальное управление закупками на базе ИИ-агентов LangGraph и верификации цепочек поставок.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 bg-slate-500/5 p-1.5 rounded-2xl border border-slate-200/40 backdrop-blur-md w-full sm:w-auto">
+                          <button
+                            onClick={() => setActiveNav('orders')}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                            title="Импортировать спецификации деталей"
+                          >
+                            <i className="fas fa-file-arrow-up text-teal-600" />
+                            <span>Импорт заказов</span>
+                          </button>
+                          <button
+                            onClick={() => setActiveNav('suppliers')}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                            title="Открыть базу поставщиков"
+                          >
+                            <i className="fas fa-truck-field text-indigo-600" />
+                            <span>Поставщики</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setFetchTrigger((prev) => prev + 1);
+                              alert('Синхронизация с ERP успешно запущена!');
+                            }}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                            title="Запустить синхронизацию с ERP"
+                          >
+                            <i className="fas fa-rotate text-amber-500" />
+                            <span>Синхронизация</span>
+                          </button>
+                          <button
+                            onClick={() => alert('Кэш очищен, сессия обновлена.')}
+                            className="flex items-center justify-center h-8.5 w-8.5 rounded-xl text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 border border-slate-200 transition-all duration-200"
+                            title="Очистить локальный кэш"
+                          >
+                            <i className="fas fa-trash-can text-[11px]" />
+                          </button>
+                          <button
+                            onClick={() => setActiveNav('orders')}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold text-white bg-teal-600 hover:bg-teal-500 border-none transition-all duration-200 shadow-[0_4px_14px_rgba(0,180,157,0.2)] hover:shadow-[0_6px_20px_rgba(0,180,157,0.3)] hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]"
+                          >
+                            <i className="fas fa-plus" />
+                            <span>Новый запрос</span>
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {overviewMetrics.map((m) => (
+                        <MetricTile key={m.label} label={m.label} value={m.value} delta={m.delta} tone={m.tone} />
                       ))}
                     </div>
-                  </SectionCard>
-
-                  {/* Urgent Cases list */}
-                  <SectionCard title="Приоритетные инциденты" icon="fa-circle-radiation">
-                    <div className="space-y-3 mt-1">
-                      {urgentCases.map(c => {
-                        const isAmber = c.tone === 'amber';
-                       
-                        let cardStyle = "";
-                        let icon = "";
-                        if (isAmber) {
-                          cardStyle = "border-l-4 border-l-amber-500 bg-amber-50/30 hover:border-amber-300";
-                          icon = "fa-circle-exclamation text-amber-500";
-                        } else if (c.tone === 'emerald') {
-                          cardStyle = "border-l-4 border-l-emerald-500 bg-emerald-50/30 hover:border-emerald-300";
-                          icon = "fa-circle-check text-emerald-500";
-                        } else {
-                          cardStyle = "border-l-4 border-l-rose-500 bg-rose-50/30 hover:border-rose-300";
-                          icon = "fa-triangle-exclamation text-rose-500";
-                        }
-                       
-                        return (
-                          <div 
-                            key={c.id} 
-                            className={`border border-y-[var(--border-default)] border-r-[var(--border-default)] rounded-r-xl p-3 flex flex-col gap-1.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${cardStyle}`}
-                          >
-                            <div className="flex justify-between items-center">
-                              <strong className="text-xs font-mono font-extrabold text-[var(--text-primary)]">{c.id}</strong>
-                              <i className={`fas ${icon} text-[11px] animate-pulse`}></i>
-                            </div>
-                            <p className="text-[11px] font-bold text-[var(--text-primary)] leading-tight">{c.title}</p>
-                            <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{c.detail}</p>
-                          </div>
-                        );
-                      })}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      <SectionCard title="Нагрузка по этапам процесса" icon="fa-network-wired" className="lg:col-span-2">
+                        <div className="flex flex-col lg:flex-row items-stretch justify-between gap-3 lg:gap-2 mt-1">
+                          {workflowLanes.map((lane, idx) => (
+                            <React.Fragment key={lane.title}>
+                              <div className="flex-1 bg-[var(--surface-2)] border border-[var(--border-default)] rounded-xl p-3.5 flex flex-col justify-between hover:border-teal-500/30 hover:shadow-sm transition-all duration-300">
+                                <div className="flex justify-between items-start gap-2 mb-1.5">
+                                  <span className="text-xs font-bold text-[var(--text-primary)] leading-tight">{lane.title}</span>
+                                  <span
+                                    className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                                      lane.tone === 'cyan'
+                                        ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
+                                        : lane.tone === 'violet'
+                                          ? 'bg-violet-50 border-violet-200 text-violet-700'
+                                          : lane.tone === 'amber'
+                                            ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                            : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                    }`}
+                                  >
+                                    {lane.count}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed mt-1">{lane.summary}</p>
+                              </div>
+                              {idx < workflowLanes.length - 1 && (
+                                <div className="hidden lg:flex items-center justify-center text-slate-300 text-sm select-none">
+                                  <i className="fas fa-chevron-right" />
+                                </div>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </SectionCard>
+                      <SectionCard title="Приоритетные инциденты" icon="fa-circle-radiation">
+                        <div className="space-y-3 mt-1">
+                          {urgentCases.map((c) => {
+                            const isAmber = c.tone === 'amber';
+                            let cardStyle = '';
+                            let icon = '';
+                            if (isAmber) {
+                              cardStyle = 'border-l-4 border-l-amber-500 bg-amber-50/30 hover:border-amber-300';
+                              icon = 'fa-circle-exclamation text-amber-500';
+                            } else if (c.tone === 'emerald') {
+                              cardStyle = 'border-l-4 border-l-emerald-500 bg-emerald-50/30 hover:border-emerald-300';
+                              icon = 'fa-circle-check text-emerald-500';
+                            } else {
+                              cardStyle = 'border-l-4 border-l-rose-500 bg-rose-50/30 hover:border-rose-300';
+                              icon = 'fa-triangle-exclamation text-rose-500';
+                            }
+                            return (
+                              <div
+                                key={c.id}
+                                className={`border border-y-[var(--border-default)] border-r-[var(--border-default)] rounded-r-xl p-3 flex flex-col gap-1.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${cardStyle}`}
+                              >
+                                <div className="flex justify-between items-center">
+                                  <strong className="text-xs font-mono font-extrabold text-[var(--text-primary)]">{c.id}</strong>
+                                  <i className={`fas ${icon} text-[11px] animate-pulse`} />
+                                </div>
+                                <p className="text-[11px] font-bold text-[var(--text-primary)] leading-tight">{c.title}</p>
+                                <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{c.detail}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </SectionCard>
                     </div>
-                  </SectionCard>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                  <LLMCostPanel />
-                </div>
-              </>
-            )}
-
-            {/* Nav: Kanban Board (Dedicated Page) */}
-            {activeNav === 'kanban' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-[var(--border-strong)] pb-3">
-                  <div>
-                    <h2 className="text-lg font-bold text-[var(--text-primary)]">Интерактивный рабочий процесс</h2>
-                    <p className="text-xs text-[var(--text-secondary)]">Перетаскивайте запросы между этапами обработки для автоматического изменения статуса в системе.</p>
-                  </div>
-                  <ActionButton 
-                    variant="secondary" 
-                    icon="fa-rotate" 
-                    onClick={fetchRequests}
-                    title="Обновить доску" 
-                  />
-                </div>
-                <KanbanBoard
-                  requests={requests}
-                  onSelectRequest={handleSelectRequest}
-                  onTransitionRequest={handleStateTransition}
-                />
-              </div>
-            )}
-
-
-            {/* Nav: Supplier Catalog - Full Page View */}
-            {activeNav === 'suppliers' && (
-              <div className="h-full">
-                <SuppliersPage />
-              </div>
-            )}
-            {/* Nav: Order Intake */}
-            {activeNav === 'orders' && (
-              <div className="max-w-2xl mx-auto space-y-4">
-                <SectionCard title="Центр импорта и создания заказов" icon="fa-file-import">
-                  <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
-                    Загружайте опросные листы клиентов, вставляйте сырые списки совместимости VIN или импортируйте комплексные запросы. Исходные данные пройдут через узлы приема LangGraph для извлечения нормализованных списков деталей.
-                  </p>
-
-                  {localOrderMessage && (
-                    <InlineAlert type="success" message={localOrderMessage} />
-                  )}
-
-                  <Dropzone 
-                    title="Перетащите файл запроса на закупку"
-                    description="Загружайте текстовые документы, листы предложений клиентов или экспорт писем для автоматической регистрации новых запросов в очереди приема LangGraph."
-                    onImport={handleImportOrders}
-                    onFileUpload={handleFileUpload}
-                  />
-                </SectionCard>
-              </div>
-            )}
-
-            {/* General Empty States for Matching and Pricing if no request is chosen */}
-            {['matching', 'pricing'].includes(activeNav) && (
-              <div className="max-w-md mx-auto py-10">
-                <EmptyState 
-                  title="Запрос не выбран"
-                  description="Пожалуйста, выберите активный запрос из очереди сортировки справа, чтобы загрузить данные подбора, сравнить предложения кандидатов и подготовить коммерческие документы."
-                  icon={
-                    activeNav === 'matching' ? 'fa-arrows-split-up-and-left' : 'fa-calculator'
-                  }
-                />
-              </div>
-            )}
-
-            {/* Audit view when no request is selected - show completed orders list + explanation */}
-            {activeNav === 'audit' && (
-              <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-4">
-                <CompletedOrdersHistory 
-                  selectedRequestId={null}
-                  onSelectRequest={(req) => {
-                    setSelectedReq(req);
-                    setActiveNav('audit');
-                  }}
-                  fetchTrigger={fetchTrigger}
-                />
-                <div className="flex items-center justify-center p-8 bg-[var(--surface-1)] border border-[var(--border-default)] rounded-xl h-[650px] shadow-sm select-none">
-                  <div className="text-center max-w-sm">
-                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-[var(--text-muted)] text-xl border border-slate-200 mx-auto">
-                      <i className="fas fa-history"></i>
+                    <div className="grid grid-cols-1 gap-4">
+                      <LLMCostPanel />
                     </div>
-                    <h3 className="text-sm font-bold text-[var(--text-primary)] block mb-1">Детальный аудит не загружен</h3>
-                    <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-                      Пожалуйста, выберите завершенный заказ из архива слева или активный запрос из очереди справа, чтобы просмотреть цепочку событий аудита и проверить SHA-256 хеши.
-                    </p>
+                  </>
+                )}
+
+                {activeNav === 'kanban' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-[var(--border-strong)] pb-3">
+                      <div>
+                        <h2 className="text-lg font-bold text-[var(--text-primary)]">Интерактивный рабочий процесс</h2>
+                        <p className="text-xs text-[var(--text-secondary)]">Перетаскивайте запросы между этапами обработки для автоматического изменения статуса в системе.</p>
+                      </div>
+                      <ActionButton variant="secondary" icon="fa-rotate" onClick={fetchRequests} title="Обновить доску" />
+                    </div>
+                    <KanbanBoard
+                      requests={requests}
+                      onSelectRequest={handleSelectRequest}
+                      onTransitionRequest={handleStateTransition}
+                      resolveDropTarget={resolveDropTarget}
+                    />
                   </div>
-                </div>
+                )}
+
+                {activeNav === 'suppliers' && (
+                  <div className="h-full">
+                    <SuppliersPage />
+                  </div>
+                )}
+
+                {activeNav === 'orders' && (
+                  <div className="max-w-2xl mx-auto space-y-4">
+                    <SectionCard title="Центр импорта и создания заказов" icon="fa-file-import">
+                      <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
+                        Загружайте опросные листы клиентов, вставляйте сырые списки совместимости VIN или импортируйте комплексные запросы.
+                      </p>
+                      {localOrderMessage && <InlineAlert type="success" message={localOrderMessage} />}
+                      <Dropzone
+                        title="Перетащите файл запроса на закупку"
+                        description="Загружайте текстовые документы, листы предложений клиентов или экспорт писем."
+                        onImport={handleImportOrders}
+                        onFileUpload={handleFileUpload}
+                      />
+                    </SectionCard>
+                  </div>
+                )}
+
+                {['matching', 'pricing'].includes(activeNav) && (
+                  <div className="max-w-md mx-auto py-10">
+                    <EmptyState
+                      title="Запрос не выбран"
+                      description="Пожалуйста, выберите активный запрос из очереди сортировки справа."
+                      icon={activeNav === 'matching' ? 'fa-arrows-split-up-and-left' : 'fa-calculator'}
+                      actionNode={
+                        <button
+                          onClick={() => setRightCollapsed(false)}
+                          className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-500 border-none transition-all duration-200 shadow-[0_4px_14px_rgba(0,180,157,0.2)] hover:shadow-[0_6px_20px_rgba(0,180,157,0.3)] hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]"
+                        >
+                          <i className="fas fa-arrow-right" />
+                          <span>Открыть очередь</span>
+                        </button>
+                      }
+                    />
+                  </div>
+                )}
+
+                {activeNav === 'audit' && selectedReq && (
+                  <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-4">
+                    <CompletedOrdersHistory
+                      selectedRequestId={selectedReq.request_id}
+                      onSelectRequest={(req) => {
+                        setSelectedReq(req);
+                        setActiveNav('audit');
+                      }}
+                      fetchTrigger={fetchTrigger}
+                    />
+                    <AuditTimeline requestId={selectedReq.request_id} />
+                  </div>
+                )}
+
+                {activeNav === 'audit' && !selectedReq && (
+                  <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-4">
+                    <CompletedOrdersHistory
+                      selectedRequestId={null}
+                      onSelectRequest={(req) => {
+                        setSelectedReq(req);
+                        setActiveNav('audit');
+                      }}
+                      fetchTrigger={fetchTrigger}
+                    />
+                    <div className="flex items-center justify-center p-8 bg-[var(--surface-1)] border border-[var(--border-default)] rounded-xl h-[650px] shadow-sm select-none">
+                      <div className="text-center max-w-sm">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-[var(--text-muted)] text-xl border border-slate-200 mx-auto">
+                          <i className="fas fa-history" />
+                        </div>
+                        <h3 className="text-sm font-bold text-[var(--text-primary)] block mb-1">Детальный аудит не загружен</h3>
+                        <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                          Пожалуйста, выберите завершенный заказ из архива слева или активный запрос из очереди справа, чтобы просмотреть цепочку событий аудита и проверить SHA-256 хеши.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
-      </main>
-
-        {/* Right operational triage queue rail */}
-        <RightPanel 
+          </main>
+          <RightPanel
+            requests={requests}
+            fetchRequests={fetchRequests}
+            selectedRequestId={selectedReq?.request_id || null}
+            onSelectRequest={handleSelectRequest}
+            fetchTrigger={fetchTrigger}
+            isCollapsed={rightCollapsed}
+            onToggleCollapse={() => setRightCollapsed(!rightCollapsed)}
+          />
+        </div>
+        <CommandPalette
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigate={(nav) => {
+            setActiveNav(nav);
+            setIsCommandPaletteOpen(false);
+          }}
           requests={requests}
-          fetchRequests={fetchRequests}
-          selectedRequestId={selectedReq?.request_id || null}
-          onSelectRequest={handleSelectRequest}
-          fetchTrigger={fetchTrigger}
-          isCollapsed={rightCollapsed}
-          onToggleCollapse={() => setRightCollapsed(!rightCollapsed)}
+          suppliers={suppliersForPalette}
         />
-      </div>
     </AppFrame>
   );
 }

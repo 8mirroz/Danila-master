@@ -2,7 +2,7 @@ system:
   name: PartsOps Agent OS Control Console
   version: 0.1.0
   type: agent_control_plane
-  mission: Управлять AI-агентом PartsOps: модели, очереди, бюджеты, tool calls, approval, debug, evals, replay и rollback.
+  mission: "Управлять AI-агентом PartsOps: модели, очереди, бюджеты, tool calls, approval, debug, evals, replay и rollback."
 
 truth_sources:
   financial_truth: ERPNext

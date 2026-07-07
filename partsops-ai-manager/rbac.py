@@ -132,7 +132,7 @@ def require_privileged_access(
 ) -> bool:
     """Require authentication when PARTSOPS_API_TOKEN is configured."""
     if principal.auth_mode == "token" and not principal.authenticated:
-        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <token>")
+        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
     return True
 
 
@@ -142,7 +142,7 @@ def get_privileged_tenant(
     """Return the safe tenant for the current request."""
     # Ensure unauthenticated token access is blocked for privileged endpoints
     if principal.auth_mode == "token" and not principal.authenticated:
-        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <token>")
+        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
     return principal.tenant_id
 
 
@@ -156,7 +156,7 @@ def get_current_role(
     principal: CurrentPrincipal = Depends(get_current_principal),
 ) -> str:
     if principal.auth_mode == "token" and not principal.authenticated:
-        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <token>")
+        raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
     return principal.role
 
 
@@ -166,7 +166,7 @@ class RoleChecker:
 
     def __call__(self, principal: CurrentPrincipal = Depends(get_current_principal)) -> str:
         if principal.auth_mode == "token" and not principal.authenticated:
-            raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer <token>")
+            raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
         if principal.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=403,
