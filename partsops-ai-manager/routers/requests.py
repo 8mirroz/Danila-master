@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 from fastapi import APIRouter, Depends, Header, HTTPException, Body, File, UploadFile
 from pydantic import BaseModel, Field as PydanticField
-from sqlmodel import Session, select
+from sqlmodel import Session, select, desc
 
 from database import get_session
 from rbac import get_privileged_tenant, get_current_tenant, get_current_principal, CurrentPrincipal
@@ -13,6 +13,9 @@ from services.request_service import RequestService
 from app.automation.storage import storage
 from models import UploadArtifact, EventType
 from event_store import emit_event
+
+# Import the new agent orchestrator
+from app.agents import AgentOrchestrator, create_orchestrator
 
 router = APIRouter(prefix="/api", tags=["Requests & Attachments"])
 
@@ -275,3 +278,582 @@ def audit_event_chain(
     tenant_id: str = Depends(get_privileged_tenant),
 ):
     return RequestService.audit_event_chain(session, request_id, tenant_id)
+
+
+# ──────────────────────────────────────────────
+# MULTI-AGENT PIPELINE ENDPOINTS
+# ──────────────────────────────────────────────
+
+class PipelineRequestPayload(BaseModel):
+    """Payload for running the full multi-agent pipeline"""
+    source: str  # telegram, email, crm, web, manual, api
+    text: str
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_erp_id: Optional[str] = None
+    vehicle_vin: Optional[str] = None
+    vehicle_make: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    vehicle_year: Optional[int] = None
+    vehicle_generation: Optional[str] = None
+    vehicle_engine: Optional[str] = None
+    parts_data: Optional[List[Dict[str, Any]]] = None
+    metadata: Optional[Dict[str, Any]] = None
+    priority: str = "normal"
+
+
+class PipelineContinuePayload(BaseModel):
+    """Payload for continuing a pipeline from a specific stage"""
+    start_from: str = "processing"  # intake, processing, delivery, reporting
+
+
+@router.post("/pipeline/run")
+def run_full_pipeline(
+    payload: PipelineRequestPayload,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """
+    Run the complete multi-agent order processing pipeline.
+    
+    Flow: Intake → Processing → Delivery → Reporting
+    
+    This endpoint:
+    1. Creates/validates the order (Intake Agent)
+    2. Matches parts and calculates pricing (Processing Agent)
+    3. Generates approval document
+    4. Sends to client via appropriate channel (Delivery Agent)
+    5. Reports results to operators (Reporting Agent)
+    """
+    orchestrator = create_orchestrator(tenant_id=tenant_id)
+    
+    
+    try:
+        result = orchestrator.run_pipeline(
+            source=payload.source,
+            raw_input=payload.text,
+            customer_data={
+                "name": payload.customer_name,
+                "phone": payload.customer_phone,
+                "email": payload.customer_email,
+                "erp_id": payload.customer_erp_id,
+            },
+            vehicle_data={
+                "vin": payload.vehicle_vin,
+                "make": payload.vehicle_make,
+                "model": payload.vehicle_model,
+                "year": payload.vehicle_year,
+                "generation": payload.vehicle_generation,
+                "engine": payload.vehicle_engine,
+            },
+            parts_data=payload.parts_data,
+            metadata=payload.metadata or {},
+            priority=payload.priority,
+        )
+        
+        return {
+            "success": result.success,
+            "request_id": result.request_id,
+            "order_id": result.order_id,
+            "phases": {k: v.to_dict() for k, v in result.phases.items()},
+            "errors": result.errors,
+            "warnings": result.warnings,
+            "correlation_id": result.correlation_id,
+            "total_time_ms": result.total_time_ms,
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {e}")
+
+
+@router.post("/pipeline/continue/{request_id}")
+def continue_pipeline(
+    request_id: str,
+    payload: PipelineContinuePayload,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """
+    Continue a pipeline from a specific stage (for retries).
+    
+    Args:
+        request_id: The request to continue
+        start_from: Which agent to start from (intake, processing, delivery, reporting)
+    """
+    from app.agents import AgentType
+    
+    try:
+        start_agent = AgentType(payload.start_from)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid start_from: {payload.start_from}")
+    
+    orchestrator = create_orchestrator(tenant_id=tenant_id)
+    
+    try:
+        result = orchestrator.continue_pipeline(
+            request_id=request_id,
+            start_from=start_agent,
+        )
+        
+        return {
+            "success": result.success,
+            "request_id": result.request_id,
+            "order_id": result.order_id,
+            "phases": {k: v.to_dict() for k, v in result.phases.items()},
+            "errors": result.errors,
+            "warnings": result.warnings,
+            "correlation_id": result.correlation_id,
+            "total_time_ms": result.total_time_ms,
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline continuation failed: {e}")
+
+
+@router.get("/pipeline/status/{request_id}")
+def get_pipeline_status(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """Get the current status of a request in the pipeline"""
+    from models import PartRequest
+    
+    request = session.exec(
+        select(PartRequest).where(
+            PartRequest.request_id == request_id,
+            PartRequest.tenant_id == tenant_id
+        )
+    ).first()
+    
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    return {
+        "request_id": request.request_id,
+        "status": request.status,
+        "source": request.source,
+        "priority": request.priority,
+        "customer_name": request.customer_name,
+        "vehicle": {
+            "make": request.vehicle_make,
+            "model": request.vehicle_model,
+            "year": request.vehicle_year,
+            "vin": request.vehicle_vin_masked,
+        },
+        "parts_count": len(request.parts_json) if request.parts_json else 0,
+        "pricing_total": None,  # Would need to parse pricing_evidence_json
+        "original_ref": request.raw_input_ref,
+        "created_at": request.created_at.isoformat() if request.created_at else None,
+        "updated_at": request.updated_at.isoformat() if request.updated_at else None,
+    }
+
+
+# ──────────────────────────────────────────────
+# DELIVERY ENDPOINTS (for InvoicePreview component)
+# ──────────────────────────────────────────────
+
+@router.get("/delivery/status/{request_id}")
+def get_delivery_status(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """Get delivery status/logs for a request"""
+    from models import OutboundMessage
+    from suppliers import Invoice
+    from sqlmodel import select
+    
+    # Get outbound messages for this request
+    messages = session.exec(
+        select(OutboundMessage).where(
+            OutboundMessage.request_id == request_id,
+            OutboundMessage.tenant_id == tenant_id,
+        ).order_by(OutboundMessage.created_at.desc())
+    ).all()
+    
+    return [
+        {
+            "message_id": m.id,
+            "channel": m.channel,
+            "recipient": m.recipient,
+            "status": m.status,
+            "attempts": m.attempts,
+            "last_error": m.last_error,
+            "sent_at": m.sent_at.isoformat() if m.sent_at else None,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in messages
+    ]
+
+
+@router.get("/delivery/invoice/{request_id}/pdf")
+def get_invoice_pdf(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """Get PDF for invoice linked to request"""
+    from suppliers import Invoice
+    from delivery import InvoicePDFGenerator
+    from fastapi.responses import Response
+    from sqlmodel import select
+    
+    # Find invoice for this request
+    invoice = session.exec(
+        select(Invoice).where(
+            Invoice.request_id == request_id,
+            Invoice.tenant_id == tenant_id,
+        )
+    ).first()
+    
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found for this request")
+    
+    # Generate PDF
+    pdf_bytes = InvoicePDFGenerator.generate(invoice)
+    
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="Invoice-{invoice.invoice_number}.pdf"'
+        }
+    )
+
+
+@router.post("/delivery/send/{request_id}")
+def send_invoice(
+    request_id: str,
+    body: dict,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """Send invoice via specified channel"""
+    from suppliers import Invoice
+    from delivery import EmailAdapter, TelegramAdapter
+    from sqlmodel import select
+    
+    channel = body.get("channel", "email")
+    recipient = body.get("recipient", "")
+    dry_run = body.get("dry_run", True)
+    
+    if not recipient:
+        raise HTTPException(status_code=400, detail="Recipient is required")
+    
+    # Find invoice for this request
+    invoice = session.exec(
+        select(Invoice).where(
+            Invoice.request_id == request_id,
+            Invoice.tenant_id == tenant_id,
+        )
+    ).first()
+    
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found for this request")
+    
+    try:
+        if channel == "email":
+            result = EmailAdapter.send_invoice(
+                invoice=invoice,
+                recipient_email=recipient,
+                session=session,
+                tenant_id=tenant_id,
+                dry_run=dry_run,
+            )
+        elif channel == "telegram":
+            result = TelegramAdapter.send_invoice_preview(
+                invoice=invoice,
+                chat_id=recipient,
+                session=session,
+                tenant_id=tenant_id,
+                dry_run=dry_run,
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported channel: {channel}")
+        
+        return {
+            "success": result.status == "sent",
+            "message_id": result.id,
+            "status": result.status,
+            "channel": result.channel,
+            "recipient": result.recipient,
+            "error": result.last_error,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send: {e}")
+
+
+# ──────────────────────────────────────────────
+# APPROVAL WORKFLOW ENDPOINTS
+# ──────────────────────────────────────────────
+
+class ApprovalActionPayload(BaseModel):
+    """Payload for approve/reject actions"""
+    action: str  # "approve" or "reject"
+    comment: Optional[str] = None
+    actor_id: str = "admin"
+
+
+@router.post("/requests/{request_id}/approve")
+def approve_request(
+    request_id: str,
+    payload: ApprovalActionPayload,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """Approve or reject a request awaiting approval"""
+    from models import PartRequest, ApprovalTicket, RequestState, EventType
+    from sqlmodel import select
+    
+    if payload.action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
+    
+    request = session.exec(
+        select(PartRequest).where(
+            PartRequest.request_id == request_id,
+            PartRequest.tenant_id == tenant_id
+        )
+    ).first()
+    
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    if request.status != RequestState.READY_FOR_APPROVAL:
+        raise HTTPException(status_code=400, detail=f"Request not in READY_FOR_APPROVAL state (current: {request.status})")
+    
+    # Find pending approval ticket
+    ticket = session.exec(
+        select(ApprovalTicket).where(
+            ApprovalTicket.request_id == request_id,
+            ApprovalTicket.tenant_id == tenant_id,
+            ApprovalTicket.status == "pending"
+        )
+    ).first()
+    
+    if payload.action == "approve":
+        # Approve the request
+        request.status = RequestState.APPROVED
+        request.updated_at = datetime.utcnow()
+        session.add(request)
+        
+        # Update ticket
+        if ticket:
+            ticket.status = "approved"
+            ticket.decided_by = payload.actor_id
+            ticket.decided_at = datetime.utcnow()
+            ticket.decision_note = payload.comment
+            session.add(ticket)
+        
+        # Emit event
+        emit_event(
+            session=session,
+            request_id=request_id,
+            event_type=EventType.MANAGER_APPROVED,
+            actor_type="user",
+            actor_id=payload.actor_id,
+            payload={"comment": payload.comment},
+            tenant_id=tenant_id,
+        )
+        
+        message = "Request approved successfully"
+        
+        # Continue pipeline after approval (delivery + reporting)
+        try:
+            from app.agents import create_orchestrator, AgentType
+            orchestrator = create_orchestrator(tenant_id=tenant_id)
+            continue_result = orchestrator.continue_pipeline(
+                request_id=request_id,
+                start_from=AgentType.DELIVERY,
+            )
+            if continue_result.success:
+                delivery_success = continue_result.phases.get('delivery')
+                delivery_success = delivery_success.success if delivery_success else False
+                reporting_success = continue_result.phases.get('reporting')
+                reporting_success = reporting_success.success if reporting_success else False
+                message += f" | Pipeline continued: delivery={delivery_success}, reporting={reporting_success}"
+            else:
+                message += f" | Pipeline continuation failed: {continue_result.errors}"
+        except Exception as e:
+            message += f" | Pipeline continuation error: {str(e)}"
+        
+    else:
+        # Reject the request
+        request.status = RequestState.CLIENT_REJECTED
+        request.updated_at = datetime.utcnow()
+        session.add(request)
+        
+        # Update ticket
+        if ticket:
+            ticket.status = "rejected"
+            ticket.decided_by = payload.actor_id
+            ticket.decided_at = datetime.utcnow()
+            ticket.decision_note = payload.comment
+            session.add(ticket)
+        
+        # Emit event
+        emit_event(
+            session=session,
+            request_id=request_id,
+            event_type=EventType.MANAGER_REJECTED,
+            actor_type="user",
+            actor_id=payload.actor_id,
+            payload={"comment": payload.comment, "reason": "rejected_by_manager"},
+            tenant_id=tenant_id,
+        )
+        
+        message = "Request rejected"
+    
+    session.commit()
+    
+    return {
+        "success": True,
+        "request_id": request_id,
+        "new_status": request.status,
+        "message": message,
+    }
+
+
+@router.get("/requests/{request_id}/approval-tickets")
+def get_approval_tickets(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """Get approval tickets for a request"""
+    from models import ApprovalTicket
+    from sqlmodel import select
+    
+    tickets = session.exec(
+        select(ApprovalTicket).where(
+            ApprovalTicket.request_id == request_id,
+            ApprovalTicket.tenant_id == tenant_id,
+        ).order_by(ApprovalTicket.created_at.desc())
+    ).all()
+    
+    return [
+        {
+            "ticket_id": t.ticket_id,
+            "tool_name": t.tool_name,
+            "reason": t.reason,
+            "role_required": t.role_required,
+            "status": t.status,
+            "requested_by": t.requested_by,
+            "decided_by": t.decided_by,
+            "decided_at": t.decided_at.isoformat() if t.decided_at else None,
+            "decision_note": t.decision_note,
+            "created_at": t.created_at.isoformat(),
+        }
+        for t in tickets
+    ]
+
+
+# ──────────────────────────────────────────────
+# CLIENT PORTAL ENDPOINTS (Public tracking)
+# ──────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+class ClientPortalViewPayload(BaseModel):
+    """Public view of request for client portal"""
+    tracking_token: str
+
+class ClientPortalActionPayload(BaseModel):
+    """Action from client (accept/reject)"""
+    tracking_token: str
+    action: str  # "accept" or "reject"
+    reason: Optional[str] = None
+
+
+@router.get("/client/track/{token}")
+def client_track_request(
+    token: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Get public view of request via tracking token"""
+    from client_portal import get_public_request_view
+    
+    view = get_public_request_view(token, session, tenant_id)
+    if not view:
+        raise HTTPException(status_code=404, detail="Request not found or token invalid")
+    
+    return view
+
+
+@router.post("/client/track/{token}/accept")
+def client_accept_offer(
+    token: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Client accepts the offer (SENT_TO_CLIENT -> PAID)"""
+    from client_portal import accept_offer
+    
+    result = accept_offer(token, session, tenant_id)
+    if not result["ok"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+
+@router.post("/client/track/{token}/reject")
+def client_reject_offer(
+    token: str,
+    body: dict,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Client rejects the offer (SENT_TO_CLIENT -> CLIENT_REJECTED)"""
+    from client_portal import reject_offer
+    
+    reason = body.get("reason", "No reason provided")
+    result = reject_offer(token, reason, session, tenant_id)
+    if not result["ok"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+
+@router.post("/requests/{request_id}/generate-tracking-token")
+def generate_tracking_token_endpoint(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """Generate tracking token for client portal access"""
+    from client_portal import create_tracking_token
+    from models import PartRequest
+    from sqlmodel import select
+    from datetime import datetime, timedelta
+    
+    request = session.exec(
+        select(PartRequest).where(
+            PartRequest.request_id == request_id,
+            PartRequest.tenant_id == tenant_id
+        )
+    ).first()
+    
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    token = create_tracking_token(
+        request_id=request_id,
+        tenant_id=tenant_id,
+        expires_hours=72,
+    )
+    
+    # Store token in request
+    request.tracking_token = token
+    request.tracking_token_expires_at = datetime.utcnow() + timedelta(hours=72)
+    session.add(request)
+    session.commit()
+    
+    return {
+        "success": True,
+        "request_id": request_id,
+        "tracking_token": token,
+        "tracking_url": f"/client/track/{token}",
+        "expires_at": request.tracking_token_expires_at.isoformat(),
+    }

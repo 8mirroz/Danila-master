@@ -605,13 +605,13 @@ export const Dropzone: React.FC<DropzoneProps> = ({
         setUploadProgress(prev => Math.min(prev + 10, 90));
       }, 100);
       
-      const artifactId = await onFileUpload(file);
+      await onFileUpload(file);
       
       clearInterval(progressInterval);
       setUploadProgress(100);
       
-      // Pass artifact reference to onImport
-      onImport(`[Файл: ${file.name}] Артефакт загружен: ${artifactId}. Распознавание спецификации и деталей запчастей...`);
+      // File upload handler should manage the complete flow (import from artifact, etc.)
+      // Don't call onImport for file uploads - the handler manages the full flow
     } catch (error) {
       console.error('File upload error:', error);
       const errorMsg = error instanceof Error ? error.message : 'Ошибка загрузки файла';

@@ -1,4 +1,6 @@
-"""Client Portal MVP (Phase 9) — public tracking, offer acceptance."""
+"""
+Client Portal MVP (Phase 9) — public tracking, offer acceptance.
+"""
 from __future__ import annotations
 import hashlib
 import secrets
@@ -16,6 +18,30 @@ def generate_tracking_token(request_id: str) -> str:
     """Generate cryptographically secure token: SHA256(request_id + salt)."""
     salt = secrets.token_hex(16)
     token = hashlib.sha256(f"{request_id}:{salt}".encode()).hexdigest()
+    return token
+
+def create_tracking_token(request_id: str, tenant_id: str, expires_hours: int = 72) -> str:
+    """Generate and store tracking token in the database."""
+    from database import engine
+    from sqlmodel import Session, select
+    from models import PartRequest
+    
+    token = generate_tracking_token(request_id)
+    
+    with Session(engine) as session:
+        req = session.exec(
+            select(PartRequest).where(
+                PartRequest.request_id == request_id,
+                PartRequest.tenant_id == tenant_id
+            )
+        ).first()
+        
+        if req:
+            req.tracking_token = token
+            req.tracking_token_expires_at = datetime.utcnow() + timedelta(hours=expires_hours)
+            session.add(req)
+            session.commit()
+    
     return token
 
 def verify_tracking_token(token: str, request_id: str) -> bool:
@@ -112,6 +138,7 @@ def reject_offer(token: str, reason: str, session: Session, tenant_id: str) -> D
     if req.status != RequestState.SENT_TO_CLIENT:
         return {"ok": False, "error": f"Cannot reject: current status is {req.status}"}
     
+    old_status = req.status
     new_state = transition(req.status, RequestState.CLIENT_REJECTED, req.model_dump())
     req.status = new_state
     
@@ -122,7 +149,7 @@ def reject_offer(token: str, reason: str, session: Session, tenant_id: str) -> D
         event_type=EventType.STATE_CHANGED,
         actor_type="client",
         actor_id="public_portal",
-        payload={"from": req.status, "to": new_state, "reason": f"Offer rejected: {reason}"}
+        payload={"from": old_status, "to": new_state, "reason": f"Offer rejected: {reason}"}
     )
     
     session.add(req)

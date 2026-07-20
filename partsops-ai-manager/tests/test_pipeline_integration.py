@@ -1,0 +1,315 @@
+"""Integration tests for the multi-agent pipeline."""
+import pytest
+import json
+from datetime import datetime
+
+from fastapi.testclient import TestClient
+
+from main import app
+from database import engine
+from sqlmodel import SQLModel, Session, select
+from models import PartRequest, RequestState, EventType, ApprovalTicket, OutboundMessage
+from suppliers import seed_database
+
+client = TestClient(app)
+
+AUTH_HEADERS = {
+    "Authorization": "Bearer test-token",
+    "X-Tenant-ID": "default",
+}
+
+
+@pytest.fixture(autouse=True)
+def setup_db():
+    SQLModel.metadata.drop_all(engine)
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        seed_database(session)
+    yield
+    SQLModel.metadata.drop_all(engine)
+
+
+def test_full_pipeline_runs_successfully():
+    """Full pipeline: intake -> processing -> delivery -> reporting."""
+    response = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "telegram",
+            "text": "Тормозные колодки для BMW X5 2018 VIN: WBAXX5C55JWE12345",
+            "customer_name": "Иван",
+            "customer_phone": "+79991234567",
+            "customer_email": "ivan@example.com",
+            "priority": "normal",
+            "metadata": {
+                "source_metadata": {"message_id": 1, "chat_id": 100, "user_id": 100}
+            },
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["request_id"] is not None
+    assert set(data["phases"].keys()) == {"intake", "processing", "delivery", "reporting"}
+
+
+def test_pipeline_creates_request_with_original_ref():
+    """Pipeline must store the original request reference."""
+    response = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "telegram",
+            "text": "Воздушный фильтр BMW X3",
+            "customer_name": "Петр",
+            "customer_phone": "+79990000000",
+            "customer_email": "petr@example.com",
+            "metadata": {"source_metadata": {"message_id": 2, "chat_id": 200, "user_id": 200}},
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == 200
+    request_id = response.json()["request_id"]
+
+    with Session(engine) as session:
+        request = session.exec(
+            select(PartRequest).where(PartRequest.request_id == request_id)
+        ).first()
+        assert request is not None
+        assert request.raw_input_ref is not None
+        assert "tg:msg" in request.raw_input_ref
+
+
+def test_pipeline_status_flow():
+    """Request should move from NEW -> SENT_TO_CLIENT after full pipeline."""
+    response = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "email",
+            "text": "Масляный фильтр для BMW",
+            "customer_name": "Алексей",
+            "customer_email": "alex@example.com",
+        },
+        headers=AUTH_HEADERS,
+    )
+    request_id = response.json()["request_id"]
+
+    status_resp = client.get(
+        f"/api/pipeline/status/{request_id}", headers=AUTH_HEADERS
+    )
+    assert status_resp.json()["status"] == "SENT_TO_CLIENT"
+
+
+def test_approval_workflow_continues_pipeline():
+    """Approving a request should continue delivery + reporting phases."""
+    # Run pipeline
+    run_resp = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "telegram",
+            "text": "Тормозные колодки BMW X5",
+            "customer_name": "Олег",
+            "customer_phone": "+7999222333",
+            "customer_email": "oleg@example.com",
+            "metadata": {"source_metadata": {"message_id": 3, "chat_id": 300, "user_id": 300}},
+        },
+        headers=AUTH_HEADERS,
+    )
+    request_id = run_resp.json()["request_id"]
+
+    # Approve
+    approve_resp = client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"action": "approve", "comment": "Одобрено"},
+        headers=AUTH_HEADERS,
+    )
+    assert approve_resp.status_code == 200
+    approve_data = approve_resp.json()
+    assert approve_data["success"] is True
+    assert "Pipeline continued" in approve_data["message"]
+
+    # Should be SENT_TO_CLIENT after approval + delivery
+    status_resp = client.get(
+        f"/api/pipeline/status/{request_id}", headers=AUTH_HEADERS
+    )
+    assert status_resp.json()["status"] == "SENT_TO_CLIENT"
+
+    # Approval ticket must be stored
+    tickets_resp = client.get(
+        f"/api/requests/{request_id}/approval-tickets", headers=AUTH_HEADERS
+    )
+    tickets = tickets_resp.json()
+    assert len(tickets) >= 1
+    assert tickets[0]["status"] == "approved"
+
+
+def test_reject_workflow():
+    """Rejecting a request should move to CLIENT_REJECTED."""
+    run_resp = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "crm",
+            "text": "Тормозные колодки BMW",
+            "customer_name": "CRM Клиент",
+            "customer_phone": "+7999555666",
+            "customer_email": "crm@example.com",
+        },
+        headers=AUTH_HEADERS,
+    )
+    request_id = run_resp.json()["request_id"]
+
+    reject_resp = client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"action": "reject", "comment": "Цена too high"},
+        headers=AUTH_HEADERS,
+    )
+    assert reject_resp.status_code == 200
+    assert reject_resp.json()["new_status"] == "CLIENT_REJECTED"
+
+    status_resp = client.get(
+        f"/api/pipeline/status/{request_id}", headers=AUTH_HEADERS
+    )
+    assert status_resp.json()["status"] == "CLIENT_REJECTED"
+
+
+def test_client_portal_tracking_token_flow():
+    """Client can track order via token, accept/reject offers."""
+    run_resp = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "telegram",
+            "text": "Передний амортизатор BMW X5",
+            "customer_name": "Максим",
+            "customer_phone": "+79997778899",
+            "customer_email": "max@example.com",
+            "metadata": {"source_metadata": {"message_id": 4, "chat_id": 400, "user_id": 400}},
+        },
+        headers=AUTH_HEADERS,
+    )
+    request_id = run_resp.json()["request_id"]
+
+    # Approve to reach SENT_TO_CLIENT
+    client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"action": "approve"},
+        headers=AUTH_HEADERS,
+    )
+
+    # Generate tracking token
+    token_resp = client.post(
+        f"/api/requests/{request_id}/generate-tracking-token", headers=AUTH_HEADERS
+    )
+    assert token_resp.status_code == 200
+    token = token_resp.json()["tracking_token"]
+
+    # Track request
+    track_resp = client.get(f"/api/client/track/{token}", headers=AUTH_HEADERS)
+    assert track_resp.status_code == 200
+    assert track_resp.json()["status"] == "SENT_TO_CLIENT"
+
+    # Accept offer
+    accept_resp = client.post(
+        f"/api/client/track/{token}/accept", headers=AUTH_HEADERS
+    )
+    assert accept_resp.json()["ok"] is True
+    assert accept_resp.json()["new_status"] == "PAID"
+
+    status_resp = client.get(
+        f"/api/pipeline/status/{request_id}", headers=AUTH_HEADERS
+    )
+    assert status_resp.json()["status"] == "PAID"
+
+
+def test_client_portal_reject_flow():
+    """Client can reject offer via tracking token."""
+    run_resp = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "email",
+            "text": "Тормозные колодки BMW X5",
+            "customer_name": "Николай",
+            "customer_email": "nik@example.com",
+        },
+        headers=AUTH_HEADERS,
+    )
+    request_id = run_resp.json()["request_id"]
+
+    client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"action": "approve"},
+        headers=AUTH_HEADERS,
+    )
+
+    token_resp = client.post(
+        f"/api/requests/{request_id}/generate-tracking-token", headers=AUTH_HEADERS
+    )
+    token = token_resp.json()["tracking_token"]
+
+    reject_resp = client.post(
+        f"/api/client/track/{token}/reject",
+        json={"reason": "Нашел дешевле"},
+        headers=AUTH_HEADERS,
+    )
+    assert reject_resp.json()["ok"] is True
+    assert reject_resp.json()["new_status"] == "CLIENT_REJECTED"
+
+
+def test_delivery_logs_stored():
+    """Outbound delivery messages must be persisted and retrievable."""
+    run_resp = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "telegram",
+            "text": "Тормозной диск BMW X5",
+            "customer_name": "Дмитрий",
+            "customer_phone": "+79990001122",
+            "customer_email": "dima@example.com",
+            "metadata": {"source_metadata": {"message_id": 5, "chat_id": 500, "user_id": 500}},
+        },
+        headers=AUTH_HEADERS,
+    )
+    request_id = run_resp.json()["request_id"]
+
+    client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"action": "approve"},
+        headers=AUTH_HEADERS,
+    )
+
+    delivery_resp = client.get(
+        f"/api/delivery/status/{request_id}", headers=AUTH_HEADERS
+    )
+    logs = delivery_resp.json()
+    assert isinstance(logs, list)
+    assert len(logs) >= 1
+    assert logs[0]["channel"] == "telegram"
+
+
+def test_generate_tracking_token_endpoint_creates_token():
+    """Endpoint must create and store a tracking token."""
+    run_resp = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "crm",
+            "text": "Тормозные колодки BMW",
+            "customer_name": "Сергей",
+            "customer_email": "sergey@example.com",
+        },
+        headers=AUTH_HEADERS,
+    )
+    request_id = run_resp.json()["request_id"]
+
+    token_resp = client.post(
+        f"/api/requests/{request_id}/generate-tracking-token", headers=AUTH_HEADERS
+    )
+    assert token_resp.status_code == 200
+    data = token_resp.json()
+    assert data["success"] is True
+    assert "tracking_token" in data
+    assert data["tracking_url"].endswith(data["tracking_token"])
+
+    with Session(engine) as session:
+        request = session.exec(
+            select(PartRequest).where(PartRequest.request_id == request_id)
+        ).first()
+        assert request.tracking_token == data["tracking_token"]
+        assert request.tracking_token_expires_at is not None

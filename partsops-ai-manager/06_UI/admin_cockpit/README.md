@@ -32,6 +32,11 @@
 ## Source of truth
 - Project UI guide: `../../../DM obs/06-agents/ui-premium-design-system.md`
 
+## Vault-backed memory
+- Бэкенд: `POST /api/admin/observability/vault-sync/{correlation_id}` записывает MD-файл в `~/antigravity-vault/04_Sessions/Zera/`
+- Фронтенд: кнопка `Vault` в `MultiAgentOrchestraView` на каждый запуск
+- Требуется env `OBSIDIAN_VAULT_PATH` или default `~/antigravity-vault`
+
 ## Validation
 ```bash
 npm install

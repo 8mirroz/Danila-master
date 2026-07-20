@@ -17,6 +17,7 @@ from sqlmodel import Session
 from database import engine, init_db
 from middleware import CorrelationIDMiddleware
 from suppliers import seed_database
+from settings import settings
 
 # Import routers
 from routers.requests import router as requests_router
@@ -44,17 +45,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS from settings
+cors_origins = [
+    origin.strip()
+    for origin in (
+        os.getenv("PARTSOPS_CORS_ORIGINS")
+        or settings.CORS_ALLOW_ORIGINS
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        origin.strip()
-        for origin in (
-            os.getenv("PARTSOPS_CORS_ORIGINS")
-            or os.getenv("CORS_ALLOW_ORIGINS")
-            or "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5176,http://127.0.0.1:5176,http://localhost:4173,http://127.0.0.1:4173,http://localhost:3000,http://127.0.0.1:3000"
-        ).split(",")
-        if origin.strip()
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,5 +79,14 @@ def read_root():
         "status": "ok",
         "message": "PartsOps AI Manager Control Plane v3",
         "version": "3.0",
-        "phase": "Phase 1 — Runtime Foundation",
+        "phase": settings.PHASE_LABEL,
+    }
+
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "version": "3.0",
+        "phase": settings.PHASE_LABEL,
     }

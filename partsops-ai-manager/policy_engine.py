@@ -45,11 +45,11 @@ class EvidenceGates:
         vin_pattern = r"\b[A-HJ-NPR-Z0-9]{17}\b"
         if re.search(vin_pattern, payload_str):
             return _gate_result(False, "Обнаружен возможный raw VIN в payload", {"pattern": "VIN"})
-            
+           
         email_pattern = r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
         if re.search(email_pattern, payload_str):
             return _gate_result(False, "Обнаружен возможный raw email в payload", {"pattern": "Email"})
-            
+           
         return _gate_result(True, "PII не обнаружены")
 
     @staticmethod
@@ -69,13 +69,13 @@ class EvidenceGates:
             parts = json.loads(request.parts_json)
         except Exception:
             return _gate_result(False, "Ошибка парсинга parts_json")
-            
+           
         low_confidence_items = []
         for part in parts:
             score = part.get("match_score", 0.0)
             if score < 70.0:
                 low_confidence_items.append(part.get("name", "Unknown"))
-                
+               
         if low_confidence_items:
             return _gate_result(False, f"Низкая уверенность матчинга для: {', '.join(low_confidence_items)}")
         return _gate_result(True, "Уверенность матчинга достаточна")
@@ -89,15 +89,15 @@ class EvidenceGates:
             evidence = json.loads(request.pricing_evidence_json)
         except Exception:
             return _gate_result(False, "Ошибка парсинга pricing_evidence_json")
-            
+           
         line_items = evidence.get("line_items", [])
         for item in line_items:
-            margin = item.get("margin", 0.0)
+            margin = item.get("margin_rate", 0.0)  # Use margin_rate instead of margin
             if margin < 0.10:
                 return _gate_result(False, f"Маржа ниже допустимого минимума 10% для {item.get('part_name')}", {"margin": margin})
             if margin > 0.50 and request.status != RequestState.APPROVED:
                 return _gate_result(False, f"Маржа выше 50% требует ручного одобрения для {item.get('part_name')}", {"margin": margin})
-                
+               
         return _gate_result(True, "Ценовая политика соблюдена")
 
     @staticmethod
@@ -227,39 +227,39 @@ class PolicyEngine:
             parts = json.loads(request.parts_json)
         except Exception:
             return False
-            
+           
         if not parts:
             return False
-            
+           
         # Check matching score
         for part in parts:
             score = part.get("match_score", 0.0)
             if score < 70.0:
                 return False
-                
+               
         # Check pricing & margin
-        if not request.pricing_evidence_json:
-            return False
-        try:
-            evidence = json.loads(request.pricing_evidence_json)
-        except Exception:
-            return False
-            
-        line_items = evidence.get("line_items", [])
-        if not line_items:
-            return False
-            
-        for item in line_items:
-            margin = item.get("margin", 0.0)
-            if margin < 0.10 or margin > 0.50:
-                return False
-                
-        # Check supplier reliability
-        for item in line_items:
-            reliability = item.get("supplier_reliability", 1.0)
-            if reliability < 0.80:
-                return False
-                
+                if not request.pricing_evidence_json:
+                    return False
+                try:
+                    evidence = json.loads(request.pricing_evidence_json)
+                except Exception:
+                    return False
+           
+                line_items = evidence.get("line_items", [])
+                if not line_items:
+                    return False
+           
+                for item in line_items:
+                    margin = item.get("margin_rate", 0.0)  # Use margin_rate instead of margin
+                    if margin < 0.10 or margin > 0.50:
+                        return False
+               
+                # Check supplier reliability
+                for item in line_items:
+                    reliability = item.get("supplier_reliability", 1.0)
+                    if reliability < 0.80:
+                        return False
+               
         # Check gates (PII_SAFE, EVENT_CHAIN_VALID, MATCH_CONFIDENCE, PRICING_POLICY, DELIVERY_SAFE)
         payload_to_check = {
             "customer_name": request.customer_name or "",
@@ -268,7 +268,7 @@ class PolicyEngine:
             "vehicle_vin": request.vehicle_vin_masked or "",
             "parts_json": request.parts_json or "[]",
         }
-        
+       
         if not EvidenceGates.gate_pii_safe(payload_to_check)["passed"]:
             return False
         if not EvidenceGates.gate_event_chain_valid(request.request_id, session, request.tenant_id)["passed"]:
@@ -279,7 +279,7 @@ class PolicyEngine:
             return False
         if not EvidenceGates.gate_delivery_safe(payload_to_check)["passed"]:
             return False
-            
+           
         return True
 
 

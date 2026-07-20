@@ -24,7 +24,7 @@ export function OfferPage({ action }: { action?: 'accept' | 'reject' }) {
 
   useEffect(() => {
     if (!token) return
-    fetch(`http://localhost:8000/api/public/track/${token}`)
+    fetch(`/api/client/track/${token}`)
       .then(res => {
         if (!res.ok) throw new Error('Not found')
         return res.json()
@@ -35,12 +35,16 @@ export function OfferPage({ action }: { action?: 'accept' | 'reject' }) {
   }, [token])
 
   const handleAccept = async () => {
-    const res = await fetch(`http://localhost:8000/api/public/offer/${token}/accept`, { method: 'POST' })
+    const res = await fetch(`/api/client/track/${token}/accept`, { method: 'POST' })
     if (res.ok) navigate(`/track/${token}`)
   }
 
   const handleReject = async () => {
-    const res = await fetch(`http://localhost:8000/api/public/offer/${token}/reject?reason=${encodeURIComponent(rejectReason)}`, { method: 'POST' })
+    const res = await fetch(`/api/client/track/${token}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: rejectReason })
+    })
     if (res.ok) navigate(`/track/${token}`)
   }
 

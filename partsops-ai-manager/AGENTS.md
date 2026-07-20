@@ -47,6 +47,36 @@ npm install && npm run dev
 7. **PII — до агент-слоя.** Все совпадения с PHI/PII/обиды проходят через `pii.*` функции перед логированием.
 8. **Тесты — с фикстурами тестовой БД в памяти.** Никаких изменений в `database.db` в продакшене из кода тестов.
 
+## Project Reality
+
+- Live backend entrypoint: `main.py`
+- Preferred business logic placement: `services/`
+- Preferred HTTP surface: `routers/`
+- Preferred agent layer: `app/agents/*`
+- Preferred automation layer: `app/automation/jobs/*`
+- Job registration: `app/automation/registry.py`
+- Current live operator UI: `06_UI/admin_cockpit`
+- Secondary frontend surface: `06_UI/client_portal`
+- `agents.py` and `agent_orchestrator.py` are legacy surfaces; do not add new core logic there.
+- Request lifecycle changes go through `app/agents/*` plus `services/` and `routers/`.
+- Scheduled work goes through `app/automation/jobs/*` and `app/automation/registry.py`.
+
+## Business Domain / Contract Rules
+
+Core domain: request intake, supplier matching, pricing evidence, invoice/ERP flow, audit trail, operator review.
+
+Treat these as implementation targets only after checking live code coverage:
+
+- SLA limits by request type
+- pricing evidence requirements
+- OEM vs OEQ policy by category
+- approval gates before financial or fulfillment transitions
+- document-generation deadlines
+- return / closure conditions for old parts
+- watchdog automation for stalled or breached requests
+
+Verify live code first; do not assume the policy is already implemented.
+
 ## 🛡️ Agent Safety Rules (выучены на опыте)
 
 ### Работа с файлами
@@ -73,58 +103,23 @@ npm install && npm run dev
 - Файл `main.py` содержит ~74KB и 38 эндпоинтов. **Не добавлять новые эндпоинты в main.py**.
 - Новая логика → `routers/` и `services/`. Использовать существующую структуру как точку входа.
 
-## Структура кода
+## Code Map
 
-Claude / агенты должны знать следующие точки входа:
+- `main.py`: HTTP runtime only, no new business logic.
+- `models.py`: SQLModel source of truth.
+- `database.py`: sessions and DB bootstrap.
+- `event_store.py`: event emission and hash chain.
+- `rbac.py`: auth and tenant scoping.
+- `state_machine.py`: all status transitions.
+- `pricing.py`: pricing rules and margin guard.
+- `pii.py`: masking before logs/LLM.
+- `app/automation/`: jobs, engines, policies.
 
-| Модуль | Назначение | Правило адресации |
-|---|---|---|
-| `main.py` | FastAPI endpoints (runtime, ~1000 строк) | Только endpoints; бизнес-логику переноси в `services/` |
-| `models.py` | SQLModel таблицы (`PartRequest`, `RequestEvent`, `Invoice`, `Supplier`, `RequestScore`, `ApprovalTicket`, `LLMUsageLog`, ...) | Один source of truth на схему |
-| `database.py` | `engine`, `get_session`, `init_db` | Все запросы через `Session(engine)` |
-| `event_store.py` | `emit_event`, `emit_state_change`, `verify_event_chain` | Tenant-scoped SHA-256 hash chain |
-| `rbac.py` | `get_current_principal`, `RoleChecker` | Bearer token + X-Tenant-ID required |
-| `state_machine.py` | `validate_transition`, `transition` | Все статусы проходят здесь |
-| `pricing.py` | `compute_price`, `check_margin_guard`, `PricingContext` | Только backend |
-| `pii.py` | `mask_phone`, `mask_email`, `mask_vin`, `mask_name` | Обрабатывает перед логированием и LLM |
-| `app/automation/` | Job runners, engines, policies | 1 job = 1 file, поддерживают dry_run |
+Runtime note: many flows still pass through `main.py`; prefer `services/` and `routers/` for new logic.
 
-Состояние на сейчас: много логики в `partsops-ai-manager/main.py` (runtime-комбайн). Планируется рефактор:
-```
-services/
-  request_service.py
-  pricing_service.py
-  audit_service.py
-routers/
-  requests.py
-  pricing.py
-  invoices.py
-  chat.py
-```
+RBAC rule of thumb: `get_current_principal` + `get_current_tenant` in endpoints, and only `admin`, `manager`, `finance` are valid roles.
 
-## RBAC quick reference (rbac.py)
-
-```python
-# В депенденсах endpoints:
-principal: CurrentPrincipal = Depends(get_current_principal)
-tenant_id: str = Depends(get_current_tenant)
-
-# Жёсткие правила:
-# - Без PARTSOPS_API_TOKEN — dev mode, X-Tenant-ID принимается из header, роль = manager
-# - С PARTSOPS_API_TOKEN — только Bearer валиден, headers игнорируются без него
-# - admin / manager / finance — единственные allowed roles
-```
-
-## Event Store invariants
-
-```python
-# emit_event → вычисляет event_hash (SHA-256 canonical JSON)
-# previous_event_hash → chain-link на last event для того же request_id + tenant_id
-# verify_event_chain → rekursive hash-проверка, вламывается на:
-#   - payload_json tamper
-#   - evidence_refs tamper
-#   - переставленный previous_event_hash
-```
+Event-store rule of thumb: event hash is canonical JSON + tenant/request chain; do not mutate events outside the helper path.
 
 ## Запуска тестов
 
@@ -146,21 +141,10 @@ python3 -m pytest tests/ --cov=. --cov-report=term-missing
 ## Чего НЕ делать
 
 - ❌ Не писать бизнес-логику в эндпоинт прямо — вынеси в сервис.
+- ❌ Не добавляй новую логику в `agents.py` или `agent_orchestrator.py`, если есть `app/agents/*`.
 - ❌ Не импортируй опциональные модули (agent_orchestrator, base_agent) без `try/except`.
 - ❌ Не коммить `.env`, `*.db`, `__pycache__/`.
 - ❌ Не трогай `DM obs/` — это Obsidian vault, синхронизируется скриптом.
 - ❌ Не добавляй node_modules/ или сборки frontend в main репо.
-
-## Frontend Vite-проверки
-- После изменений в `06_UI/admin_cockpit/src/`: `npx tsc --noEmit -p tsconfig.app.json`.
-- Vite dev-server: default порт 5173 (не 3000).
-- `TS6133` (noUnusedLocals) не блокирует Vite runtime, но `TS2304` — блокирует трансформацию → белый экран.
-
-## Obsidian
-
-См. `scripts/sync_obsidian.sh` и `/.agents/AGENTS.md`.
-Vault: `/Users/user/projects/Danila master/DM obs/`.
-После архитектурных изменений и закрытых задач запускай:
-```bash
-cd /Users/user/projects/Danila master && bash scripts/sync_obsidian.sh
-```
+- ❌ Не забывай `npx tsc --noEmit -p tsconfig.app.json` после TSX-изменений.
+- ❌ Не ломай CORS/портовую схему: Vite 5173, backend 8000, origins из `.env`.

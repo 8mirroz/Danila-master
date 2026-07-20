@@ -43,3 +43,21 @@ __TRASH__/
 .pytest_cache/
 playwright-report/
 test-results/
+
+# Crawler / scraping artifacts
+autodoc_*.png
+autodoc_*.json
+exist_*.png
+exist_*.json
+rossko_*.png
+rossko_*.json
+my-crawler/
+versions_screenshots/
+
+# Obsidian sync
+"DM obs/obsidian_sync.log"
+DM\ obs/obsidian_sync.log
+
+# Agent OS cache
+.hermes/
+partsops-ai-manager/.hermes/

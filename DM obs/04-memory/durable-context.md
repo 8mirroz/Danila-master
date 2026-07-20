@@ -110,3 +110,7 @@ Learning: добавлены Code Hygiene Rules, исправлен порт Vit
 ## 🧠 Durable Fact | 2026-07-06T07:13:33+03:00
 
 Production Stabilization Program: PostgreSQL migration track, zero-trust RBAC, secure upload pipeline
+
+## 🧠 Durable Fact | 2026-07-08T05:51:55+03:00
+
+Решение проблемы автодополнения Autodoc через JS-клик кнопки поиска

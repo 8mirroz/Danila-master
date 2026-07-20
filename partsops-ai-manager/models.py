@@ -412,8 +412,10 @@ class OutboundMessage(SQLModel, table=True):
     idempotency_key: str = Field(index=True, unique=True)
     status: str = Field(default="pending")  # pending|sent|failed|delivered|bounced
     attempts: int = Field(default=0)
+    max_attempts: int = Field(default=3)
     last_error: Optional[str] = None
     sent_at: Optional[datetime] = None
+    next_retry_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -479,3 +481,62 @@ class ApprovalTicket(SQLModel, table=True):
     decision_note: Optional[str] = None
     payload_json: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ──────────────────────────────────────────────
+# CONTRACT № 2026.170160 — FLEET & TARIFFS
+# ──────────────────────────────────────────────
+
+class FleetVehicle(SQLModel, table=True):
+    """59 VINs from Contract Appendix 1 — strict fleet registry."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    vin: str = Field(max_length=17, index=True, unique=True)
+    make: str
+    model: str
+    year: int
+    engine: Optional[str] = None
+    transmission: Optional[str] = None
+    fuel_type: Optional[str] = None
+    odometer_km: int = Field(default=0)
+    fuel_level_percent: int = Field(default=100)
+    status: str = Field(default="active", index=True)  # active|maintenance|retired
+    contract_ref: str = Field(default="2026.170160")
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ServiceTariff(SQLModel, table=True):
+    """Service tariffs from Contract Appendix 2."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    tariff_code: str = Field(index=True, unique=True)
+    service_name: str
+    category: str  # diagnostics|maintenance|evacuation|on_site
+    unit: str = Field(default="per_service")  # per_service|per_km|per_hour
+    base_price_rub: float
+    vat_rate: float = Field(default=0.20)
+    sla_hours: int  # 2, 24, 168
+    penalty_rate_per_day_pct: float = Field(default=0.1)  # 0.1% per day
+    contract_ref: str = Field(default="2026.170160")
+    is_active: bool = Field(default=True, index=True)
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContractPenaltyConfig(SQLModel, table=True):
+    """Single source of truth for penalty calculation (Contract § SLA & Penalties)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    contract_ref: str = Field(index=True, unique=True)
+    contract_total_value_rub: float
+    penalty_pct_per_day: float = Field(default=0.001)  # 0.1%
+    penalty_rub_per_day: float  # pre-calculated = contract_total * penalty_pct
+    max_penalty_pct: float = Field(default=0.10)  # cap at 10%
+    currency: str = Field(default="RUB")
+    effective_from: datetime
+    effective_to: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

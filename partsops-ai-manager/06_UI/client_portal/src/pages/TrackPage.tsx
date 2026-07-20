@@ -24,7 +24,7 @@ export function TrackPage() {
 
   useEffect(() => {
     if (!token) return
-    fetch(`http://localhost:8000/api/public/track/${token}`)
+    fetch(`/api/client/track/${token}`)
       .then(res => {
         if (!res.ok) throw new Error('Not found')
         return res.json()

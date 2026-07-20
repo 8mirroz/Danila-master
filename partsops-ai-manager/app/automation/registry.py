@@ -60,6 +60,7 @@ try:
         intake_validate_vin_job,
         metrics_refresh_job,
         notify_owner_job,
+        outbound_dispatch_job,
         po_create_job,
         quote_collect_job,
         quote_evaluate_job,
@@ -87,6 +88,7 @@ try:
         register_job("intake_validate_vin", intake_validate_vin_job.run)
         register_job("metrics_refresh", metrics_refresh_job.run)
         register_job("notify_owner", notify_owner_job.run)
+        register_job("outbound_dispatch", outbound_dispatch_job.run)
         register_job("po_create", po_create_job.run)
         register_job("quote_collect", quote_collect_job.run)
         register_job("quote_evaluate", quote_evaluate_job.run)

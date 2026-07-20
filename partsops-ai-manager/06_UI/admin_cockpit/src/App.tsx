@@ -27,6 +27,9 @@ import { apiFetch, createEventSource } from './lib/api';
 import { ChevronStepper } from './components/ChevronStepper';
 import { SuppliersPage } from './components/SuppliersPage';
 import { CommandPalette } from './components/CommandPalette';
+import { PipelineMonitor } from './components/PipelineMonitor';
+import { AgentOSPanel } from './components/AgentOSPanel';
+import { MultiAgentOrchestraView } from './components/MultiAgentOrchestraView';
 
 type Request = {
   id: number;
@@ -158,8 +161,11 @@ function App() {
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'requests_updated' || data.type === 'llm_cost_updated' || data.type === 'metrics_updated') {
+        if (data.type === 'requests_updated' || data.type === 'llm_cost_updated' || data.type === 'metrics_updated' || data.type === 'pipeline_runs_updated') {
           setFetchTrigger((prev) => prev + 1);
+          if (data.type === 'pipeline_runs_updated') {
+            window.dispatchEvent(new CustomEvent('orchestra-update', { detail: data }));
+          }
         }
       } catch (e) {
         console.warn('SSE message parse error:', e);
@@ -308,6 +314,9 @@ function App() {
 
   const navItems = [
     { id: 'dashboard', label: 'Панель управления', icon: 'fa-chart-pie' },
+    { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'fa-robot' },
+    { id: 'orchestra', label: 'Мультиагентный оркестр', icon: 'fa-diagram-project' },
+    { id: 'agent_os', label: 'Консоль ИИ-агента', icon: 'fa-terminal' },
     { id: 'kanban', label: 'Канбан-доска', icon: 'fa-table-columns' },
     { id: 'suppliers', label: 'Каталог поставщиков', icon: 'fa-truck-field' },
     { id: 'orders', label: 'Импорт заказов', icon: 'fa-file-arrow-up' },
@@ -650,6 +659,18 @@ function App() {
                       resolveDropTarget={resolveDropTarget}
                     />
                   </div>
+                )}
+
+                {activeNav === 'pipeline' && (
+                <PipelineMonitor requests={requests} fetchTrigger={fetchTrigger} />
+                )}
+
+                {activeNav === 'orchestra' && (
+                <MultiAgentOrchestraView />
+                )}
+
+                {activeNav === 'agent_os' && (
+                  <AgentOSPanel />
                 )}
 
                 {activeNav === 'suppliers' && (
