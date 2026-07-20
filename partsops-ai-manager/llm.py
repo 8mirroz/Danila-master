@@ -174,6 +174,10 @@ def _load_providers() -> List[ProviderConfig]:
 
 PROVIDERS: List[ProviderConfig] = _load_providers()
 
+# Simple circuit breaker state per provider
+_provider_failures: dict[str, int] = {}
+_PROVIDER_FAILURE_THRESHOLD = 2
+
 # Model alias mapping (from budget_guard ModelRouter pool to actual per-provider model names)
 _MODEL_ALIASES: Dict[str, Dict[str, str]] = {
     "default": {
@@ -494,6 +498,30 @@ async def call_llm_async(
         None,
         call_llm,
         prompt, system_prompt, model, temperature, response_format, priority,
+    )
+
+
+async def call_llm_async_nonblocking(
+    prompt: str,
+    system_prompt: str = "You are an AI assistant for automotive parts supply chain.",
+    model: str = "default",
+    temperature: float = 0.2,
+    response_format: Optional[dict] = None,
+    priority: str = "normal",
+) -> str:
+    """
+    Non-blocking async LLM call using asyncio.to_thread.
+    Safer for FastAPI endpoints and async contexts.
+    """
+    import asyncio
+    return await asyncio.to_thread(
+        call_llm,
+        prompt,
+        system_prompt,
+        model,
+        temperature,
+        response_format,
+        priority,
     )
 
 

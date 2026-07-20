@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional, List, Dict
@@ -131,7 +132,7 @@ def get_requests(
 
 
 @router.post("/requests/import-from-artifact")
-def import_from_artifact(
+async def import_from_artifact(
     payload: ImportFromArtifactPayload,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant),
@@ -139,13 +140,6 @@ def import_from_artifact(
 ):
     _rate_limit(request, tenant_id)
     """Import a request from a previously uploaded artifact (file)."""
-    from agents import process_intake_request
-    from pii import secure_pre_parse
-    from services.supplier_service import SupplierService
-    from sqlmodel import select
-    from models import UploadArtifact
-    from event_store import emit_event, EventType
-    
     # Get the artifact
     artifact = session.exec(
         select(UploadArtifact).where(
@@ -160,18 +154,18 @@ def import_from_artifact(
     if artifact.status != "stored":
         raise HTTPException(status_code=400, detail=f"Artifact not ready for import (status: {artifact.status})")
     
-    # Parse the file content
     file_type = artifact.content_type or ""
     filename = artifact.original_filename
     stored_path = artifact.stored_path
     
-    # Read and parse the file
-    try:
+    def _do_import() -> dict:
+        from agents import process_intake_request
         from services.supplier_service import _parse_supplier_table_file, _extract_supplier_table_rows
+        from event_store import emit_event, EventType
+        
         raw_rows, file_type = _parse_supplier_table_file(stored_path, filename, file_type)
         normalized_rows, mapped_columns, validation_summary = _extract_supplier_table_rows(raw_rows)
         
-        # Build text representation for intake pipeline
         text_parts = []
         for row in normalized_rows:
             part_name = row.get("part_name", "")
@@ -183,17 +177,11 @@ def import_from_artifact(
         
         text_content = "\n".join(text_parts) if text_parts else f"File upload: {filename}"
         
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse file: {e}")
-    
-    # Run through intake pipeline
-    try:
         intake_result = process_intake_request(
             text=text_content,
             priority=payload.priority,
         )
         
-        # Create the request
         request_payload = {
             "source": payload.source,
             "text": text_content,
@@ -201,13 +189,20 @@ def import_from_artifact(
             "priority": payload.priority,
         }
         
-        # Add vehicle info from intake
         if intake_result.get("vehicle_make"):
             request_payload["vehicle_vin"] = intake_result.get("vehicle_vin") or ""
         
         new_request = RequestService.create_request(tenant_id, request_payload, None)
+        return {
+            "text_content": text_content,
+            "intake_result": intake_result,
+            "new_request": new_request,
+        }
+    
+    try:
+        result = await asyncio.to_thread(_do_import)
+        new_request = result["new_request"]
         
-        # Emit event linking artifact to request
         emit_event(
             session=session,
             request_id=new_request["request_id"],
@@ -218,7 +213,6 @@ def import_from_artifact(
             tenant_id=tenant_id,
         )
         
-        # Update artifact status
         artifact.status = "attached"
         artifact.request_id = new_request["request_id"]
         session.add(artifact)
@@ -231,7 +225,7 @@ def import_from_artifact(
 
 
 @router.post("/requests")
-def create_request(
+async def create_request(
     payload: RawRequestPayload,
     session: Session = Depends(get_session),
     x_idempotency_key: Optional[str] = Header(default=None),
@@ -239,7 +233,12 @@ def create_request(
     request: Request = None,
 ):
     _rate_limit(request, tenant_id)
-    return RequestService.create_request(tenant_id, payload.model_dump(), x_idempotency_key)
+    return await asyncio.to_thread(
+        RequestService.create_request,
+        tenant_id,
+        payload.model_dump(),
+        x_idempotency_key,
+    )
 
 
 @router.get("/requests/{request_id}")
