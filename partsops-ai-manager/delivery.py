@@ -371,6 +371,7 @@ class TelegramAdapter:
             else:
                 try:
                     import httpx
+                    from concurrent.futures import ThreadPoolExecutor
                     
                     # 1. Send text preview
                     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -378,13 +379,13 @@ class TelegramAdapter:
                         "chat_id": safe_chat_id,
                         "text": body_text,
                         "parse_mode": "Markdown"
-                    }, timeout=10.0)
+                    }, timeout=10.0, limits=httpx.Limits(max_connections=50, max_keepalive_connections=10))
                     
                     if r.status_code == 200:
                         # 2. Send PDF document
                         doc_url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
                         files = {"document": (f"Invoice-{invoice.invoice_number}.pdf", pdf_bytes)}
-                        doc_r = httpx.post(doc_url, data={"chat_id": safe_chat_id}, files=files, timeout=15.0)
+                        doc_r = httpx.post(doc_url, data={"chat_id": safe_chat_id}, files=files, timeout=15.0, limits=httpx.Limits(max_connections=50, max_keepalive_connections=10))
                         if doc_r.status_code == 200:
                             success = True
                         else:

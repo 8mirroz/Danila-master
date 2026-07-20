@@ -428,6 +428,8 @@ def call_llm(
                    except Exception as db_err:
                        print(f"[LLM] Database logging failed: {db_err}")
 
+                   # Reset circuit breaker on success
+                   _provider_failures.pop(provider.name, None)
                    return content
                except Exception as e:
                    latency_ms = int((time.time() - start_time) * 1000)
@@ -464,7 +466,8 @@ def call_llm(
                        model_failed = True
                        # fall through to next concrete_model in pool
 
-       # All models in this provider failed → next provider
+       # All models in this provider failed → increment circuit breaker and next provider
+       _provider_failures[provider.name] = _provider_failures.get(provider.name, 0) + 1
        last_error = RuntimeError(
            f"All models in provider chain failed for prompt: "
            f"{masked_prompt[:80]}"

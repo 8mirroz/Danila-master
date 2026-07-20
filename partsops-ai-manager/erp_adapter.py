@@ -288,6 +288,7 @@ def _attempt_erp_sync(sync_log: ERPSyncLog, erp_payload: dict, dry_run: bool) ->
             headers=headers,
             json={"data": erp_payload},
             timeout=30.0,
+            limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
         )
         
         if response.status_code in (200, 201):
