@@ -114,3 +114,7 @@ Production Stabilization Program: PostgreSQL migration track, zero-trust RBAC, s
 ## 🧠 Durable Fact | 2026-07-08T05:51:55+03:00
 
 Решение проблемы автодополнения Autodoc через JS-клик кнопки поиска
+
+| Decision | 2026-07-20T22:05:26+03:00
+
+P0: Extract intake pipeline to app.agents.legacy_intake_pipeline (commit `261b0a7`). Шим в `agents.py` через `__getattr__`, реальный код в `app/agents/legacy_intake_pipeline.py`.

@@ -1,0 +1,237 @@
+# Matcher keywords configuration
+# This file is loaded by matcher.py at runtime.
+# Edit this file to add/remove brands, vehicles, sides without changing code.
+
+# Known brands for Brand/Article Score (20%)
+known_brands:
+  - trw
+  - ate
+  - ngk
+  - brembo
+  - bosch
+  - mann
+  - akebono
+  - toyota
+  - castrol
+  - bilstein
+  - denso
+  - hella
+  - valeo
+  - sachs
+  - lemforder
+  - meyle
+  - febi
+  - swag
+  - gates
+  - contitech
+  - skf
+  - nsk
+  - kmp
+  - mahle
+  - knect
+  - fram
+  - champion
+  - delphi
+  - magnetti
+  - marelli
+
+# Vehicle keywords for Vehicle Compatibility Score (15%)
+vehicle_keywords:
+  - x5
+  - x3
+  - x1
+  - x6
+  - x7
+  - camry
+  - corolla
+  - rav4
+  - land cruiser
+  - bmw
+  - toyota
+  - audi
+  - mercedes
+  - urus
+  - lamborghini
+  - porsche
+  - cayenne
+  - volkswagen
+  - passat
+  - golf
+  - skoda
+  - octavia
+  - honda
+  - civic
+  - accord
+  - nissan
+  - qashqai
+  - x-trail
+  - mazda
+  - cx-5
+  - hyundai
+  - kia
+  - renault
+  - peugeot
+  - citroen
+  - opel
+  - ford
+  - focus
+  - mondeo
+  - volvo
+  - land rover
+  - jaguar
+  - lexus
+  - infinity
+  - mitsubishi
+  - subaru
+  - suzuki
+  - daewoo
+  - chevrolet
+  - lada
+  - vesta
+  - granta
+  - priora
+  - niva
+  - uaz
+  - gazel
+  - kamaz
+
+# Side/position keywords for Side Position Score (10%)
+side_keywords:
+  - передн
+  - задн
+  - левы
+  - прав
+  - front
+  - rear
+  - left
+  - right
+  - upper
+  - lower
+  - inner
+  - outer
+  - top
+  - bottom
+  - driver
+  - passenger
+  - вверх
+  - нижн
+  - внутр
+  - наруж
+
+# Russian → English synonym map for Text Score boost
+# When a Russian word is found in the query, its English synonyms
+# are also checked against the item name for cosine similarity.
+synonym_map:
+  колодк:
+    - pads
+    - pad
+    - brake
+    - shoes
+  фильтр:
+    - filter
+    - mann
+    - bosch
+  свеч:
+    - spark
+    - ngk
+    - ignition
+  диск:
+    - disc
+    - rotor
+    - brembo
+  амортизатор:
+    - shock
+    - absorber
+    - bilstein
+    - strut
+  масло:
+    - oil
+    - castrol
+    - lubricant
+  ремень:
+    - belt
+    - timing
+    - serpentine
+  цепь:
+    - chain
+    - timing
+  помпа:
+    - pump
+    - water
+    - coolant
+  радиатор:
+    - radiator
+    - cooling
+  глушитель:
+    - muffler
+    - exhaust
+  стартер:
+    - starter
+    - motor
+  генератор:
+    - alternator
+    - generator
+  сцепление:
+    - clutch
+    - kit
+  подшипник:
+    - bearing
+    - wheel
+  ступица:
+    - hub
+    - bearing
+  рычаг:
+    - arm
+    - control
+  шаровая:
+    - ball
+    - joint
+  рулевая:
+    - steering
+    - rack
+  сайлентблок:
+    - bushing
+    - silent
+  пружина:
+    - spring
+    - coil
+  патрубок:
+    - hose
+    - pipe
+    - duct
+  лямбда:
+    - lambda
+    - oxygen
+    - sensor
+  датчик:
+    - sensor
+    - switch
+  лампа:
+    - lamp
+    - bulb
+    - light
+  стекло:
+    - glass
+    - window
+  зеркало:
+    - mirror
+    - side
+  дворник:
+    - wiper
+    - blade
+  аккумулятор:
+    - battery
+    - accumulator
+  антифриз:
+    - antifreeze
+    - coolant
+  тормоз:
+    - brake
+    - braking
+  выхлоп:
+    - exhaust
+    - muffler
+  топлив:
+    - fuel
+    - pump
+    - injector

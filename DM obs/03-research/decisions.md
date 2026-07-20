@@ -114,3 +114,20 @@ Production Stabilization Program: PostgreSQL migration track, zero-trust RBAC, s
 ## ⚖️ Decision | 2026-07-08T05:51:55+03:00
 
 Решение проблемы автодополнения Autodoc через JS-клик кнопки поиска
+
+## ⚖️ Decision | 2026-07-20T22:05:26+03:00
+
+P0: Extract intake pipeline to app.agents.legacy_intake_pipeline
+
+## ⚖️ Validated Summary | 2026-07-21
+
+- Legacy intake graph (узлы classifier/vin/parts/scatter/pricing/gates + intake_app + full_pipeline_graph + process_intake_request) вынесен из `partsops-ai-manager/agents.py` в `partsops-ai-manager/app/agents/legacy_intake_pipeline.py`.
+- `agents.py` стал re-export шимом через `__getattr__` + `importlib.import_module` — круговой импорт `app.agents.* ↔ agents` решён.
+- Поведение идентичное: все 10 публичных символов доступны по старым путям, тесты test_agents.py::TestE2EAgentWorkflow, test_automation_pipeline.py::test_full_pipeline_graph_initializes проходят локально.
+- Коммит: `261b0a7 P0: Extract intake pipeline into app.agents.legacy_intake_pipeline + shim` (ветка `audit/scrape-fixes`).
+
+## Открытые вопросы (Phase 2+)
+
+- P2 кандидат: транзакционная гигиена — закрытие сессии БД до LLM/HTTP-вызовов внутри `process_intake_request`/узлов графа. После 7 промежуточных коммитов (LLM circuit-breaker, rate-limiter, parser-guards) — контекст требует ревизии.
+- P3 кандидат: `settings.PHASE_LABEL` отстаёт от фактической стадии (`Phase 1 — Runtime Foundation`).
+- P4: разграничение продуктивого пути `process_intake_request` ↔ new-стек `app.agents.*` для `/api/requests` — пока сосуществуют.
