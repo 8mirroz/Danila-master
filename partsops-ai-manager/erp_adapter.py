@@ -43,7 +43,20 @@ from event_store import emit_event, emit_state_change
 ERPNEXT_URL = os.getenv("ERPNEXT_URL", "")
 ERPNEXT_API_KEY = os.getenv("ERPNEXT_API_KEY", "")
 ERPNEXT_API_SECRET = os.getenv("ERPNEXT_API_SECRET", "")
-ERP_WEBHOOK_SECRET = os.getenv("ERP_WEBHOOK_SECRET", "partsops-webhook-secret-default")
+def _load_webhook_secret() -> str:
+    secret = os.getenv("ERP_WEBHOOK_SECRET")
+    if secret:
+        return secret
+    generated = os.urandom(32).hex()
+    import warnings
+    warnings.warn(
+        "ERP_WEBHOOK_SECRET is not set. Generated a one-time secret for this process. "
+        "Set ERP_WEBHOOK_SECRET env var to a persistent value in production.",
+        RuntimeWarning,
+    )
+    return generated
+
+ERP_WEBHOOK_SECRET = _load_webhook_secret()
 ERP_DRY_RUN = os.getenv("ERP_DRY_RUN", "1") == "1" or not ERPNEXT_URL
 
 MAX_RETRY_ATTEMPTS = 3
@@ -364,6 +377,20 @@ def process_payment_webhook(
     
     if not invoice:
         return {"status": "ERROR", "reason": f"Invoice {invoice_number} not found"}
+    
+    # Validate payment amount against invoice total
+    try:
+        webhook_amount = float(payload.get("amount", 0))
+    except (TypeError, ValueError):
+        webhook_amount = 0.0
+    invoice_total = float(invoice.total or 0)
+    if webhook_amount <= 0:
+        return {"status": "ERROR", "reason": "Invalid payment amount in webhook payload"}
+    if abs(webhook_amount - invoice_total) > 0.01 and webhook_amount < invoice_total:
+        return {
+            "status": "ERROR",
+            "reason": f"Payment amount {webhook_amount} does not match invoice total {invoice_total}",
+        }
     
     request = session.exec(
         select(PartRequest).where(

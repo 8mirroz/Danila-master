@@ -264,3 +264,53 @@ def test_retry_outbox_advances_to_dlq_on_max_attempts():
                 assert sync_log.status == "DLQ"
                 assert sync_log.last_error == "Persistent Error"
                 mock_sleep.assert_called_once()
+
+
+def test_process_payment_webhook_rejects_invalid_amount():
+    with Session(engine) as session:
+        req = PartRequest(
+            request_id="REQ-TEST-5",
+            tenant_id="default",
+            source="manual",
+            status=RequestState.SENT_TO_CLIENT,
+            customer_name="Test Customer",
+        )
+        invoice = Invoice(
+            invoice_number="INV-TEST-5",
+            tenant_id="default",
+            request_id="REQ-TEST-5",
+            supplier_id="SUP-1",
+            customer_name="Test Customer",
+            items_json=json.dumps([]),
+            subtotal=1000.0,
+            tax=200.0,
+            total=1200.0,
+            status="DRAFT",
+        )
+        session.add(req)
+        session.add(invoice)
+        session.commit()
+        
+        # Mismatched amount
+        webhook_payload = {
+            "event": "payment_received",
+            "invoice_number": "INV-TEST-5",
+            "payment_ref": "PAY-BAD",
+            "amount": 999.0,
+            "currency": "RUB",
+        }
+        res = process_payment_webhook(webhook_payload, session)
+        assert res["status"] == "ERROR"
+        assert "does not match invoice total" in res["reason"]
+        
+        # Zero amount
+        webhook_payload["amount"] = 0
+        res = process_payment_webhook(webhook_payload, session)
+        assert res["status"] == "ERROR"
+        assert "Invalid payment amount" in res["reason"]
+
+
+def test_webhook_secret_is_not_default():
+    from erp_adapter import ERP_WEBHOOK_SECRET
+    assert ERP_WEBHOOK_SECRET != "partsops-webhook-secret-default"
+    assert len(ERP_WEBHOOK_SECRET) >= 32
