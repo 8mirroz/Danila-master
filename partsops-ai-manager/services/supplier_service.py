@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 import csv
 import io
@@ -187,6 +188,9 @@ def _normalize_header(value: Any) -> str:
 
 def _parse_xlsx_rows(stored_path: str) -> list[dict[str, Any]]:
     import openpyxl
+    from settings import settings
+    max_rows = settings.MAX_PARSE_ROWS
+    
     try:
         wb = openpyxl.load_workbook(stored_path, read_only=True, data_only=True)
     except Exception as e:
@@ -216,6 +220,8 @@ def _parse_xlsx_rows(stored_path: str) -> list[dict[str, Any]]:
             cell_val = r[idx] if idx < len(r) else None
             row_dict[val] = _coerce_text(cell_val)
         parsed_rows.append(row_dict)
+        if len(parsed_rows) >= max_rows:
+            break
     
     wb.close()
     return parsed_rows
@@ -229,6 +235,9 @@ def _decode_text_file(raw_bytes: bytes) -> str:
     return raw_bytes.decode("utf-8", errors="ignore")
 
 def _parse_delimited_rows(stored_path: str, delimiter: Optional[str] = None) -> list[dict[str, Any]]:
+    from settings import settings
+    max_rows = settings.MAX_PARSE_ROWS
+    
     raw_bytes = Path(stored_path).read_bytes()
     text = _decode_text_file(raw_bytes)
     sample = text[:2048]
@@ -239,17 +248,37 @@ def _parse_delimited_rows(stored_path: str, delimiter: Optional[str] = None) -> 
         except csv.Error:
             resolved_delimiter = ","
     reader = csv.DictReader(io.StringIO(text), delimiter=resolved_delimiter)
-    return [dict(row) for row in reader if any(_coerce_text(value) for value in row.values())]
+    rows = []
+    for row in reader:
+        if any(_coerce_text(value) for value in row.values()):
+            rows.append(dict(row))
+            if len(rows) >= max_rows:
+                break
+    return rows
 
 def _parse_json_rows(stored_path: str) -> list[dict[str, Any]]:
+    from settings import settings
+    max_rows = settings.MAX_PARSE_ROWS
+    
     raw_payload = json.loads(_decode_text_file(Path(stored_path).read_bytes()))
     if isinstance(raw_payload, dict):
         raw_payload = raw_payload.get("rows", [])
     if not isinstance(raw_payload, list):
         raise ValueError("JSON import must contain a list of rows or an object with 'rows'")
-    return [row for row in raw_payload if isinstance(row, dict)]
+    return [row for row in raw_payload if isinstance(row, dict)][:max_rows]
 
 def _parse_supplier_table_file(stored_path: str, filename: str, content_type: Optional[str]) -> tuple[list[dict[str, Any]], str]:
+    from settings import settings
+    
+    # Hard file-size guard at parser level (defense in depth beyond storage)
+    try:
+        file_size = os.path.getsize(stored_path)
+    except OSError:
+        file_size = 0
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if file_size > max_bytes:
+        raise ValueError(f"UPLOAD_FILE_TOO_LARGE: {file_size} bytes exceeds limit {max_bytes} bytes")
+    
     extension = Path(filename or stored_path).suffix.lower()
     if extension == ".json" or content_type == "application/json":
         return _parse_json_rows(stored_path), "json"
@@ -260,6 +289,11 @@ def _parse_supplier_table_file(stored_path: str, filename: str, content_type: Op
     return _parse_delimited_rows(stored_path), "csv"
 
 def _extract_supplier_table_rows(raw_rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, str], dict[str, Any]]:
+    from settings import settings
+    max_rows = settings.MAX_PARSE_ROWS
+    if len(raw_rows) > max_rows:
+        raise ValueError(f"UPLOAD_TOO_MANY_ROWS: {len(raw_rows)} rows exceeds limit {max_rows}")
+    
     alias_map = {
         "part_name": ["partname", "name", "part", "detail", "description", "item", "название", "деталь", "позиция", "наименование"],
         "oem_number": ["oemnumber", "oem", "oemno", "articlenumber", "article", "sku", "номер", "артикул", "номердетали"],

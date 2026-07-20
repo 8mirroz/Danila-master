@@ -2,19 +2,92 @@
 Fuzzy matching engine for part name lookups.
 Uses RapidFuzz against SupplierCatalogItem rows in the database,
 falling back to the in-memory MOCK_INVENTORY if no DB items exist.
+
+v4 improvements:
+  - Keywords loaded from 01_CONFIGS/matcher_keywords.yaml (no hardcoded lists)
+  - vehicle_context now accepts List[str] for multi-vehicle queries
+  - synonym_map is used to boost Text Score via synonym expansion
+  - load_keywords() function with caching for performance
 """
 from rapidfuzz import process, fuzz
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Sequence
 from sqlmodel import Session, select
-
 
 import re
 import math
+import os
 from collections import Counter
+
+# ---------------------------------------------------------------------------
+# Keywords loader (cached)
+# ---------------------------------------------------------------------------
+_KEYWORDS_CACHE: Optional[dict] = None
+
+def load_keywords(config_path: str = None) -> dict:
+    """
+    Load keyword lists from YAML config file.
+    Falls back to hardcoded defaults if file not found or PyYAML not installed.
+    Results are cached globally.
+    """
+    global _KEYWORDS_CACHE
+    if _KEYWORDS_CACHE is not None:
+        return _KEYWORDS_CACHE
+
+    defaults = {
+        "known_brands": ["trw", "ate", "ngk", "brembo", "bosch", "mann",
+                         "akebono", "toyota", "castrol", "bilstein"],
+        "vehicle_keywords": ["x5", "camry", "bmw", "toyota", "audi",
+                             "mercedes", "urus", "lamborghini"],
+        "side_keywords": ["передн", "задн", "левы", "прав",
+                          "front", "rear", "left", "right"],
+        "synonym_map": {
+            "колодк": ["pads", "pad", "brake"],
+            "фильтр": ["filter", "mann", "bosch"],
+            "свеч": ["spark", "ngk"],
+            "диск": ["disc", "rotor", "brembo"],
+            "амортизатор": ["shock", "absorber", "bilstein"],
+            "масло": ["oil", "castrol"],
+        },
+    }
+
+    if config_path is None:
+        config_path = os.path.join(
+            os.path.dirname(__file__), "01_CONFIGS", "matcher_keywords.yaml"
+        )
+
+    if not os.path.exists(config_path):
+        _KEYWORDS_CACHE = defaults
+        return _KEYWORDS_CACHE
+
+    try:
+        import yaml
+        with open(config_path, "r", encoding="utf-8") as f:
+            loaded = yaml.safe_load(f)
+        if loaded and isinstance(loaded, dict):
+            # Merge – use loaded values where present, fall back to defaults
+            result = dict(defaults)
+            for key in ("known_brands", "vehicle_keywords", "side_keywords"):
+                if key in loaded and isinstance(loaded[key], list):
+                    result[key] = loaded[key]
+            if "synonym_map" in loaded and isinstance(loaded["synonym_map"], dict):
+                result["synonym_map"] = loaded["synonym_map"]
+            _KEYWORDS_CACHE = result
+            return _KEYWORDS_CACHE
+    except Exception:
+        pass  # fall through to defaults
+
+    _KEYWORDS_CACHE = defaults
+    return _KEYWORDS_CACHE
+
+
+# ---------------------------------------------------------------------------
+# String helpers
+# ---------------------------------------------------------------------------
 
 def clean_string(s: str) -> str:
     """Remove all non-alphanumeric characters and lowercase."""
     return re.sub(r"[^a-zA-Z0-9а-яА-Я]", "", s).lower()
+
 
 def levenshtein(a: str, b: str) -> int:
     if len(a) < len(b):
@@ -32,9 +105,11 @@ def levenshtein(a: str, b: str) -> int:
         previous_row = current_row
     return previous_row[-1]
 
+
 def jaro_winkler(s1: str, s2: str) -> float:
     from rapidfuzz.distance import JaroWinkler
     return JaroWinkler.normalized_similarity(s1, s2)
+
 
 def cosine_sim(a: str, b: str) -> float:
     tokens_a = [t for t in a.lower().split() if len(t) > 2]
@@ -50,25 +125,73 @@ def cosine_sim(a: str, b: str) -> float:
     return 0.0
 
 
+# ---------------------------------------------------------------------------
+# Synonym-aware cosine similarity
+# ---------------------------------------------------------------------------
+
+def cosine_sim_with_synonyms(
+    a: str, b: str, synonym_map: dict
+) -> float:
+    """
+    Like cosine_sim, but expands Russian tokens in query 'a' with their
+    English synonyms from synonym_map so that e.g. "колодки" matches "pads".
+    """
+    tokens_a_raw = [t for t in a.lower().split() if len(t) > 2]
+    tokens_b = [t for t in b.lower().split() if len(t) > 2]
+
+    # Expand tokens_a with synonyms
+    tokens_a = list(tokens_a_raw)
+    for tok in tokens_a_raw:
+        # Check if any key in synonym_map is a substring of tok
+        # (e.g. "колодк" in "колодки")
+        for rus_key, eng_syns in synonym_map.items():
+            if rus_key in tok:
+                tokens_a.extend(eng_syns)
+
+    vocab = set(tokens_a).union(set(tokens_b))
+    vec_a = Counter(tokens_a)
+    vec_b = Counter(tokens_b)
+    dot = sum(vec_a.get(t, 0) * vec_b.get(t, 0) for t in vocab)
+    mag_a = math.sqrt(sum(v**2 for v in vec_a.values()))
+    mag_b = math.sqrt(sum(v**2 for v in vec_b.values()))
+    if mag_a and mag_b:
+        return dot / (mag_a * mag_b)
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
+# Main matching function
+# ---------------------------------------------------------------------------
+
 def match_part_from_db(
     query: str,
     session: Session,
     threshold: float = 55.0,
     limit: int = 5,
-    vehicle_context: Optional[str] = None,
+    vehicle_context: Optional[Sequence[str]] = None,
     tenant_id: Optional[str] = None,
 ) -> List[Dict]:
     """
     Match a query against SupplierCatalogItem rows in the database
-    using the v3 6-component matching score formula.
-    
+    using the v4 6-component matching score formula with YAML keywords.
+
     Args:
-        vehicle_context: Optional vehicle make (e.g. "BMW", "Toyota") — 
-                         when provided, boosts vehicle_compatibility_score
-                         by matching against this keyword in addition to
-                         whatever is already in the query text.
+        query: Search query (part name, OEM, brand, vehicle, etc.)
+        session: Active DB session
+        threshold: Minimum score to include in results (default 55.0)
+        limit: Max results (default 5)
+        vehicle_context: Optional list of vehicle makes (e.g. ["BMW", "Toyota"]).
+                         Multiple values are joined into the query for scoring.
+        tenant_id: Optional tenant filter
     """
     from suppliers import SupplierCatalogItem, Supplier
+
+    # Load keywords from config
+    kw = load_keywords()
+    vehicle_keywords: list = kw["vehicle_keywords"]
+    side_keywords: list = kw["side_keywords"]
+    synonym_map: dict = kw["synonym_map"]
+    known_brands: list = kw["known_brands"]
 
     catalog_query = select(SupplierCatalogItem)
     supplier_query = select(Supplier)
@@ -80,40 +203,30 @@ def match_part_from_db(
     if not catalog_items:
         return []
 
+    # Preload suppliers in one query to eliminate N+1
+    supplier_ids = list({item.supplier_id for item in catalog_items if item.supplier_id})
+    suppliers_by_id: dict[str, Supplier] = {}
+    if supplier_ids:
+        suppliers = session.exec(
+            supplier_query.where(Supplier.supplier_id.in_(supplier_ids))  # type: ignore
+        ).all()
+        suppliers_by_id = {s.supplier_id: s for s in suppliers}
+
     query_lower = query.lower()
     query_clean = clean_string(query)
 
-    # Inject vehicle_context into query so vehicle_compatibility scoring picks it up
-    # Also extract vehicle keywords directly from query text if no context provided
+    # Inject vehicle_context(s) into query_lower for scoring
     if vehicle_context:
-        vc_lower = vehicle_context.lower()
-        if vc_lower not in query_lower:
-            query_lower = query_lower + " " + vc_lower
-    else:
-        # Fallback: detect vehicle keywords already in the raw query
-        # so that vehicle_compatibility scoring can use them
-        pass  # query_lower already contains whatever the user typed
-
-    # Keywords lists
-    vehicle_keywords = ["x5", "camry", "bmw", "toyota", "audi", "mercedes", "urus", "lamborghini"]
-    side_keywords = ["передн", "задн", "левы", "прав", "front", "rear", "left", "right"]
-    synonym_map = {
-        "колодк": ["pads", "pad", "brake"],
-        "фильтр": ["filter", "mann", "bosch"],
-        "свеч": ["spark", "ngk"],
-        "диск": ["disc", "rotor", "brembo"],
-        "амортизатор": ["shock", "absorber", "bilstein"],
-        "масло": ["oil", "castrol"],
-    }
+        for vc in vehicle_context:
+            vc_lower = vc.lower().strip()
+            if vc_lower and vc_lower not in query_lower:
+                query_lower = query_lower + " " + vc_lower
 
     matches = []
     for item in catalog_items:
-        supplier = session.exec(
-            supplier_query.where(Supplier.supplier_id == item.supplier_id)
-        ).first()
+        supplier = suppliers_by_id.get(item.supplier_id)
         reliability = supplier.reliability_score if supplier else 0.80
 
-        # 6-Component scoring
         # 1. OEM Exact Score (30%)
         has_oem_in_query = len(re.sub(r"\D", "", query)) >= 5
         oem_score = 100.0
@@ -128,7 +241,6 @@ def match_part_from_db(
                 oem_score = 0.0
 
         # 2. Brand/Article Score (20%)
-        known_brands = ["trw", "ate", "ngk", "brembo", "bosch", "mann", "akebono", "toyota", "castrol", "bilstein"]
         has_brand_in_query = any(b in query_lower for b in known_brands)
         brand_score = 100.0
         if has_brand_in_query:
@@ -147,7 +259,8 @@ def match_part_from_db(
         lev = levenshtein(a_clean, b_clean)
         sim_lev = 1 - lev / max(len(a_clean) or 1, len(b_clean) or 1)
         sim_jw = jaro_winkler(a_clean, b_clean)
-        sim_cos = cosine_sim(query, item.part_name)
+        # Use synonym-aware cosine similarity instead of plain cosine
+        sim_cos = cosine_sim_with_synonyms(query, item.part_name, synonym_map)
         text_score = float((0.25 * sim_lev + 0.35 * sim_jw + 0.40 * sim_cos) * 100)
 
         # 4. Vehicle Compatibility Score (15%)
@@ -213,7 +326,7 @@ def match_part_from_db(
 
     # Sort matches by final_score descending
     matches.sort(key=lambda m: m["score"], reverse=True)
-    
+
     # Calculate median price for matched items
     if matches:
         prices = sorted([m["item"]["price"] for m in matches])
@@ -222,7 +335,7 @@ def match_part_from_db(
             median_price = prices[n // 2]
         else:
             median_price = (prices[n // 2 - 1] + prices[n // 2]) / 2.0
-            
+
         for m in matches:
             price = m["item"]["price"]
             if median_price > 0:
@@ -231,8 +344,8 @@ def match_part_from_db(
                 deviation = 0.0
             m["price_deviation_from_median"] = round(deviation, 4)
 
-    # Apply limit (default 5, but test may override to 3)
-    return matches[:limit]  # Respect the limit parameter
+    # Apply limit
+    return matches[:limit]
 
 
 # Backward-compatible wrapper for agents.py

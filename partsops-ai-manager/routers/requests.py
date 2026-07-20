@@ -11,11 +11,30 @@ from database import get_session
 from rbac import get_privileged_tenant, get_current_tenant, get_current_principal, CurrentPrincipal
 from services.request_service import RequestService
 from app.automation.storage import storage
+from app.automation.rate_limiter import rate_limiter
 from models import UploadArtifact, EventType
 from event_store import emit_event
+from fastapi import Request
 
 # Import the new agent orchestrator
 from app.agents import AgentOrchestrator, create_orchestrator
+
+# Rate limit config (env-overridable)
+import os as _os
+_RATE_LIMIT = int(_os.getenv("PARTSOPS_INTAKE_RATE_LIMIT", "10"))
+_RATE_WINDOW = int(_os.getenv("PARTSOPS_INTAKE_RATE_WINDOW", "60"))
+
+
+def _rate_limit(request: Request, tenant_id: str):
+    key = f"intake:{tenant_id}:{request.client.host if request.client else 'unknown'}"
+    allowed, retry_after = rate_limiter.allow(key, _RATE_LIMIT, _RATE_WINDOW)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
 
 router = APIRouter(prefix="/api", tags=["Requests & Attachments"])
 
@@ -116,7 +135,9 @@ def import_from_artifact(
     payload: ImportFromArtifactPayload,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant),
+    request: Request = None,
 ):
+    _rate_limit(request, tenant_id)
     """Import a request from a previously uploaded artifact (file)."""
     from agents import process_intake_request
     from pii import secure_pre_parse
@@ -215,7 +236,9 @@ def create_request(
     session: Session = Depends(get_session),
     x_idempotency_key: Optional[str] = Header(default=None),
     tenant_id: str = Depends(get_privileged_tenant),
+    request: Request = None,
 ):
+    _rate_limit(request, tenant_id)
     return RequestService.create_request(tenant_id, payload.model_dump(), x_idempotency_key)
 
 
