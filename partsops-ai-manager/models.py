@@ -540,3 +540,55 @@ class ContractPenaltyConfig(SQLModel, table=True):
     effective_to: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ──────────────────────────────────────────────
+# CONTRACT OPERATIONS — PRICE EVIDENCE
+# ──────────────────────────────────────────────
+
+class ContractPosition(SQLModel, table=True):
+    """One immutable contract-list position and its current selection."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    position_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    contract_ref: str = Field(index=True)
+    line_no: int
+    part_number: str
+    description: Optional[str] = None
+    quantity: int = Field(default=1)
+    selected_evidence_id: Optional[str] = None
+    review_status: str = Field(default="pending")  # pending|auto_selected|review|approved
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PriceEvidence(SQLModel, table=True):
+    """Append-only snapshot proving a price observed by a crawler adapter."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    evidence_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    position_id: str = Field(index=True)
+    source: str  # exist.ru|autodoc.ru|rossko.ru
+    price: float
+    currency: str = Field(default="RUB")
+    source_url: str
+    captured_at: datetime
+    screenshot_ref: str
+    screenshot_sha256: Optional[str] = None
+    adapter_run_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContractExport(SQLModel, table=True):
+    """Versioned output document; created only after approved evidence exists."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    export_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    contract_ref: str = Field(index=True)
+    template_name: str
+    content_json: str
+    created_by: str = Field(default="system")
+    created_at: datetime = Field(default_factory=datetime.utcnow)

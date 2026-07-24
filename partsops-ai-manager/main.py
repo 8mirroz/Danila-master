@@ -27,6 +27,7 @@ from routers.chat import router as chat_router
 from routers.erp import router as erp_router
 from routers.catalog import router as catalog_router
 from routers.data_health import router as data_health_router
+from routers.contracts import router as contracts_router
 
 load_dotenv()
 
@@ -73,6 +74,7 @@ app.include_router(chat_router)
 app.include_router(erp_router)
 app.include_router(catalog_router)
 app.include_router(data_health_router)
+app.include_router(contracts_router)
 
 
 @app.get("/")
