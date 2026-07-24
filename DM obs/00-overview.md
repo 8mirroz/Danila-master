@@ -5,7 +5,7 @@
 - Project Slug: ``
 - Status: `in-progress`
 - Current Stage: `discovery`
-- Last Sync: `2026-07-20T22:18:28+03:00`
+- Last Sync: `2026-07-22T21:16:19+03:00`
 - Vault Path: `/Users/user/projects/Danila master/DM obs`
 <!-- SNAPSHOT:END -->
 - Runtime Modes: DEV, STAGE, PROD
@@ -52,3 +52,17 @@ TBD
 - Canonical Human Memory: `Obsidian`
 - Canonical Runtime Memory: `Antigravity/MCP/runtime layers`
 <!-- LINKS:END -->
+
+## 🔗 Cross-Vault: PVP2
+
+> Смежный проект: **PVP2 Agent Arena** (kernel, combat, governance, execution reliability)
+
+| Ссылка | Что там |
+|--------|---------|
+| `../pvp2/Project-Knowledge/reference/MOC.md` | Map of Content – все reference-пакеты |
+| `../pvp2/Project-Knowledge/reference/packages/reference-kernel-v1/` | Kernel: ADR, CDR, правила, стандарты |
+| `../pvp2/Project-Knowledge/reference/packages/combat-foundation-v1/` | Combat: CDR, механики боя |
+| `../pvp2/Project-Knowledge/reference/packages/agent-execution-reliability-v1/` | Execution reliability: production standards |
+| `../pvp2/Project-Knowledge/reference/notes/game-design-docs/` | GDD: split docs по validation vision, combat, UI |
+
+**Когда обращаться:** при задачах, затрагивающих Agent Arena, AI combat, runtime reliability или governance policy.

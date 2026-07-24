@@ -118,3 +118,7 @@ Production Stabilization Program: PostgreSQL migration track, zero-trust RBAC, s
 | Decision | 2026-07-20T22:05:26+03:00
 
 P0: Extract intake pipeline to app.agents.legacy_intake_pipeline (commit `261b0a7`). Шим в `agents.py` через `__getattr__`, реальный код в `app/agents/legacy_intake_pipeline.py`.
+
+## 🧠 Durable Fact | 2026-07-21T00:31:36+03:00
+
+Learn: gallery-dl Pinterest scraping skill + Genesis workflow

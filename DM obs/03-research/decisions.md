@@ -131,3 +131,7 @@ P0: Extract intake pipeline to app.agents.legacy_intake_pipeline
 - P2 кандидат: транзакционная гигиена — закрытие сессии БД до LLM/HTTP-вызовов внутри `process_intake_request`/узлов графа. После 7 промежуточных коммитов (LLM circuit-breaker, rate-limiter, parser-guards) — контекст требует ревизии.
 - P3 кандидат: `settings.PHASE_LABEL` отстаёт от фактической стадии (`Phase 1 — Runtime Foundation`).
 - P4: разграничение продуктивого пути `process_intake_request` ↔ new-стек `app.agents.*` для `/api/requests` — пока сосуществуют.
+
+## ⚖️ Decision | 2026-07-21T00:31:36+03:00
+
+Learn: gallery-dl Pinterest scraping skill + Genesis workflow

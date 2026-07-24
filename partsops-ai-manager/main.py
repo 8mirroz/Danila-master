@@ -26,6 +26,7 @@ from routers.observability import router as observability_router
 from routers.chat import router as chat_router
 from routers.erp import router as erp_router
 from routers.catalog import router as catalog_router
+from routers.data_health import router as data_health_router
 
 load_dotenv()
 
@@ -71,6 +72,7 @@ app.include_router(observability_router)
 app.include_router(chat_router)
 app.include_router(erp_router)
 app.include_router(catalog_router)
+app.include_router(data_health_router)
 
 
 @app.get("/")
