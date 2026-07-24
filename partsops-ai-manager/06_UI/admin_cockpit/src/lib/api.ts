@@ -125,6 +125,33 @@ export async function importFromArtifact(
   return data as { request: any };
 }
 
+export type ContractPositionDraft = {
+  part_number: string;
+  description?: string;
+  quantity: number;
+};
+
+export type ContractCreateResponse = {
+  request_id: string;
+  contract_ref: string;
+  positions: number;
+  status: string;
+};
+
+export async function createCrawlerContract(
+  positions: ContractPositionDraft[],
+): Promise<ContractCreateResponse> {
+  return apiJson<ContractCreateResponse>('/api/contracts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contract_ref: '2026.170160',
+      positions,
+      actor_id: 'operator',
+    }),
+  });
+}
+
 export function createEventSource(tenantId?: string): EventSource {
   const baseUrl = API_BASE_URL.replace('/api', '');
   const url = `${baseUrl}/api/events/stream${tenantId ? `?tenant_id=${tenantId}` : ''}`;

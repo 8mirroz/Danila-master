@@ -9,7 +9,6 @@ import {
   SectionCard,
   MetricTile,
   ActionButton,
-  Dropzone,
   ReviewPanel,
   EmptyState,
   InlineAlert,
@@ -30,6 +29,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { PipelineMonitor } from './components/PipelineMonitor';
 import { AgentOSPanel } from './components/AgentOSPanel';
 import { MultiAgentOrchestraView } from './components/MultiAgentOrchestraView';
+import { CrawlerIntakePanel } from './components/CrawlerIntakePanel';
 
 type Request = {
   id: number;
@@ -92,7 +92,6 @@ function App() {
   const [searchGlobalQuery, setSearchGlobalQuery] = useState('');
 
   const [requests, setRequests] = useState<Request[]>([]);
-  const [localOrderMessage, setLocalOrderMessage] = useState<string | null>(null);
   const [normalizedParts, setNormalizedParts] = useState<Array<{ name: string; quantity: number }>>([]);
   const [selectedOffers, setSelectedOffers] = useState<Record<string, any>>({});
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -247,69 +246,6 @@ function App() {
     }
     setSelectedReq((prev) => (prev ? { ...prev, parts_json: JSON.stringify(normalizedParts) } : null));
     setActiveStep(3);
-  };
-
-  const handleImportOrders = async (text: string) => {
-    try {
-      let payload = { source: 'UI_UPLOAD', text, customer_name: 'Direct Upload Client' };
-      try {
-        const parsed = JSON.parse(text);
-        payload = {
-          source: parsed.source || 'UI_UPLOAD',
-          text: parsed.text || text,
-          customer_name: parsed.customer_name || 'Direct Upload Client',
-        };
-      } catch {}
-
-      const res = await apiFetch('/api/requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setLocalOrderMessage(`Successfully added order ${data.request.request_id} to the live triage queue.`);
-        setFetchTrigger((prev) => prev + 1);
-        setTimeout(() => setLocalOrderMessage(null), 5000);
-      } else {
-        alert('Backend failed to intake the request. Adding local simulation draft.');
-        throw new Error('Local fallback');
-      }
-    } catch {
-      const mockId = `REQ-LOCAL-${Math.floor(1000 + Math.random() * 9000)}`;
-      const mockReq: Request = {
-        id: Date.now(),
-        request_id: mockId,
-        source: 'LOCAL_DRAFT',
-        status: 'NEW',
-        customer_name: 'Local Demo Client',
-        created_at: new Date().toISOString(),
-        parts_json: JSON.stringify([{ name: 'Brake pads', quantity: 2 }, { name: 'Air filter', quantity: 1 }]),
-      };
-      setSelectedReq(mockReq);
-      setLocalOrderMessage(`Intake offline. Added local draft ${mockId} to active triage queue.`);
-      setTimeout(() => setLocalOrderMessage(null), 5000);
-    }
-  };
-
-  const handleFileUpload = async (file: File): Promise<string> => {
-    const { uploadAttachment, importFromArtifact } = await import('./lib/api');
-    const result = await uploadAttachment(file);
-    const artifactId = result.artifact_id;
-    try {
-      const importResult = await importFromArtifact(artifactId, 'FILE_UPLOAD', 'File Upload Client', 'normal');
-      const request = importResult.request;
-      setLocalOrderMessage(`Successfully imported order ${request.request_id} from file ${file.name}.`);
-      setFetchTrigger((prev) => prev + 1);
-      setTimeout(() => setLocalOrderMessage(null), 5000);
-      return artifactId;
-    } catch (error) {
-      console.error('Import from artifact failed:', error);
-      setLocalOrderMessage(`File uploaded but import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setTimeout(() => setLocalOrderMessage(null), 5000);
-      return artifactId;
-    }
   };
 
   const navItems = [
@@ -680,19 +616,12 @@ function App() {
                 )}
 
                 {activeNav === 'orders' && (
-                  <div className="max-w-2xl mx-auto space-y-4">
-                    <SectionCard title="Центр импорта и создания заказов" icon="fa-file-import">
-                      <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
-                        Загружайте опросные листы клиентов, вставляйте сырые списки совместимости VIN или импортируйте комплексные запросы.
-                      </p>
-                      {localOrderMessage && <InlineAlert type="success" message={localOrderMessage} />}
-                      <Dropzone
-                        title="Перетащите файл запроса на закупку"
-                        description="Загружайте текстовые документы, листы предложений клиентов или экспорт писем."
-                        onImport={handleImportOrders}
-                        onFileUpload={handleFileUpload}
-                      />
-                    </SectionCard>
+                  <div className="mx-auto max-w-5xl space-y-4">
+                    <CrawlerIntakePanel
+                      onCreated={() => {
+                        setFetchTrigger((prev) => prev + 1);
+                      }}
+                    />
                   </div>
                 )}
 

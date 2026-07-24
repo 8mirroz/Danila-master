@@ -51,7 +51,19 @@ exist_*.png
 exist_*.json
 rossko_*.png
 rossko_*.json
-my-crawler/
+# Keep the crawler implementation versioned; runtime state and customer/article input stay local.
+my-crawler/*
+!my-crawler/Dockerfile
+!my-crawler/README.md
+!my-crawler/pyproject.toml
+!my-crawler/requirements.txt
+!my-crawler/uv.lock
+!my-crawler/my_crawler/
+!my-crawler/my_crawler/**
+!my-crawler/tests/
+!my-crawler/tests/**
+my-crawler/**/__pycache__/
+my-crawler/**/*.py[cod]
 versions_screenshots/
 
 # Obsidian sync

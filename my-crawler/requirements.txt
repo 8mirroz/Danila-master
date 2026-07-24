@@ -1,0 +1,1 @@
+crawlee[playwright,httpx]>=0.4.0
