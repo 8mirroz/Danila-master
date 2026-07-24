@@ -8,13 +8,24 @@ Usage:
     CLEAN_SCREENSHOTS=1 python -m my_crawler.main  # remove old debug screenshots
 """
 import asyncio
+import csv
+import json
 import os
 import sys
 import glob
+from pathlib import Path
 from datetime import timedelta
 from crawlee.crawlers import PlaywrightCrawler
+from crawlee.configuration import Configuration
 from crawlee import ConcurrencySettings, Request
 from .routes import router
+
+SITE_LABELS = ("exist", "autodoc", "rossko")
+SITE_ENV_PREFIX = {
+    "exist": "EXIST",
+    "autodoc": "AUTODOC",
+    "rossko": "ROSSKO",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -35,13 +46,32 @@ def get_proxy_config() -> dict | None:
     return {"server": proxy_url}
 
 
-def get_browser_profile_dir() -> str:
-    """Return an isolated persistent browser profile for marketplace sessions."""
-    configured = os.environ.get("BROWSER_PROFILE_DIR", "").strip()
-    default = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".browser-profile")
-    profile_dir = os.path.abspath(configured or default)
+def ensure_dir(path: str) -> str:
+    """Create directory if needed and return its absolute path."""
+    profile_dir = os.path.abspath(path)
     os.makedirs(profile_dir, mode=0o700, exist_ok=True)
     return profile_dir
+
+
+def get_browser_profile_dir(site: str | None = None) -> str:
+    """Return a persistent browser profile, optionally overridden per marketplace."""
+    configured = os.environ.get("BROWSER_PROFILE_DIR", "").strip()
+    default = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".browser-profile")
+    if site:
+        env_prefix = SITE_ENV_PREFIX[site]
+        site_configured = os.environ.get(f"{env_prefix}_BROWSER_PROFILE_DIR", "").strip()
+        if site_configured:
+            return ensure_dir(site_configured)
+    return ensure_dir(configured or default)
+
+
+def get_proxy_config_for_site(site: str) -> dict | None:
+    """Return proxy config, allowing site-specific override over global PROXY_URL."""
+    env_prefix = SITE_ENV_PREFIX[site]
+    proxy_url = os.environ.get(f"{env_prefix}_PROXY_URL", "").strip()
+    if proxy_url:
+        return {"server": proxy_url}
+    return get_proxy_config()
 
 
 def get_max_concurrency() -> int:
@@ -133,6 +163,94 @@ def build_requests(articles: list[str]) -> list[Request]:
     return requests
 
 
+def partition_requests_by_site(requests: list[Request]) -> dict[str, list[Request]]:
+    """Split crawler requests into site-specific batches."""
+    batches = {site: [] for site in SITE_LABELS}
+    for request in requests:
+        if request.label in batches:
+            batches[request.label].append(request)
+    return batches
+
+
+def get_site_storage_dir(site: str) -> str:
+    """Return isolated Crawlee storage dir for one marketplace run."""
+    base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "storage", site)
+    return ensure_dir(base)
+
+
+def export_results(records: list[dict], results_dir: str = "results") -> tuple[str, str]:
+    """Export aggregated records to JSON and CSV."""
+    os.makedirs(results_dir, exist_ok=True)
+    csv_path = os.path.join(results_dir, "aggregated_parts.csv")
+    json_path = os.path.join(results_dir, "aggregated_parts.json")
+
+    with open(json_path, "w", encoding="utf-8") as handle:
+        json.dump(records, handle, ensure_ascii=False, indent=2)
+
+    fieldnames: list[str] = []
+    for record in records:
+        for key in record.keys():
+            if key not in fieldnames:
+                fieldnames.append(key)
+
+    with open(csv_path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames or ["site"], extrasaction="ignore")
+        writer.writeheader()
+        for record in records:
+            writer.writerow(record)
+
+    return csv_path, json_path
+
+
+async def run_site_crawler(site: str, requests: list[Request], headless_mode: bool) -> list[dict]:
+    """Run one marketplace batch with its own persistent profile and isolated storage."""
+    if not requests:
+        return []
+
+    proxy_config = get_proxy_config_for_site(site)
+    browser_profile_dir = get_browser_profile_dir(site)
+    storage_dir = get_site_storage_dir(site)
+    if proxy_config:
+        print(f"[{site}] Using configured proxy.")
+    print(f"[{site}] Using persistent browser profile: {browser_profile_dir}")
+
+    crawler = PlaywrightCrawler(
+        request_handler=router,
+        headless=headless_mode,
+        user_data_dir=browser_profile_dir,
+        use_incognito_pages=False,
+        max_requests_per_crawl=100,
+        concurrency_settings=ConcurrencySettings(
+            min_concurrency=1,
+            desired_concurrency=get_max_concurrency(),
+            max_concurrency=get_max_concurrency(),
+        ),
+        browser_type="chromium",
+        browser_new_context_options={
+            "user_agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "viewport": {"width": 1920, "height": 1080},
+            "proxy": proxy_config,
+        },
+        max_request_retries=3,
+        request_handler_timeout=timedelta(seconds=60),
+        max_session_rotations=3,
+        navigation_timeout=timedelta(seconds=30),
+        configuration=Configuration(
+            storage_dir=storage_dir,
+            purge_on_start=True,
+            headless=headless_mode,
+        ),
+    )
+
+    await crawler.run(requests)
+    dataset_page = await crawler.get_data(limit=10_000)
+    return list(dataset_page.items)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -158,59 +276,25 @@ async def main() -> None:
 
     # -- Build requests --
     requests = build_requests(articles)
-    print(f"Prepared {len(requests)} crawler tasks. Starting PlaywrightCrawler...")
+    print(f"Prepared {len(requests)} crawler tasks. Starting site-specific crawler runs...")
 
     # -- Crawler configuration --
     headless_mode = is_headless()
-    proxy_config = get_proxy_config()
-    browser_profile_dir = get_browser_profile_dir()
-    if proxy_config:
-        print("Using configured proxy.")
-    print(f"Using persistent browser profile: {browser_profile_dir}")
-
-    crawler = PlaywrightCrawler(
-        request_handler=router,
-        headless=headless_mode,
-        user_data_dir=browser_profile_dir,
-        use_incognito_pages=False,
-        max_requests_per_crawl=100,
-        concurrency_settings=ConcurrencySettings(
-            min_concurrency=1,
-            desired_concurrency=get_max_concurrency(),
-            max_concurrency=get_max_concurrency(),
-        ),
-        browser_type="chromium",
-        browser_new_context_options={
-            "user_agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "viewport": {"width": 1920, "height": 1080},
-            "proxy": proxy_config,
-        },
-        # Retry & timeout settings
-        max_request_retries=3,
-        request_handler_timeout=timedelta(seconds=60),
-        max_session_rotations=3,
-        # Use playwright's built-in navigation timeout
-        navigation_timeout=timedelta(seconds=30),
-    )
-
-    # -- Run --
-    await crawler.run(requests)
+    request_batches = partition_requests_by_site(requests)
+    collected_records: list[dict] = []
+    for site in SITE_LABELS:
+        site_requests = request_batches[site]
+        if not site_requests:
+            continue
+        print(f"[{site}] Running {len(site_requests)} request(s)")
+        site_records = await run_site_crawler(site, site_requests, headless_mode)
+        print(f"[{site}] Collected {len(site_records)} record(s)")
+        collected_records.extend(site_records)
 
     # -- Export results --
-    results_dir = "results"
-    os.makedirs(results_dir, exist_ok=True)
-
-    csv_path = os.path.join(results_dir, "aggregated_parts.csv")
-    json_path = os.path.join(results_dir, "aggregated_parts.json")
-
     print("Scraping completed! Exporting collected data...")
     try:
-        await crawler.export_data(csv_path)
-        await crawler.export_data(json_path)
+        csv_path, json_path = export_results(collected_records)
         print(f"Successfully exported results to:")
         print(f"  CSV:  {os.path.abspath(csv_path)}")
         print(f"  JSON: {os.path.abspath(json_path)}")

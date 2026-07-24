@@ -7,7 +7,14 @@ import os
 # Add parent dir so we can import routes
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from my_crawler.routes import clean_price
+from my_crawler.routes import (
+    autodoc_row_score,
+    clean_price,
+    extract_autodoc_delivery,
+    extract_autodoc_stock,
+    is_autodoc_price_link,
+    split_autodoc_title,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +102,55 @@ def test_clean_price_decimal_dot():
 def test_clean_price_no_spaces():
     """Price without any spaces."""
     assert clean_price("1200.50₽") == "1200.50 ₽"
+
+
+def test_is_autodoc_price_link():
+    """Autodoc search results should only enqueue /price/ routes."""
+    assert is_autodoc_price_link("/price/34/oc90")
+    assert is_autodoc_price_link("https://www.autodoc.ru/price/9430/oc90")
+    assert not is_autodoc_price_link("/catalogs/oil-filter")
+    assert not is_autodoc_price_link(None)
+
+
+def test_split_autodoc_title_brand_description_and_article():
+    """Autodoc row title should split into brand, description, article."""
+    brand, article, description = split_autodoc_title(
+        "KNECHT | MAHLE | BEHR Фильтр масляный OC 90",
+        "OC90",
+    )
+    assert brand == "KNECHT | MAHLE | BEHR"
+    assert article == "OC 90"
+    assert description == "Фильтр масляный"
+
+
+def test_extract_autodoc_delivery_and_stock_from_row_text():
+    """Delivery and stock should survive even when the row becomes text-only."""
+    row_text = "MILES Фильтр масляный AFOS051 4.6 37 оценок Дистрибьютор 2 рабочих дня 31 шт 236 ₽"
+    assert extract_autodoc_delivery(row_text) == "2 рабочих дня"
+    assert extract_autodoc_stock(row_text) == "31 шт"
+
+
+def test_extract_autodoc_stock_marks_unavailable():
+    """Unavailable rows should surface explicit stock fallback."""
+    row_text = "AUTO TECHNOLOGIES Фильтр масляный AT 2005-200OF Товар недоступен для покупки от 166 ₽"
+    assert extract_autodoc_stock(row_text, "offers offers-closed") == "Unavailable"
+
+
+def test_autodoc_row_score_prefers_exact_brand_and_article_match():
+    """Scoring should prefer the intended branded row over generic analogs."""
+    direct = autodoc_row_score(
+        "KNECHT | MAHLE | BEHR Фильтр масляный OC 90",
+        "KNECHT | MAHLE | BEHR Фильтр масляный OC 90 399 ₽",
+        "KNECHT | MAHLE | BEHR Фильтр масляный",
+        "OC90",
+    )
+    analog = autodoc_row_score(
+        "AUTO TECHNOLOGIES Фильтр масляный AT 2005-200OF",
+        "AUTO TECHNOLOGIES Фильтр масляный AT 2005-200OF 166 ₽",
+        "KNECHT | MAHLE | BEHR Фильтр масляный",
+        "OC90",
+    )
+    assert direct > analog
 
 
 # ---------------------------------------------------------------------------

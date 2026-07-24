@@ -9,6 +9,10 @@ from crawlee import Request
 
 router = Router[PlaywrightCrawlingContext]()
 
+AUTODOC_SEARCH_INPUT_SELECTOR = 'input[type="search"]:visible'
+AUTODOC_SEARCH_BUTTON_SELECTOR = 'button.search-button:visible, button:has-text("Найти"):visible'
+AUTODOC_RESULT_ROW_SELECTOR = '.pgoods'
+
 
 def resolve_rossko_card_url(href: str | None, base_url: str) -> str | None:
     """Return a same-site Rossko internal product-card URL, or None for a search URL."""
@@ -26,6 +30,97 @@ def resolve_rossko_card_url(href: str | None, base_url: str) -> str | None:
 def rossko_card_has_product_data(title: str, price_node_count: int) -> bool:
     """Reject the empty Rossko shell that renders without any product pricing."""
     return bool(title.strip()) and price_node_count > 0
+
+
+def is_autodoc_price_link(href: str | None) -> bool:
+    """Return True for Autodoc product-price routes."""
+    return bool(href and "/price/" in href)
+
+
+def normalize_part_token(value: str | None) -> str:
+    """Normalize article/brand tokens for fuzzy matching across vendor formatting."""
+    return re.sub(r'[^A-Z0-9]+', '', (value or '').upper())
+
+
+def split_autodoc_title(title: str, fallback_article: str = "") -> tuple[str, str, str]:
+    """Split an Autodoc row title into brand, article, description."""
+    text = re.sub(r'\s+', ' ', (title or '').strip())
+    if not text:
+        return "Autodoc Match", fallback_article, ""
+
+    tokens = text.split()
+    article_tokens: list[str] = []
+    for idx in range(len(tokens) - 1, -1, -1):
+        token = tokens[idx]
+        if re.search(r'\d', token) or article_tokens:
+            article_tokens.insert(0, token)
+            if normalize_part_token(" ".join(article_tokens)) == normalize_part_token(fallback_article):
+                break
+        else:
+            break
+
+    article = " ".join(article_tokens).strip() or fallback_article
+    core_tokens = tokens[: len(tokens) - len(article_tokens)] if article_tokens else tokens
+
+    brand_tokens: list[str] = []
+    description_tokens: list[str] = []
+    seen_description = False
+    for token in core_tokens:
+        letters = re.sub(r'[^A-Za-zА-Яа-яЁё]+', '', token)
+        is_brandish = bool(letters) and letters == letters.upper()
+        if not seen_description and (is_brandish or token in {"|", "/", "&"}):
+            brand_tokens.append(token)
+            continue
+        seen_description = True
+        description_tokens.append(token)
+
+    brand = " ".join(brand_tokens).strip(" |/") or "Autodoc Match"
+    description = " ".join(description_tokens).strip()
+    if not description and brand != text:
+        description = text.replace(brand, "", 1).replace(article, "", 1).strip(" |-")
+
+    return brand, article, description
+
+
+def extract_autodoc_stock(row_text: str, offers_class: str = "") -> str:
+    """Extract stock/availability from a result row text."""
+    text = re.sub(r'\s+', ' ', (row_text or '').strip())
+    stock_match = re.search(r'(\d+\s*шт)', text, flags=re.IGNORECASE)
+    if stock_match:
+        return stock_match.group(1)
+    if "недоступ" in text.lower() or "offers-closed" in offers_class:
+        return "Unavailable"
+    return "Unknown"
+
+
+def extract_autodoc_delivery(row_text: str) -> str:
+    """Extract delivery window from row text as a stable human-readable fragment."""
+    text = re.sub(r'\s+', ' ', (row_text or '').strip())
+    match = re.search(
+        r'((?:от\s+)?\d+\s+(?:раб(?:оч(?:его|их))?\.?\s+)?дн(?:я|ей)|(?:от\s+)?\d+\s+рабоч(?:его|их)\s+дн(?:я|ей))',
+        text,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        return match.group(1)
+    return "Standard Delivery"
+
+
+def autodoc_row_score(title: str, row_text: str, catalog_brand: str, search_article: str) -> int:
+    """Rank Autodoc result rows so the parser chooses the intended product first."""
+    title_norm = normalize_part_token(title)
+    brand_norm = normalize_part_token(catalog_brand)
+    article_norm = normalize_part_token(search_article)
+    score = 0
+    if article_norm and article_norm in title_norm:
+        score += 10
+    if brand_norm and brand_norm in title_norm:
+        score += 8
+    if "₽" in row_text:
+        score += 4
+    if "недоступ" in row_text.lower():
+        score -= 3
+    return score
 
 
 async def capture_price_evidence(context: PlaywrightCrawlingContext, site: str, article: str) -> dict:
@@ -219,75 +314,56 @@ async def handle_exist(context: PlaywrightCrawlingContext) -> None:
 @router.handler('autodoc')
 async def handle_autodoc(context: PlaywrightCrawlingContext) -> None:
     """Handler for Autodoc.ru home page to search and enqueue price pages."""
-    url = context.request.url
     article = context.request.user_data.get('article', '')
     context.log.info(f'Searching Autodoc.ru for article: {article}')
 
-    # Wait for the input box
-    await context.page.wait_for_timeout(3000)
-    
-    # Find the visible search input
-    visible_input = None
-    input_candidates = context.page.locator("input")
-    for index in range(await input_candidates.count()):
-        candidate = input_candidates.nth(index)
-        if await candidate.is_visible():
-            visible_input = candidate
-            break
-
-    if visible_input is None:
+    search_input = context.page.locator(AUTODOC_SEARCH_INPUT_SELECTOR).first
+    try:
+        await search_input.wait_for(state="visible", timeout=12_000)
+    except Exception:
         context.log.error("Could not find visible search input on Autodoc.ru")
         await context.page.screenshot(path="autodoc_no_input_debug.png")
         return
 
-    # Focus and type the part number
-    await visible_input.click()
+    await search_input.click()
+    await search_input.fill(article)
     await context.page.wait_for_timeout(500)
-    await context.page.keyboard.type(article, delay=100)
-    await context.page.wait_for_timeout(1000)
-    
-    # Perform JS click on search button to trigger suggestions dropdown
-    search_clicked = await context.page.evaluate("""() => {
-        const selectors = [
-            'a-search button',
-            'button[type="submit"]',
-            'button[aria-label*="Поиск"]',
-            'button[title*="Поиск"]',
-        ];
-        for (const selector of selectors) {
-            const button = Array.from(document.querySelectorAll(selector)).find((candidate) => {
-                const rect = candidate.getBoundingClientRect();
-                const style = window.getComputedStyle(candidate);
-                return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-            });
-            if (button) {
-                button.click();
-                return true;
-            }
-        }
-        return false;
-    }""")
-    if not search_clicked:
-        context.log.warning("Could not find a visible Autodoc search button")
-        await context.page.keyboard.press("Enter")
-    
-    # Wait for autocomplete dropdown to load
-    await context.page.wait_for_timeout(3000)
 
-    # Extract links from dropdown suggestions
-    suggestion_links = await context.page.evaluate("""() => {
-        const links = [];
-        document.querySelectorAll('a').forEach(a => {
-            const href = a.getAttribute('href');
-            if (href && href.includes('/price/')) {
-                links.push({
-                    href: href,
-                    text: a.textContent.trim().replace(/\\s+/g, ' ')
-                });
-            }
-        });
-        return links;
+    await context.page.keyboard.press("Enter")
+    await context.page.wait_for_timeout(700)
+
+    search_button = context.page.locator(AUTODOC_SEARCH_BUTTON_SELECTOR).first
+    try:
+        if await search_button.count() and not await context.page.locator('a[href*="/price/"]').count():
+            await search_button.click(timeout=2_000)
+    except Exception:
+        context.log.warning("Could not click a visible Autodoc search button after Enter")
+
+    try:
+        await context.page.wait_for_function(
+            """() => Array.from(document.querySelectorAll('a[href]'))
+            .some((a) => a.getAttribute('href')?.includes('/price/'))""",
+            timeout=10_000,
+        )
+    except Exception:
+        context.log.warning(f"No search suggestions found on Autodoc.ru for article: {article}")
+        await context.page.screenshot(path="autodoc_no_suggestions_debug.png")
+        return
+
+    raw_links = await context.page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('a[href]')).map((a) => ({
+            href: a.getAttribute('href'),
+            text: (a.textContent || '').trim().replace(/\\s+/g, ' ')
+        }));
     }""")
+    suggestion_links = []
+    seen_hrefs = set()
+    for item in raw_links:
+        href = item.get("href")
+        if not is_autodoc_price_link(href) or href in seen_hrefs:
+            continue
+        seen_hrefs.add(href)
+        suggestion_links.append(item)
 
     if not suggestion_links:
         context.log.warning(f"No search suggestions found on Autodoc.ru for article: {article}")
@@ -313,47 +389,75 @@ async def handle_autodoc_price(context: PlaywrightCrawlingContext) -> None:
     """Handler for Autodoc.ru product price pages."""
     url = context.request.url
     article = context.request.user_data.get('article', '')
-    brand = context.request.user_data.get('catalog_brand', 'Autodoc Match')
+    catalog_brand = context.request.user_data.get('catalog_brand', 'Autodoc Match')
     context.log.info(f'Processing Autodoc.ru price page: {url}')
 
-    # Autodoc may redirect the first product-card navigation after it opens.
-    # A locator is resilient to that navigation; raw query_selector is not.
-    price_link = context.page.locator(".card__price-link").first
     try:
         await context.page.wait_for_load_state("domcontentloaded", timeout=10_000)
-        await price_link.wait_for(state="visible", timeout=10_000)
+        await context.page.locator(AUTODOC_RESULT_ROW_SELECTOR).first.wait_for(state="visible", timeout=12_000)
     except Exception as exc:
         context.log.warning(f"Autodoc price card is unavailable after navigation: {url}; {exc}")
-        # Check if we need to show browser window for manual intervention
         context.log.error(f"Failed to load prices for Autodoc URL: {url}. Please resolve block or login if needed.")
         await context.page.screenshot(path="autodoc_price_load_failed.png")
         return
 
-    # Extract price
-    price_raw = (await price_link.inner_text()).strip()
-    price = clean_price(price_raw)
+    rows = await context.page.locator(AUTODOC_RESULT_ROW_SELECTOR).all()
+    candidates: list[dict] = []
+    for row in rows:
+        row_text = (await row.inner_text()).strip().replace("\n", " ")
+        title_locator = row.locator(".card__title").first
+        title_text = (await title_locator.inner_text()).strip().replace("\n", " ") if await title_locator.count() else ""
+        if not row_text or not title_text:
+            continue
 
-    # Extract stock/availability
-    stock_el = await context.page.query_selector(".card__price-stock")
-    stock = (await stock_el.inner_text()).strip() if stock_el else "Unknown"
+        price_raw = ""
+        for selector in (".offers__price", ".card__price-link", '[class*="offers__price"]'):
+            locator = row.locator(selector).first
+            if await locator.count():
+                raw = (await locator.inner_text()).strip()
+                if raw:
+                    price_raw = raw
+                    break
+        if not price_raw:
+            price_raw = row_text
 
-    # Extract delivery options
-    delivery_items = await context.page.query_selector_all(".card__delivery-item")
-    delivery_list = []
-    for item in delivery_items:
-        delivery_list.append((await item.inner_text()).strip().replace("\n", " "))
-    delivery = " | ".join(delivery_list) if delivery_list else "Standard Delivery"
+        delivery_raw = ""
+        for selector in (".offers__delivery-desktop", ".offers__delivery", '[class*="delivery"]'):
+            locator = row.locator(selector).first
+            if await locator.count():
+                raw = (await locator.inner_text()).strip()
+                if raw:
+                    delivery_raw = raw
+                    break
 
-    # Extract precise brand from page breadcrumbs if available
-    breadcrumbs = await context.page.query_selector_all(".catalog-breadcrumbs__item")
-    precise_brand = brand
-    if len(breadcrumbs) >= 4:
-        precise_brand = (await breadcrumbs[-1].inner_text()).strip()
+        offers_class = ""
+        offers_locator = row.locator(".offers").first
+        if await offers_locator.count():
+            offers_class = await offers_locator.get_attribute("class") or ""
 
-    # Extract description
-    title_el = await context.page.query_selector("h1")
-    description = (await title_el.inner_text()).strip() if title_el else "Фильтр масляный"
-    description = description.replace(precise_brand, "").replace(article, "").strip()
+        candidates.append({
+            "title": title_text,
+            "row_text": row_text,
+            "price": clean_price(price_raw),
+            "delivery": delivery_raw or extract_autodoc_delivery(row_text),
+            "stock": extract_autodoc_stock(row_text, offers_class),
+            "score": autodoc_row_score(title_text, row_text, catalog_brand, article),
+        })
+
+    candidates = [candidate for candidate in candidates if candidate["price"] != "——"]
+    if not candidates:
+        context.log.error(f"Failed to extract priced rows for Autodoc URL: {url}")
+        await context.page.screenshot(path="autodoc_price_load_failed.png")
+        return
+
+    best = sorted(candidates, key=lambda item: item["score"], reverse=True)[0]
+    precise_brand, matched_article, description = split_autodoc_title(best["title"], article)
+    price = best["price"]
+    delivery = best["delivery"]
+    stock = best["stock"]
+
+    if normalize_part_token(catalog_brand) and normalize_part_token(catalog_brand) not in normalize_part_token(best["title"]):
+        precise_brand = catalog_brand
 
     if price == "——":
         return
@@ -363,8 +467,8 @@ async def handle_autodoc_price(context: PlaywrightCrawlingContext) -> None:
         "site": "autodoc.ru",
         "search_article": article,
         "brand": precise_brand,
-        "article": article,
-        "description": description,
+        "article": matched_article or article,
+        "description": description or best["title"],
         "delivery": f"{delivery} (Stock: {stock})",
         "price": price,
         **evidence,

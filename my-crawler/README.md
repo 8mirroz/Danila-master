@@ -108,37 +108,38 @@ Autodoc использует **два хендлера**: поиск и цену
 
 #### Этап 1: Поиск (`handle_autodoc`)
 
-**URL:** `https://www.autodoc.ru/#search-{article}`
+**URL:** `https://www.autodoc.ru/`
 
 ```
 [Страница autodoc.ru]
     │
-    ├── Найти видимое поле ввода (JS: первый input с display != none)
+    ├── Дождаться `input[type="search"]:visible`
     ├── Кликнуть в поле
-    ├── Напечатать артикул (delay=100ms между символами)
-    ├── Кликнуть кнопку поиска
-    ├── Подождать выпадающий список (3 сек)
+    ├── Ввести артикул
+    ├── Нажать Enter
+    ├── Если `/price/...` не появились → fallback на кнопку поиска
     │
-    └── Извлечь все ссылки /price/... из предложений
+    └── Извлечь и дедуплицировать все ссылки /price/... из предложений
           └── Каждую → добавить в очередь как autodoc_price
 ```
 
-**Детекшн поля ввода:** Использует `page.evaluate()` с JS, который ищет первый видимый input на странице. Это обходит проблему с Shadow DOM и динамическими ID.
+**Особенность:** `Autodoc` гидратирует search input с задержкой, поэтому fixed sleep недостаточен. Хендлер ждет целевой видимый search input до 12 секунд.
 
 #### Этап 2: Цена (`handle_autodoc_price`)
 
 ```
 [Страница товара autodoc.ru]
     │
-    ├── Цена: .card__price-link (очищается)
-    ├── Наличие: .card__price-stock
-    ├── Доставка: .card__delivery-item (каждый → конкатенация)
-    ├── Хлебные крошки: .catalog-breadcrumbs__item
-    │     └── Последний элемент → уточнённый бренд
-    └── Заголовок: h1 (описание)
+    ├── Найти result rows `.pgoods`
+    ├── Для каждой строки:
+    │     ├── Заголовок: `.card__title`
+    │     ├── Цена: `.offers__price` (fallback: текст строки)
+    │     ├── Доставка: `.offers__delivery*` (fallback: regex по тексту)
+    │     └── Наличие: `31 шт` / `Unavailable` (fallback: regex + class flags)
+    └── Выбрать лучшую строку по score: бренд + артикул + наличие цены
 ```
 
-**Ретраи:** Если `.card__price-link` не найден сразу — ждёт 5 секунд и пробует снова. Если всё ещё нет — сохраняет скриншот.
+**Автолечение:** Если `Autodoc` снова сдвинет микроразметку внутри строки, парсер все равно может извлечь цену/доставку/stock из текстового fallback без немедленного падения.
 
 **Что парсит:**
 ```json
@@ -226,28 +227,37 @@ HEADLESS=1 PROXY_URL=socks5://user:pass@host:1080 CLEAN_SCREENSHOTS=1 .venv/bin/
 - Browser: Chromium
 - Retry: 3 попытки на страницу (при таймаутах/ошибках)
 - Timeout: 30s на навигацию, 60s на обработку страницы
-- Persistent session: `.browser-profile` по умолчанию, без использования личного Chrome-профиля
+- Persistent session: shared `.browser-profile` по умолчанию или site-specific overrides через env vars
 - Concurrency: 2 вкладки по умолчанию, чтобы не терять marketplace session
 - Proxy: опциональный fallback через `PROXY_URL`
 
-**Production recipe для Rossko:**
+**Production recipe для mixed profiles:**
 
-1. Один раз запустите crawler без `HEADLESS`, выберите регион и пройдите необходимые проверки.
-   Изолированная сессия сохранится в `.browser-profile`.
-2. Для автоматических запусков используйте `HEADLESS=1` с этим же profile directory.
-3. Если Rossko перестал отдавать result rows, включите согласованный proxy через секрет окружения `PROXY_URL`; crawler не пишет его значение в logs.
+1. По умолчанию crawler все еще поддерживает один shared `BROWSER_PROFILE_DIR`.
+2. Для production лучше задавать отдельные профили по сайтам:
+   - `EXIST_BROWSER_PROFILE_DIR`
+   - `AUTODOC_BROWSER_PROFILE_DIR`
+   - `ROSSKO_BROWSER_PROFILE_DIR`
+3. Каждый marketplace теперь запускается отдельным crawler run с изолированным storage, так что `Rossko` может жить в своем профиле и при этом итоговый `aggregated_parts.json` остается общим.
+4. Если `Rossko` перестал отдавать result rows, включите согласованный proxy через секрет `ROSSKO_PROXY_URL`; значение proxy не логируется.
 
 ```bash
-# Одноразовое прогревание session/profile
-BROWSER_PROFILE_DIR=/secure/partsops-rossko-profile .venv/bin/python -m my_crawler.main
+# Общий shared профиль, если он вам действительно подходит
+BROWSER_PROFILE_DIR="$HOME/Library/Application Support/partsops/marketplaces-profile" \
+  .venv/bin/python -m my_crawler.main
 
-# Production run
-HEADLESS=1 BROWSER_PROFILE_DIR=/secure/partsops-rossko-profile \
-  CRAWLER_MAX_CONCURRENCY=2 .venv/bin/python -m my_crawler.main
+# Production-ready вариант: отдельные persistent profiles
+EXIST_BROWSER_PROFILE_DIR="$HOME/Library/Application Support/partsops/exist-profile" \
+AUTODOC_BROWSER_PROFILE_DIR="$HOME/Library/Application Support/partsops/autodoc-profile" \
+ROSSKO_BROWSER_PROFILE_DIR="$HOME/Library/Application Support/partsops/rossko-profile" \
+HEADLESS=1 CRAWLER_MAX_CONCURRENCY=2 .venv/bin/python -m my_crawler.main
 
-# Fallback, если result rows Rossko не отрисовались
-HEADLESS=1 BROWSER_PROFILE_DIR=/secure/partsops-rossko-profile \
-  PROXY_URL="$PARTSOPS_ROSSKO_PROXY_URL" .venv/bin/python -m my_crawler.main
+# Rossko fallback proxy только для этого сайта
+EXIST_BROWSER_PROFILE_DIR="$HOME/Library/Application Support/partsops/exist-profile" \
+AUTODOC_BROWSER_PROFILE_DIR="$HOME/Library/Application Support/partsops/autodoc-profile" \
+ROSSKO_BROWSER_PROFILE_DIR="$HOME/Library/Application Support/partsops/rossko-profile" \
+ROSSKO_PROXY_URL="$PARTSOPS_ROSSKO_PROXY_URL" \
+HEADLESS=1 CRAWLER_MAX_CONCURRENCY=2 .venv/bin/python -m my_crawler.main
 ```
 
 **Переменные окружения:**
@@ -255,8 +265,12 @@ HEADLESS=1 BROWSER_PROFILE_DIR=/secure/partsops-rossko-profile \
 | Переменная | Значение | Эффект |
 |-----------|----------|--------|
 | `HEADLESS` | `1`/`true` | Без видимого браузера |
-| `PROXY_URL` | `http://user:pass@host:port` | Через proxy |
-| `BROWSER_PROFILE_DIR` | `/secure/partsops-rossko-profile` | Изолированный persistent profile; default: `.browser-profile` |
+| `PROXY_URL` | `http://user:pass@host:port` | Общий proxy для всех источников |
+| `ROSSKO_PROXY_URL` | `http://user:pass@host:port` | Proxy override только для Rossko |
+| `BROWSER_PROFILE_DIR` | `...` | Shared persistent profile для всех источников |
+| `EXIST_BROWSER_PROFILE_DIR` | `...` | Persistent profile только для Exist |
+| `AUTODOC_BROWSER_PROFILE_DIR` | `...` | Persistent profile только для Autodoc |
+| `ROSSKO_BROWSER_PROFILE_DIR` | `...` | Persistent profile только для Rossko |
 | `CRAWLER_MAX_CONCURRENCY` | `1`–`4` | Одновременные вкладки; default: `2` |
 | `CLEAN_SCREENSHOTS` | `1`/`true` | Удалить старые `*_debug.png` перед стартом |
 
