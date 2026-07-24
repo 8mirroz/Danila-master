@@ -7,11 +7,14 @@ Records usage in BudgetGuard; routes models via ModelRouter.
 from __future__ import annotations
 
 import os
+import logging
 import json
 import time
 import asyncio
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 from openai import OpenAI
 from pii import mask_for_log
 from dotenv import load_dotenv
@@ -73,6 +76,16 @@ def _load_providers() -> List[ProviderConfig]:
     4. LM Studio (локальный fallback)
     5. MOCK (только при TESTING=1, <1ms, детерминированный)
     """
+    if os.environ.get("TESTING") == "1":
+        return [ProviderConfig(
+            name="mock",
+            base_url="http://mock.local/v1",
+            api_key="mock",
+            default_model="mock-model",
+            timeout_seconds=5,
+            max_retries=1,
+        )]
+
     providers: List[ProviderConfig] = []
 
     # 1. OpenRouter FREE — самый широкий пул бесплатных моделей
@@ -284,8 +297,18 @@ def _mock_llm_response(prompt: str, response_format: Optional[dict] = None) -> s
         prompt_lower = prompt.lower()
 
         # Определяем контекст запроса
-        if "spam" in prompt_lower or "is_spam" in prompt_lower or "classify" in prompt_lower:
-            return _json.dumps({"is_spam": False, "confidence": 0.95, "reason": "mock: valid parts query"})
+        if "spam" in prompt_lower or "is_spam" in prompt_lower or "classify" in prompt_lower or "analyze text" in prompt_lower:
+            spam_indicators = ["привет", "как дела", "сколько стоит", "hello", "hi", "buy now"]
+            part_keywords = ["колодк", "фильтр", "свеч", "диск", "амортизатор", "масл", "parts", "brake"]
+            is_spam = any(indicator in prompt_lower for indicator in spam_indicators) and not any(
+                keyword in prompt_lower for keyword in part_keywords
+            )
+            return _json.dumps({"is_spam": is_spam, "confidence": 0.95, "reason": "mock: deterministic classifier"})
+
+        if "decode vin" in prompt_lower:
+            return _json.dumps({
+                "valid": True, "make": "BMW", "model": "X5", "year": 2018,
+            })
 
         if "vin" in prompt_lower or "vehicle" in prompt_lower:
             return _json.dumps({
@@ -334,7 +357,7 @@ def call_llm(
         router = _get_model_router()
         route_result = router.route_with_budget(priority=priority, estimated_tokens=500)
         if not route_result["allowed"]:
-            print(f"[LLM] Budget guard blocked: {route_result['reason']}")
+            logger.warning("Budget guard blocked: %s", route_result["reason"])
             raise RuntimeError(f"Budget limit: {route_result['reason']}")
         # Use the router-selected alias (may upgrade for vip/urgent)
         model = route_result["model"]
@@ -345,18 +368,19 @@ def call_llm(
        if not provider.enabled:
            continue
 
+       client = _get_client(provider)
        # ── MOCK shortcut: для TESTING=1 — отвечаем детерминированной заглушкой (<1ms) ──
-       if provider.name == "mock":
+       # If tests patch _get_client, honor that patch so retry/fallback/usage-log paths remain testable.
+       if provider.name == "mock" and client is None:
            mock_response = _mock_llm_response(prompt, response_format)
-           print(f"[LLM] MOCK provider — returned deterministic stub in <1ms")
+           logger.debug("MOCK provider — returned deterministic stub in <1ms")
            return mock_response
 
-       client = _get_client(provider)
        provider_models = provider.get_models()
-       print(f"[LLM] Provider {provider.name} — pool: {provider_models}")
+       logger.debug("Provider %s — pool: %s", provider.name, provider_models)
 
        for concrete_model in provider_models:
-           print(f"[LLM] Trying {provider.name} / {concrete_model} — "
+           logger.debug("Trying %s / %s — "
                  f"prompt: {masked_prompt[:120]}...")
 
            for attempt in range(max_retries):
@@ -430,7 +454,7 @@ def call_llm(
                            db_session.add(log_entry)
                            db_session.commit()
                    except Exception as db_err:
-                       print(f"[LLM] Database logging failed: {db_err}")
+                       logger.warning("Database logging failed: %s", db_err)
 
                    # Reset circuit breaker on success
                    _provider_failures.pop(provider.name, None)
@@ -454,7 +478,7 @@ def call_llm(
                            db_session.add(log_entry)
                            db_session.commit()
                    except Exception as db_err:
-                       print(f"[LLM] Database error logging failed: {db_err}")
+                       logger.warning("Database error logging failed: %s", db_err)
 
                    err_msg = str(e)
                    if attempt < max_retries - 1:
@@ -664,10 +688,10 @@ async def call_llm_stream(
                 last_error = e
                 if attempt < max_retries - 1:
                     wait = 2 ** attempt
-                    print(f"[LLM-STREAM] {provider.name} attempt {attempt+1}/{max_retries} failed: {e}. Retry in {wait}s...")
+                    logger.warning("%s-STREAM attempt %d/%d failed: %s. Retry in %ds...", provider.name, attempt+1, max_retries, e, wait)
                     await asyncio.sleep(wait)
                 else:
-                    print(f"[LLM-STREAM] {provider.name} exhausted retries: {e}. Next provider...")
+                    logger.error("%s-STREAM exhausted retries: %s. Next provider...", provider.name, e)
 
     # All providers failed — yield error chunk
     yield {
@@ -727,7 +751,7 @@ Respond ONLY with valid JSON. No explanations, no markdown formatting blocks."""
         data = json.loads(res_text)
         return data
     except Exception as e:
-        print(f"[LLM] parse_request_with_llm failed: {e}. Falling back to rule-based.")
+        logger.warning("parse_request_with_llm failed: %s. Falling back to rule-based.", e)
         return {}
 
 

@@ -6,7 +6,10 @@ Uses the existing obsidian_sync_bridge.py approach for consistency.
 import os
 import subprocess
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -164,7 +167,7 @@ def get_vault_status() -> Dict[str, Any]:
 if __name__ == "__main__":
     # Test the vault sync
     status = get_vault_status()
-    print("Vault Status:", json.dumps(status, indent=2))
+    logger.info("Vault Status: %s", json.dumps(status, indent=2))
     
     if status.get("vault_exists") and status.get("bridge_script_exists"):
         test_result = sync_session_summary({
@@ -172,4 +175,4 @@ if __name__ == "__main__":
             "message": "Vault sync service test",
             "data": {"test": True}
         })
-        print(f"Test sync result: {test_result}")
+        logger.info("Test sync result: %s", test_result)

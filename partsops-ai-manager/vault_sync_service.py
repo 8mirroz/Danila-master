@@ -4,9 +4,12 @@ Can run as a standalone process or be integrated into FastAPI as a background ta
 """
 
 import os
+import logging
 import asyncio
 import json
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from typing import Dict, Any
 from pathlib import Path
 
@@ -90,11 +93,11 @@ class VaultSyncService:
                     
                     try:
                         result = sync_pipeline_run(corr_id, run_data)
-                        print(f"[VaultSync] Synced pipeline {corr_id[:16]} -> {result}")
+                        logger.info("Synced pipeline %s -> %s", corr_id[:16], result)
                         synced += 1
                         self.seen_correlations.add(run_key)
                     except Exception as e:
-                        print(f"[VaultSync] Failed to sync {corr_id}: {e}")
+                        logger.error("Failed to sync %s: %s", corr_id, e)
         
         return synced
     
@@ -109,26 +112,26 @@ class VaultSyncService:
     async def run_forever(self):
         """Run the sync service indefinitely."""
         self.running = True
-        print(f"[VaultSync] Starting service for tenant {self.tenant_id}, polling every {self.poll_interval}s")
+        logger.info("Starting service for tenant %s, polling every %ds", self.tenant_id, self.poll_interval)
         
         # Initial status check
         status = get_vault_status()
-        print(f"[VaultSync] Vault status: {json.dumps(status, indent=2)}")
+        logger.debug("Vault status: %s", json.dumps(status, indent=2))
         
         while self.running:
             try:
                 count = self.sync_new_pipeline_runs()
                 if count > 0:
-                    print(f"[VaultSync] Synced {count} new pipeline runs")
+                    logger.info("Synced %d new pipeline runs", count)
                     
                 await asyncio.sleep(self.poll_interval)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"[VaultSync] Error in sync loop: {e}")
+                logger.error("Error in sync loop: %s", e)
                 await asyncio.sleep(self.poll_interval)
         
-        print("[VaultSync] Service stopped")
+        logger.info("Service stopped")
     
     def stop(self):
         self.running = False
@@ -142,7 +145,7 @@ async def main():
         await service.run_forever()
     except KeyboardInterrupt:
         service.stop()
-        print("\n[VaultSync] Shutdown requested")
+        logger.info("Shutdown requested")
 
 
 if __name__ == "__main__":
