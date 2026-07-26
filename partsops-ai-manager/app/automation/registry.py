@@ -48,6 +48,7 @@ def list_pipelines() -> List[str]:
 try:
     from app.automation.jobs import (
         archive_close_job,
+        contract_orchestrate_job,
         dead_letter_cleanup_job,
         erp_sync_job,
         erp_sync_retry_job,
@@ -76,6 +77,7 @@ try:
 
     def _init_registry() -> None:
         register_job("archive_close", archive_close_job.run)
+        register_job("contract_orchestrate", contract_orchestrate_job.run)
         register_job("dead_letter_cleanup", dead_letter_cleanup_job.run)
         register_job("erp_sync", erp_sync_job.run)
         register_job("erp_sync_retry", erp_sync_retry_job.run)

@@ -26,7 +26,7 @@ def upgrade() -> None:
         'fleetvehicle',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('tenant_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False, default='default'),
-        sa.Column('vin', sqlmodel.sql.sqltypes.AutoString(length=17), nullable=False, unique=True, index=True),
+        sa.Column('vin', sqlmodel.sql.sqltypes.AutoString(length=17), nullable=False, unique=True),
         sa.Column('make', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column('model', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column('year', sa.Integer(), nullable=False),
@@ -51,7 +51,7 @@ def upgrade() -> None:
         'servicetariff',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('tenant_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False, default='default'),
-        sa.Column('tariff_code', sqlmodel.sql.sqltypes.AutoString(), nullable=False, unique=True, index=True),
+        sa.Column('tariff_code', sqlmodel.sql.sqltypes.AutoString(), nullable=False, unique=True),
         sa.Column('service_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column('category', sqlmodel.sql.sqltypes.AutoString(), nullable=False),  # diagnostics, maintenance, evacuation, on_site
         sa.Column('unit', sqlmodel.sql.sqltypes.AutoString(), nullable=False, default='per_service'),  # per_service, per_km, per_hour

@@ -30,6 +30,15 @@ import { PipelineMonitor } from './components/PipelineMonitor';
 import { AgentOSPanel } from './components/AgentOSPanel';
 import { MultiAgentOrchestraView } from './components/MultiAgentOrchestraView';
 import { CrawlerIntakePanel } from './components/CrawlerIntakePanel';
+import { ContractControlPanel } from './components/ContractControlPanel';
+import { BlockedQueue } from './components/BlockedQueue';
+import { TransitionActions } from './components/TransitionActions';
+import { notify } from './lib/notify';
+import { BatchSearchModal } from './components/BatchSearchModal';
+import { JobReportView } from './components/JobReportView';
+import { RoleSwitcher } from './components/RoleSwitcher';
+import { getPermissions } from './lib/rbac';
+import type { Role } from './lib/rbac';
 
 type Request = {
   id: number;
@@ -90,12 +99,15 @@ function App() {
   const [activeStep, setActiveStep] = useState<number>(2);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [searchGlobalQuery, setSearchGlobalQuery] = useState('');
+  const [currentRole, setCurrentRole] = useState<Role>('ADMIN');
 
   const [requests, setRequests] = useState<Request[]>([]);
   const [normalizedParts, setNormalizedParts] = useState<Array<{ name: string; quantity: number }>>([]);
   const [selectedOffers, setSelectedOffers] = useState<Record<string, any>>({});
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [suppliersForPalette, setSuppliersForPalette] = useState<any[]>([]);
+
 
   const fetchSuppliersForPalette = async () => {
     try {
@@ -207,7 +219,7 @@ function App() {
       });
       if (res.ok) {
         const updated = await res.json();
-        alert(`Статус запроса ${idToTransition} успешно обновлен на ${updated.new_state}`);
+        notify.transition(selectedReq?.status || 'CURRENT', updated.new_state);
         setFetchTrigger((prev) => prev + 1);
         if (selectedReq && selectedReq.request_id === idToTransition) {
           setSelectedReq((prev) => (prev ? { ...prev, status: updated.new_state } : null));
@@ -215,11 +227,11 @@ function App() {
         }
       } else {
         const err = await res.json();
-        alert(`Transition failed: ${err.detail}`);
+        notify.error(`Ошибка смены статуса: ${err.detail}`);
       }
     } catch (error) {
       console.error(error);
-      alert('API error during transition. Simulating local transition for demo.');
+      notify.info('Эмуляция локального перехода статуса');
       setRequests((prev) => prev.map((r) => (r.request_id === idToTransition ? { ...r, status: targetState } : r)));
       if (selectedReq && selectedReq.request_id === idToTransition) {
         setSelectedReq((prev) => (prev ? { ...prev, status: targetState } : null));
@@ -240,7 +252,7 @@ function App() {
           correction_reason_tags: ['operator_review'],
         }),
       });
-      if (res.ok) alert('Normalization confirmed and saved to Golden Dataset.');
+      if (res.ok) notify.success('Нормализация сохранена в Golden Dataset');
     } catch {
       console.warn('Could not save golden correction to backend');
     }
@@ -256,6 +268,7 @@ function App() {
     { id: 'kanban', label: 'Канбан-доска', icon: 'fa-table-columns' },
     { id: 'suppliers', label: 'Каталог поставщиков', icon: 'fa-truck-field' },
     { id: 'orders', label: 'Импорт заказов', icon: 'fa-file-arrow-up' },
+    { id: 'contract_control', label: 'Договорный контроль', icon: 'fa-file-shield' },
     { id: 'matching', label: 'Матрица подбора', icon: 'fa-arrows-split-up-and-left' },
     { id: 'pricing', label: 'Калькулятор цен', icon: 'fa-calculator' },
     { id: 'audit', label: 'Аудит и логи', icon: 'fa-shield-halved' },
@@ -308,6 +321,7 @@ function App() {
             setSelectedReq(null);
             setActiveNav('dashboard');
           }}
+          roleSwitcherNode={<RoleSwitcher currentRole={currentRole} onRoleChange={setCurrentRole} />}
         />
         <div className="flex-1 flex flex-row overflow-hidden relative">
           <LeftNavRail
@@ -385,37 +399,13 @@ function App() {
                           message="Некоторые детали не имеют выбранных предложений поставщиков. Настоятельно рекомендуется сравнить и выбрать варианты для всех позиций перед согласованием."
                         />
                       )}
-                      <div className="flex flex-col md:flex-row gap-3 pt-3 border-t border-[var(--border-subtle)] justify-end">
-                        <ActionButton
-                          variant="secondary"
-                          icon="fa-shuffle"
-                          onClick={() => {
-                            const reason = prompt('Укажите причину переработки:');
-                            if (reason !== null) handleStateTransition('MANUAL_REVIEW', reason || 'Требуется ручное уточнение');
-                          }}
-                        >
-                          Уточнить / Переработать
-                        </ActionButton>
-                        <ActionButton
-                          variant="primary"
-                          icon="fa-circle-check"
-                          onClick={() => {
-                            const reason = prompt('Укажите примечания к согласованию:');
-                            if (reason !== null) handleStateTransition('APPROVED', reason || 'Согласовано администратором закупок');
-                          }}
-                        >
-                          Явно одобрить закупку
-                        </ActionButton>
-                        <ActionButton
-                          variant="danger"
-                          icon="fa-trash-can"
-                          onClick={() => {
-                            const reason = prompt('Укажите причину отмены:');
-                            if (reason !== null) handleStateTransition('CANCELLED', reason || 'Запрос отклонен');
-                          }}
-                        >
-                          Отменить / Отклонить запрос
-                        </ActionButton>
+                      <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[var(--border-subtle)] justify-end">
+                        <TransitionActions
+                          status={selectedReq.status}
+                          requestId={selectedReq.request_id}
+                          onTransition={handleStateTransition}
+                          permissions={getPermissions(currentRole)}
+                        />
                       </div>
                     </SectionCard>
                   )}
@@ -426,7 +416,7 @@ function App() {
                         requestId={selectedReq.request_id}
                         isApproved={selectedReq.status === 'APPROVED'}
                         onDraftInvoice={(data) => {
-                          alert(`Черновик счета создан! Номер счета: ${data.invoice_number}`);
+                          notify.invoiceDrafted(data.invoice_number);
                           setFetchTrigger((prev) => prev + 1);
                         }}
                       />
@@ -477,7 +467,7 @@ function App() {
                           <button
                             onClick={() => {
                               setFetchTrigger((prev) => prev + 1);
-                              alert('Синхронизация с ERP успешно запущена!');
+                              notify.erpSync();
                             }}
                             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                             title="Запустить синхронизацию с ERP"
@@ -486,11 +476,19 @@ function App() {
                             <span>Синхронизация</span>
                           </button>
                           <button
-                            onClick={() => alert('Кэш очищен, сессия обновлена.')}
+                            onClick={() => notify.info('Кэш очищен, сессия обновлена')}
                             className="flex items-center justify-center h-8.5 w-8.5 rounded-xl text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 border border-slate-200 transition-all duration-200"
                             title="Очистить локальный кэш"
                           >
                             <i className="fas fa-trash-can text-[11px]" />
+                          </button>
+                          <button
+                            onClick={() => setIsBatchModalOpen(true)}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-all duration-200 shadow-[0_4px_14px_rgba(16,185,129,0.3)] hover:scale-[1.02] active:scale-[0.98]"
+                            title="Открыть форму пакетного поиска по артикулам OEM"
+                          >
+                            <i className="fas fa-list-check" />
+                            <span>Пакетный поиск OEM</span>
                           </button>
                           <button
                             onClick={() => setActiveNav('orders')}
@@ -502,6 +500,14 @@ function App() {
                         </div>
                       </div>
                     </section>
+
+
+                    <BlockedQueue
+                      requests={requests}
+                      onSelectRequest={handleSelectRequest}
+                      onTransitionRequest={handleStateTransition}
+                    />
+
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                       {overviewMetrics.map((m) => (
                         <MetricTile key={m.label} label={m.label} value={m.value} delta={m.delta} tone={m.tone} />
@@ -597,9 +603,17 @@ function App() {
                   </div>
                 )}
 
+                {activeNav === 'report' && (
+                  <JobReportView
+                    request={selectedReq || (requests[0] || null)}
+                    onBack={() => setActiveNav('dashboard')}
+                  />
+                )}
+
                 {activeNav === 'pipeline' && (
                 <PipelineMonitor requests={requests} fetchTrigger={fetchTrigger} />
                 )}
+
 
                 {activeNav === 'orchestra' && (
                 <MultiAgentOrchestraView />
@@ -622,6 +636,12 @@ function App() {
                         setFetchTrigger((prev) => prev + 1);
                       }}
                     />
+                  </div>
+                )}
+
+                {activeNav === 'contract_control' && (
+                  <div className="mx-auto max-w-6xl space-y-4">
+                    <ContractControlPanel requestId={selectedReq?.request_id ?? null} refreshTrigger={fetchTrigger} />
                   </div>
                 )}
 
@@ -703,6 +723,16 @@ function App() {
           }}
           requests={requests}
           suppliers={suppliersForPalette}
+        />
+
+        <BatchSearchModal
+          isOpen={isBatchModalOpen}
+          onClose={() => setIsBatchModalOpen(false)}
+          onSuccess={(createdReq) => {
+            setSelectedReq(createdReq);
+            setFetchTrigger((prev) => prev + 1);
+            setActiveNav('report');
+          }}
         />
     </AppFrame>
   );

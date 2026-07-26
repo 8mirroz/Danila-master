@@ -28,6 +28,8 @@ from routers.erp import router as erp_router
 from routers.catalog import router as catalog_router
 from routers.data_health import router as data_health_router
 from routers.contracts import router as contracts_router
+from routers.webhooks import router as webhooks_router
+from routers.analogs import router as analogs_router
 
 load_dotenv()
 
@@ -75,7 +77,8 @@ app.include_router(erp_router)
 app.include_router(catalog_router)
 app.include_router(data_health_router)
 app.include_router(contracts_router)
-
+app.include_router(webhooks_router)
+app.include_router(analogs_router)
 
 @app.get("/")
 def read_root():

@@ -12,9 +12,16 @@ from sqlmodel import Session, select
 
 from database import get_session
 from rbac import get_privileged_tenant
-from services.contract_operations import (approve_contract, collect_evidence, create_contract,
-                                          evaluate_policy, export_contract, review_position)
-from models import ContractPosition, PriceEvidence
+from app.automation.context import AutomationContext
+from app.automation.runner import run_job
+from services.contract_crawler_adapter import normalize_uploaded_crawler_payload
+from services.contract_operations import (advance_contract_workflow, approve_client_export, approve_contract, archive_contract,
+                                          authorize_purchase,
+                                          collect_evidence, create_contract, evaluate_policy,
+                                          export_contract, get_control_plane, list_contract_exceptions,
+                                          record_purchase, register_analog_candidate, register_oem_candidate,
+                                          review_position, update_contract_exception, verify_receipt)
+from models import AnalogCandidate, CompatibilityEvidence, ContractPosition, OEMCandidate, PriceEvidence
 from models import EventType, UploadArtifact
 from app.automation.storage import storage
 from event_store import emit_event
@@ -37,6 +44,68 @@ class ReviewPayload(BaseModel):
     evidence_id: str
     actor_id: str = "operator"
     comment: str | None = None
+
+
+class ClientApprovalPayload(BaseModel):
+    export_id: str
+    actor_id: str = "customer"
+    evidence_ref: str | None = None
+    comment: str | None = None
+
+
+class PurchaseAuthorizationPayload(BaseModel):
+    approval_id: str
+    actor_id: str = "operator"
+    comment: str | None = None
+
+
+class PurchaseRecordPayload(BaseModel):
+    authorization_id: str
+    supplier_ref: str
+    actor_id: str = "operator"
+    evidence_ref: str | None = None
+    amount_total: float | None = None
+    comment: str | None = None
+
+
+class ReceiptVerificationPayload(BaseModel):
+    purchase_id: str
+    actor_id: str = "operator"
+    evidence_ref: str
+    received_quantity: int = Field(gt=0)
+    discrepancy_note: str | None = None
+
+
+class ArchivePayload(BaseModel):
+    receipt_id: str
+    actor_id: str = "operator"
+    archive_ref: str
+    comment: str | None = None
+
+
+class ContractOrchestrationPayload(BaseModel):
+    actor_id: str = "contract-agent"
+    dry_run: bool = False
+    generate_export: bool = False
+
+
+class CandidatePayload(BaseModel):
+    actor_id: str = "operator"
+    data: dict[str, Any]
+
+
+class WorkflowAdvancePayload(BaseModel):
+    target_stage: str
+    actor_id: str = "operator"
+    reason: str = "manual workflow validation"
+
+
+class ExceptionActionPayload(BaseModel):
+    action: str
+    actor_id: str = "operator"
+    owner: str | None = None
+    resolution: str | None = None
+    evidence_ref: str | None = None
 
 
 @router.post("", status_code=201)
@@ -84,18 +153,43 @@ def evidence(request_id: str, payload: EvidenceBatch, session: Session = Depends
     return collect_evidence(session, request_id, tenant_id, payload.rows, payload.actor_id)
 
 
+@router.post("/{request_id}/crawler-results/upload")
+async def upload_crawler_results(request_id: str, file: UploadFile = File(...),
+                                 session: Session = Depends(get_session),
+                                 tenant_id: str = Depends(get_privileged_tenant)):
+    raw = await file.read()
+    rows, stats = normalize_uploaded_crawler_payload(raw, file.filename)
+    if not rows:
+        raise HTTPException(status_code=422, detail={"message": "Crawler upload contains no valid evidence rows",
+                                                     "adapter_stats": stats})
+    result = collect_evidence(session, request_id, tenant_id, rows, "my-crawler")
+    return {**result, "adapter_stats": stats}
+
+
 @router.get("/{request_id}/positions")
 def positions(request_id: str, session: Session = Depends(get_session), tenant_id: str = Depends(get_privileged_tenant)):
     rows = session.exec(select(ContractPosition).where(ContractPosition.request_id == request_id,
                                                        ContractPosition.tenant_id == tenant_id).order_by(ContractPosition.line_no)).all()
     return [{"position_id": row.position_id, "line_no": row.line_no, "part_number": row.part_number,
              "description": row.description, "quantity": row.quantity, "review_status": row.review_status,
-             "selected_evidence_id": row.selected_evidence_id,
+             "selected_evidence_id": row.selected_evidence_id, "position_uuid": row.position_uuid,
+             "completeness_status": row.completeness_status, "blocking_status": row.blocking_status,
+             "blocking_error_code": row.blocking_error_code,
+             "calculation": None if not row.calculation_json else row.calculation_json,
              "evidence": [{"evidence_id": evidence.evidence_id, "source": evidence.source,
                             "price": evidence.price, "source_url": evidence.source_url,
                             "captured_at": evidence.captured_at.isoformat(),
+                            "expires_at": evidence.expires_at.isoformat() if evidence.expires_at else None,
+                            "availability_status": evidence.availability_status,
+                            "package_quantity": evidence.package_quantity,
+                            "unit": evidence.unit,
+                            "condition": evidence.condition,
+                            "comparability_status": evidence.comparability_status,
+                            "evidence_status": evidence.evidence_status,
                             "screenshot_ref": evidence.screenshot_ref,
-                            "screenshot_sha256": evidence.screenshot_sha256}
+                            "screenshot_sha256": evidence.screenshot_sha256,
+                            "screenshot_readability_status": evidence.screenshot_readability_status,
+                            "screenshot_completeness_status": evidence.screenshot_completeness_status}
                            for evidence in session.exec(select(PriceEvidence).where(
                                PriceEvidence.position_id == row.position_id,
                                PriceEvidence.tenant_id == tenant_id)).all()]} for row in rows]
@@ -113,9 +207,118 @@ def crawler_manifest(request_id: str, session: Session = Depends(get_session), t
             "required_evidence": ["source_url", "captured_at", "screenshot_path"]}
 
 
+@router.post("/{request_id}/positions/{position_id}/oem-candidates", status_code=201)
+def oem_candidate(request_id: str, position_id: str, payload: CandidatePayload,
+                  session: Session = Depends(get_session),
+                  tenant_id: str = Depends(get_privileged_tenant)):
+    return register_oem_candidate(session, request_id, tenant_id, position_id, payload.data, payload.actor_id)
+
+
+@router.post("/{request_id}/positions/{position_id}/analog-candidates", status_code=201)
+def analog_candidate(request_id: str, position_id: str, payload: CandidatePayload,
+                     session: Session = Depends(get_session),
+                     tenant_id: str = Depends(get_privileged_tenant)):
+    return register_analog_candidate(session, request_id, tenant_id, position_id, payload.data, payload.actor_id)
+
+
+@router.get("/{request_id}/positions/{position_id}/candidates")
+def candidates(request_id: str, position_id: str, session: Session = Depends(get_session),
+               tenant_id: str = Depends(get_privileged_tenant)):
+    oems = session.exec(select(OEMCandidate).where(
+        OEMCandidate.request_id == request_id,
+        OEMCandidate.position_id == position_id,
+        OEMCandidate.tenant_id == tenant_id,
+    )).all()
+    analogs = session.exec(select(AnalogCandidate).where(
+        AnalogCandidate.request_id == request_id,
+        AnalogCandidate.position_id == position_id,
+        AnalogCandidate.tenant_id == tenant_id,
+    )).all()
+    compatibility = session.exec(select(CompatibilityEvidence).where(
+        CompatibilityEvidence.request_id == request_id,
+        CompatibilityEvidence.position_id == position_id,
+        CompatibilityEvidence.tenant_id == tenant_id,
+    )).all()
+    return {
+        "oem_candidates": [{
+            "candidate_id": row.candidate_id,
+            "oem_number": row.oem_number,
+            "manufacturer": row.manufacturer,
+            "source": row.source,
+            "confidence": row.confidence,
+            "lifecycle_status": row.lifecycle_status,
+            "verification_status": row.verification_status,
+        } for row in oems],
+        "analog_candidates": [{
+            "candidate_id": row.candidate_id,
+            "article": row.article,
+            "brand": row.brand,
+            "source": row.source,
+            "interchange_type": row.interchange_type,
+            "independent_confirmations": row.independent_confirmations,
+            "compatibility_score": row.compatibility_score,
+            "evidence_score": row.evidence_score,
+            "manual_review_status": row.manual_review_status,
+            "rejection_reason": row.rejection_reason,
+        } for row in analogs],
+        "compatibility_evidence": [{
+            "evidence_id": row.evidence_id,
+            "candidate_type": row.candidate_type,
+            "candidate_id": row.candidate_id,
+            "evidence_type": row.evidence_type,
+            "source": row.source,
+            "score_points": row.score_points,
+            "readability_status": row.readability_status,
+            "completeness_status": row.completeness_status,
+            "freshness_status": row.freshness_status,
+        } for row in compatibility],
+    }
+
+
 @router.post("/{request_id}/evaluate")
 def evaluate(request_id: str, session: Session = Depends(get_session), tenant_id: str = Depends(get_privileged_tenant)):
     return evaluate_policy(session, request_id, tenant_id, "policy_engine")
+
+
+@router.get("/{request_id}/control-plane")
+def control_plane(request_id: str, session: Session = Depends(get_session), tenant_id: str = Depends(get_privileged_tenant)):
+    return get_control_plane(session, request_id, tenant_id)
+
+
+@router.post("/{request_id}/orchestrate")
+def orchestrate(request_id: str, payload: ContractOrchestrationPayload,
+                session: Session = Depends(get_session),
+                tenant_id: str = Depends(get_privileged_tenant)):
+    return run_job(session, "contract_orchestrate", AutomationContext(
+        tenant_id=tenant_id,
+        request_id=request_id,
+        actor_id=payload.actor_id,
+        role="agent",
+        dry_run=payload.dry_run,
+        payload={"generate_export": payload.generate_export},
+    ))
+
+
+@router.post("/{request_id}/workflow/advance")
+def workflow_advance(request_id: str, payload: WorkflowAdvancePayload,
+                     session: Session = Depends(get_session),
+                     tenant_id: str = Depends(get_privileged_tenant)):
+    return advance_contract_workflow(session, request_id, tenant_id, payload.target_stage,
+                                     payload.actor_id, payload.reason)
+
+
+@router.get("/{request_id}/exceptions")
+def exceptions(request_id: str, session: Session = Depends(get_session),
+               tenant_id: str = Depends(get_privileged_tenant)):
+    return list_contract_exceptions(session, request_id, tenant_id)
+
+
+@router.post("/{request_id}/exceptions/{exception_id}/action")
+def exception_action(request_id: str, exception_id: str, payload: ExceptionActionPayload,
+                     session: Session = Depends(get_session),
+                     tenant_id: str = Depends(get_privileged_tenant)):
+    return update_contract_exception(session, request_id, tenant_id, exception_id, payload.action,
+                                     payload.actor_id, payload.owner, payload.resolution, payload.evidence_ref)
 
 
 @router.post("/{request_id}/positions/{position_id}/review")
@@ -131,3 +334,42 @@ def approve(request_id: str, session: Session = Depends(get_session), tenant_id:
 @router.post("/{request_id}/export")
 def export(request_id: str, session: Session = Depends(get_session), tenant_id: str = Depends(get_privileged_tenant)):
     return export_contract(session, request_id, tenant_id, "operator")
+
+
+@router.post("/{request_id}/client-approval")
+def client_approval(request_id: str, payload: ClientApprovalPayload,
+                    session: Session = Depends(get_session),
+                    tenant_id: str = Depends(get_privileged_tenant)):
+    return approve_client_export(session, request_id, tenant_id, payload.export_id, payload.actor_id,
+                                 payload.evidence_ref, payload.comment)
+
+
+@router.post("/{request_id}/purchase-authorization")
+def purchase_authorization(request_id: str, payload: PurchaseAuthorizationPayload,
+                           session: Session = Depends(get_session),
+                           tenant_id: str = Depends(get_privileged_tenant)):
+    return authorize_purchase(session, request_id, tenant_id, payload.approval_id, payload.actor_id, payload.comment)
+
+
+@router.post("/{request_id}/purchase-record")
+def purchase_record(request_id: str, payload: PurchaseRecordPayload,
+                    session: Session = Depends(get_session),
+                    tenant_id: str = Depends(get_privileged_tenant)):
+    return record_purchase(session, request_id, tenant_id, payload.authorization_id, payload.supplier_ref,
+                           payload.actor_id, payload.evidence_ref, payload.amount_total, payload.comment)
+
+
+@router.post("/{request_id}/receipt-verification")
+def receipt_verification(request_id: str, payload: ReceiptVerificationPayload,
+                         session: Session = Depends(get_session),
+                         tenant_id: str = Depends(get_privileged_tenant)):
+    return verify_receipt(session, request_id, tenant_id, payload.purchase_id, payload.actor_id,
+                          payload.evidence_ref, payload.received_quantity, payload.discrepancy_note)
+
+
+@router.post("/{request_id}/archive")
+def archive(request_id: str, payload: ArchivePayload,
+            session: Session = Depends(get_session),
+            tenant_id: str = Depends(get_privileged_tenant)):
+    return archive_contract(session, request_id, tenant_id, payload.receipt_id, payload.actor_id,
+                            payload.archive_ref, payload.comment)

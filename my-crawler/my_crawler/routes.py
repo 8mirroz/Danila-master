@@ -1,3 +1,10 @@
+"""
+Route handlers for PartsOps Crawler.
+
+Each handler classifies failures into stable miss-reason categories
+stored in context.request.user_data for the orchestrator to consume.
+"""
+
 import re
 import os
 import uuid
@@ -13,6 +20,41 @@ AUTODOC_SEARCH_INPUT_SELECTOR = 'input[type="search"]:visible'
 AUTODOC_SEARCH_BUTTON_SELECTOR = 'button.search-button:visible, button:has-text("Найти"):visible'
 AUTODOC_RESULT_ROW_SELECTOR = '.pgoods'
 
+
+# ---------------------------------------------------------------------------
+# Miss classification helpers
+# ---------------------------------------------------------------------------
+
+def _init_miss_classifier(context: PlaywrightCrawlingContext) -> callable:
+    """Return a function that records a miss reason for the current article.
+
+    The miss reason is stored in the request's user_data so the orchestrator
+    can read it after the handler completes.
+    """
+    article = context.request.user_data.get('article', '')
+
+    def classify(reason: str, detail: str = "") -> None:
+        """Record a miss reason for the current article."""
+        if article:
+            context.request.user_data['_miss_reason'] = reason
+            context.request.user_data['_miss_detail'] = detail
+
+    return classify
+
+
+def _get_miss_reason(context: PlaywrightCrawlingContext) -> str:
+    """Read the miss reason from user_data, if any."""
+    return context.request.user_data.get('_miss_reason', '')
+
+
+def _get_miss_detail(context: PlaywrightCrawlingContext) -> str:
+    """Read the miss detail from user_data, if any."""
+    return context.request.user_data.get('_miss_detail', '')
+
+
+# ---------------------------------------------------------------------------
+# URL and data helpers
+# ---------------------------------------------------------------------------
 
 def resolve_rossko_card_url(href: str | None, base_url: str) -> str | None:
     """Return a same-site Rossko internal product-card URL, or None for a search URL."""
@@ -135,37 +177,32 @@ async def capture_price_evidence(context: PlaywrightCrawlingContext, site: str, 
         "screenshot_path": os.path.abspath(path),
     }
 
-# Helper to clean up price strings to numbers
+
 def clean_price(price_str: str) -> str:
     """Extract a clean price string from raw marketplace text.
 
     Handles formats:
-        "4 500 ₽"       → "4500 ₽"
-        "1 200,50 ₽"    → "1200.50 ₽"
-        "4500"          → "4500 ₽"
-        "471,15 ₽  1 418 20" → "471.15 ₽"
-        "——"            → "——"
+        "4 500 ₽"       -> "4500 ₽"
+        "1 200,50 ₽"    -> "1200.50 ₽"
+        "4500"          -> "4500 ₽"
+        "471,15 ₽  1 418 20" -> "471.15 ₽"
+        "——"            -> "——"
     """
     if not price_str or price_str == "——":
         return "——"
 
-    # Step 1: collapse all whitespace around digits — remove spaces between digits
-    # so "4 500" becomes "4500" but "1 200,50" becomes "1200,50"
     s = price_str.replace("\xa0", " ")
     s = re.sub(r'(?<=\d)\s+(?=\d)', '', s)
     s = s.replace("–", "-")
 
-    # Step 2: find the price pattern: digits (with optional decimal , or .) near ₽
     m = re.search(r'(\d+(?:[.,]\d+)?)\s*₽', s)
     if m:
         return m.group(1).replace(",", ".") + " ₽"
 
-    # Try: ₽ before digits
     m = re.search(r'₽\s*(\d+(?:[.,]\d+)?)', s)
     if m:
         return m.group(1).replace(",", ".") + " ₽"
 
-    # Step 3: first continuous digit group (no ₽ symbol in string)
     digits = re.findall(r'\d+', s)
     if digits:
         return digits[0] + " ₽"
@@ -175,12 +212,18 @@ def clean_price(price_str: str) -> str:
 
     return price_str
 
+
+# ---------------------------------------------------------------------------
+# Exist handler
+# ---------------------------------------------------------------------------
+
 @router.handler('exist')
 async def handle_exist(context: PlaywrightCrawlingContext) -> None:
     """Handler for Exist.ru search and price pages."""
     url = context.request.url
     article = context.request.user_data.get('article', '')
     context.log.info(f'Processing Exist.ru request for article: {article} (URL: {url})')
+    classify = _init_miss_classifier(context)
 
     # Wait for the main page content to settle
     await context.page.wait_for_timeout(3000)
@@ -207,15 +250,13 @@ async def handle_exist(context: PlaywrightCrawlingContext) -> None:
         return
 
     # 2. Otherwise, we are on the price page
-    # Find all row containers (for both original and analog parts)
     row_containers = await context.page.query_selector_all(".row-container")
     if not row_containers:
         context.log.warning(f"No price rows found on Exist.ru for URL: {url}")
-        # Save a debug screenshot
+        classify("no_results", f"No .row-container elements on {url}")
         await context.page.screenshot(path="exist_no_rows_debug.png")
         return
 
-    # Known brands list to help extract brand from description on Exist.ru
     EXIST_KNOWN_BRANDS = [
         "TRW", "ATE", "NGK", "Brembo", "Bosch", "Mann", "Mann-Filter", "MANN-FILTER",
         "Mahle", "Knecht", "Knecht Filter", "Hengst", "Finwhale", "SCT", "WIX", "Mapco",
@@ -247,7 +288,6 @@ async def handle_exist(context: PlaywrightCrawlingContext) -> None:
     context.log.info(f"Found {len(row_containers)} part matches on Exist.ru")
     page_evidence = await capture_price_evidence(context, "exist_ru", article)
     for container in row_containers:
-        # Extract Brand — try multiple selectors
         brand = "Unknown"
         for sel in [".row .name-container b", ".row .name-container strong",
                      ".row .name-container a", "[class*=brand]"]:
@@ -257,11 +297,9 @@ async def handle_exist(context: PlaywrightCrawlingContext) -> None:
                 if brand:
                     break
 
-        # Extract Article/Part Number
         partno_el = await container.query_selector(".row .partno")
         matched_article = (await partno_el.inner_text()).strip() if partno_el else ""
 
-        # Extract Description
         name_container = await container.query_selector(".row .name-container")
         description = ""
         full_name_text = ""
@@ -269,8 +307,6 @@ async def handle_exist(context: PlaywrightCrawlingContext) -> None:
             full_name_text = (await name_container.inner_text()).strip().replace("\n", " ")
             description = full_name_text.replace(brand, "").replace(matched_article, "").strip()
 
-        # Fallback: if brand still Unknown, try to extract brand from description
-        # by matching against known brands list
         if brand == "Unknown" and full_name_text:
             for kb in sorted(EXIST_KNOWN_BRANDS, key=len, reverse=True):
                 if kb.lower() in full_name_text.lower():
@@ -278,28 +314,23 @@ async def handle_exist(context: PlaywrightCrawlingContext) -> None:
                     description = full_name_text.replace(brand, "").replace(matched_article, "").strip()
                     break
 
-        # If still Unknown, use first word of description as brand hint
         if brand == "Unknown" and description:
             words = description.split()
             if words:
                 brand = words[0]
                 description = " ".join(words[1:]).strip()
 
-        # Extract Offers (price rows)
         price_rows = await container.query_selector_all(".pricerow, .pricerow--direct")
         for row in price_rows:
-            # Delivery time
             delivery_el = await row.query_selector(".statis")
             delivery = (await delivery_el.inner_text()).strip().replace("\n", " ") if delivery_el else "Unknown"
 
-            # Price
             price_el = await row.query_selector(".price")
             price_raw = (await price_el.inner_text()).strip() if price_el else ""
             price = clean_price(price_raw)
 
             if price == "——":
                 continue
-            # Store result
             await context.push_data({
                 "site": "exist.ru",
                 "search_article": article,
@@ -311,17 +342,24 @@ async def handle_exist(context: PlaywrightCrawlingContext) -> None:
                 **page_evidence,
             })
 
+
+# ---------------------------------------------------------------------------
+# Autodoc search handler
+# ---------------------------------------------------------------------------
+
 @router.handler('autodoc')
 async def handle_autodoc(context: PlaywrightCrawlingContext) -> None:
     """Handler for Autodoc.ru home page to search and enqueue price pages."""
     article = context.request.user_data.get('article', '')
     context.log.info(f'Searching Autodoc.ru for article: {article}')
+    classify = _init_miss_classifier(context)
 
     search_input = context.page.locator(AUTODOC_SEARCH_INPUT_SELECTOR).first
     try:
         await search_input.wait_for(state="visible", timeout=12_000)
     except Exception:
         context.log.error("Could not find visible search input on Autodoc.ru")
+        classify("layout_changed", "Search input selector not found")
         await context.page.screenshot(path="autodoc_no_input_debug.png")
         return
 
@@ -347,6 +385,7 @@ async def handle_autodoc(context: PlaywrightCrawlingContext) -> None:
         )
     except Exception:
         context.log.warning(f"No search suggestions found on Autodoc.ru for article: {article}")
+        classify("search_empty", "No /price/ links appeared after search")
         await context.page.screenshot(path="autodoc_no_suggestions_debug.png")
         return
 
@@ -367,6 +406,7 @@ async def handle_autodoc(context: PlaywrightCrawlingContext) -> None:
 
     if not suggestion_links:
         context.log.warning(f"No search suggestions found on Autodoc.ru for article: {article}")
+        classify("search_empty", "No /price/ links in evaluated DOM")
         await context.page.screenshot(path="autodoc_no_suggestions_debug.png")
         return
 
@@ -384,6 +424,11 @@ async def handle_autodoc(context: PlaywrightCrawlingContext) -> None:
     if requests_to_add:
         await context.add_requests(requests_to_add)
 
+
+# ---------------------------------------------------------------------------
+# Autodoc price page handler
+# ---------------------------------------------------------------------------
+
 @router.handler('autodoc_price')
 async def handle_autodoc_price(context: PlaywrightCrawlingContext) -> None:
     """Handler for Autodoc.ru product price pages."""
@@ -391,13 +436,14 @@ async def handle_autodoc_price(context: PlaywrightCrawlingContext) -> None:
     article = context.request.user_data.get('article', '')
     catalog_brand = context.request.user_data.get('catalog_brand', 'Autodoc Match')
     context.log.info(f'Processing Autodoc.ru price page: {url}')
+    classify = _init_miss_classifier(context)
 
     try:
         await context.page.wait_for_load_state("domcontentloaded", timeout=10_000)
         await context.page.locator(AUTODOC_RESULT_ROW_SELECTOR).first.wait_for(state="visible", timeout=12_000)
     except Exception as exc:
         context.log.warning(f"Autodoc price card is unavailable after navigation: {url}; {exc}")
-        context.log.error(f"Failed to load prices for Autodoc URL: {url}. Please resolve block or login if needed.")
+        classify("no_results", f"Price card not loaded: {exc}")
         await context.page.screenshot(path="autodoc_price_load_failed.png")
         return
 
@@ -447,6 +493,7 @@ async def handle_autodoc_price(context: PlaywrightCrawlingContext) -> None:
     candidates = [candidate for candidate in candidates if candidate["price"] != "——"]
     if not candidates:
         context.log.error(f"Failed to extract priced rows for Autodoc URL: {url}")
+        classify("no_results", "All candidates had price == '——'")
         await context.page.screenshot(path="autodoc_price_load_failed.png")
         return
 
@@ -474,55 +521,55 @@ async def handle_autodoc_price(context: PlaywrightCrawlingContext) -> None:
         **evidence,
     })
 
+
+# ---------------------------------------------------------------------------
+# Rossko search handler
+# ---------------------------------------------------------------------------
+
 @router.handler('rossko')
 async def handle_rossko(context: PlaywrightCrawlingContext) -> None:
     """Handler for Rossko.ru search result pages."""
     url = context.request.url
     article = context.request.user_data.get('article', '')
     context.log.info(f'Processing Rossko.ru request for article: {article} (URL: {url})')
+    classify = _init_miss_classifier(context)
 
     # Wait for the results to load
     await context.page.wait_for_timeout(5000)
 
-    # Find search result links (which represent rows in their grid/list)
-    # The class format is prefix-link-suffix from CSS Modules. We select links containing brand and article
+    # Find search result links
     item_links = await context.page.query_selector_all('a[class*="result-item-"][class*="link"]')
     if not item_links:
-        # Fallback: check if there are any results at all
         no_results = await context.page.query_selector("text=Ничего не найдено")
         if no_results:
             context.log.warning(f"No matches found on Rossko.ru for article: {article}")
+            classify("search_empty", "Rossko returned 'Ничего не найдено'")
             return
-        
+
         context.log.warning(f"No result rows found on Rossko.ru for URL: {url}. Retrying wait...")
         await context.page.wait_for_timeout(5000)
         item_links = await context.page.query_selector_all('a[class*="result-item-"][class*="link"]')
 
     if not item_links:
         context.log.error(f"Failed to find search result rows on Rossko.ru")
+        classify("layout_changed", "No result-item links found after extended wait")
         await context.page.screenshot(path="rossko_no_rows_debug.png")
         return
 
     context.log.info(f"Found {len(item_links)} matches on Rossko.ru")
     requests_to_add = []
     for link in item_links:
-        # Extract Brand — use first text node only, not inner_text which includes children
         brand_el = await link.query_selector('[class*="brand__"]')
         brand_raw = (await brand_el.inner_text()).strip() if brand_el else ""
-        # Take only the first line before any newline (brand name)
         brand = brand_raw.split("\n")[0].strip() if brand_raw else "Unknown"
 
-        # Extract Article/Part Number
         art_el = await link.query_selector('[class*="articleNumbers__"]')
         matched_article_raw = (await art_el.inner_text()).strip() if art_el else ""
         matched_article = matched_article_raw.split("\n")[0].strip() if matched_article_raw else ""
 
-        # Extract Description/Name
         full_text = (await link.inner_text()).strip()
-        # Normalize whitespace but keep words separated
         full_text = re.sub(r'\s+', ' ', full_text)
-        
-        # Extract Price from dedicated price element (not surrounding text)
+
         price_raw = ""
         price_el = await link.query_selector('[class*="priceWrapper__"], [class*="price__"]')
         if price_el:
@@ -534,18 +581,16 @@ async def handle_rossko(context: PlaywrightCrawlingContext) -> None:
             if not card_url:
                 context.log.warning("Rossko result has no internal product-card URL; skipping evidence capture")
             continue
-        # Subtract brand and article from full text to get description
+
         description = full_text
         if brand:
             description = description.replace(brand, "", 1).strip()
         if matched_article:
             description = description.replace(matched_article, "", 1).strip()
-        # Clean up description — remove price leftovers, delivery hints
-        description = re.sub(r'~?\d+\s+\S+.*$', '', description).strip()  # "~10 июля, пт"
+        description = re.sub(r'~?\d+\s+\S+.*$', '', description).strip()
         description = re.sub(r'Партнёрский склад.*$', '', description).strip()
         description = re.sub(r'\s+', ' ', description).strip()
 
-        # Extract delivery / stock info
         delivery_el = await link.query_selector('[class*="delivery__"], [class*="deliver__"]')
         delivery = (await delivery_el.inner_text()).strip().replace("\n", " ") if delivery_el else "In stock"
         delivery = re.sub(r'\s+', ' ', delivery).strip()
@@ -567,10 +612,16 @@ async def handle_rossko(context: PlaywrightCrawlingContext) -> None:
         await context.add_requests(requests_to_add)
 
 
+# ---------------------------------------------------------------------------
+# Rossko card handler
+# ---------------------------------------------------------------------------
+
 @router.handler('rossko_card')
 async def handle_rossko_card(context: PlaywrightCrawlingContext) -> None:
     """Attach evidence from a Rossko internal product card, never from search results."""
     article = context.request.user_data.get('article', '')
+    classify = _init_miss_classifier(context)
+
     await context.page.wait_for_timeout(3000)
     consent = context.page.get_by_text("Согласен", exact=True)
     if await consent.count():
@@ -580,6 +631,7 @@ async def handle_rossko_card(context: PlaywrightCrawlingContext) -> None:
     price_node_count = await context.page.locator('[class*="price"]').count()
     if not rossko_card_has_product_data(title, price_node_count):
         context.log.warning(f"Rossko product card did not render product data: {context.request.url}")
+        classify("card_shell_only", f"title='{title}', price_nodes={price_node_count}")
         await context.page.screenshot(path="rossko_card_not_rendered_debug.png", full_page=True)
         return
 
@@ -594,6 +646,7 @@ async def handle_rossko_card(context: PlaywrightCrawlingContext) -> None:
         "price": context.request.user_data.get("price", "——"),
         **evidence,
     })
+
 
 @router.default_handler
 async def default_handler(context: PlaywrightCrawlingContext) -> None:

@@ -1,4 +1,6 @@
 import React from 'react';
+import { KanbanCard } from './KanbanCard';
+
 
 type Request = {
   id: number;
@@ -29,6 +31,28 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onTransitionRequest,
   resolveDropTarget,
 }) => {
+  const [recentlyMoved, setRecentlyMoved] = React.useState<Set<string>>(new Set());
+  const prevRequestsRef = React.useRef<Request[]>(requests);
+
+  React.useEffect(() => {
+    const moved = new Set<string>();
+    const prevMap = new Map(prevRequestsRef.current.map((r) => [r.request_id, r.status]));
+    
+    requests.forEach((req) => {
+      if (prevMap.has(req.request_id) && prevMap.get(req.request_id) !== req.status) {
+        moved.add(req.request_id);
+      }
+    });
+
+    if (moved.size > 0) {
+      setRecentlyMoved(moved);
+      const timer = setTimeout(() => setRecentlyMoved(new Set()), 2000);
+      prevRequestsRef.current = requests;
+      return () => clearTimeout(timer);
+    }
+    prevRequestsRef.current = requests;
+  }, [requests]);
+
   // Columns definition mapping
   const columns = [
     {
@@ -83,65 +107,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     },
   ];
 
-  // Helper to get number of items in order
-  const getPartsCount = (partsJson: string) => {
-    try {
-      const parsed = JSON.parse(partsJson || '[]');
-      return Array.isArray(parsed) ? parsed.length : 0;
-    } catch {
-      return 0;
-    }
-  };
-
-  const formatCreatedAt = (value: string) => {
-    if (!value) return 'нет данных';
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return value;
-
-    return new Intl.DateTimeFormat('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(parsed);
-  };
-
-  // Helper for rendering human-readable status badge
-  const renderStatus = (status: string) => {
-    const statusesMap: Record<string, { label: string; cls: string }> = {
-      NEW: { label: 'Новый', cls: 'bg-slate-100 text-slate-700 border-slate-200' },
-      NORMALIZING: { label: 'Нормализация', cls: 'bg-blue-50 text-blue-700 border-blue-100' },
-      PARSING: { label: 'Анализ текста', cls: 'bg-blue-50 text-blue-700 border-blue-100' },
-      VIN_CHECK: { label: 'Проверка VIN', cls: 'bg-blue-50 text-blue-700 border-blue-100' },
-      PART_EXTRACTION: { label: 'Извлечение деталей', cls: 'bg-blue-50 text-blue-700 border-blue-100' },
-      MATCHING: { label: 'Подбор предложений', cls: 'bg-sky-50 text-sky-700 border-sky-100' },
-      SUPPLIER_SEARCH: { label: 'Поиск поставщика', cls: 'bg-sky-50 text-sky-700 border-sky-100' },
-      OFFER_RANKING: { label: 'Ранжирование', cls: 'bg-sky-50 text-sky-700 border-sky-100' },
-      MANUAL_REVIEW: { label: 'Ручная проверка', cls: 'bg-rose-50 text-rose-700 border-rose-100 font-bold' },
-      PRICING_REVIEW: { label: 'Калькуляция цен', cls: 'bg-amber-50 text-amber-700 border-amber-100' },
-      READY_FOR_APPROVAL: { label: 'Ожидает апрува', cls: 'bg-amber-50 text-amber-700 border-amber-100 animate-pulse font-bold' },
-      APPROVED: { label: 'Согласован', cls: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-      ERP_SYNCING: { label: 'Синхронизация ERP', cls: 'bg-cyan-50 text-cyan-700 border-cyan-100' },
-      INVOICE_DRAFTED: { label: 'Счёт выставлен', cls: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-      SENT_TO_CLIENT: { label: 'Отправлен клиенту', cls: 'bg-teal-50 text-teal-700 border-teal-100' },
-      PAID: { label: 'Оплачен', cls: 'bg-green-100 text-green-800 border-green-200' },
-      PURCHASE_ORDERED: { label: 'Закупка', cls: 'bg-slate-100 text-slate-700 border-slate-200' },
-      FULFILLED: { label: 'Выполнен', cls: 'bg-slate-100 text-slate-700 border-slate-200' },
-      CLOSED: { label: 'Закрыт', cls: 'bg-slate-100 text-slate-700 border-slate-200' },
-      CANCELLED: { label: 'Отменен', cls: 'bg-red-50 text-red-700 border-red-100' },
-      FAILED: { label: 'Сбой', cls: 'bg-red-50 text-red-700 border-red-100' },
-      ERP_SYNC_FAILED: { label: 'Ошибка ERP', cls: 'bg-red-50 text-red-700 border-red-100 font-bold' },
-    };
-
-    const config = statusesMap[status] || { label: status, cls: 'bg-slate-100 text-slate-700 border-slate-200' };
-
-    return (
-      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${config.cls}`}>
-        {config.label}
-      </span>
-    );
-  };
-
   // Drag over handler to allow dropping
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -177,10 +142,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
   };
 
-  const handleDragStart = (e: React.DragEvent, reqId: string) => {
-    e.dataTransfer.setData('text/plain', reqId);
-    e.dataTransfer.effectAllowed = 'move';
-  };
 
   return (
     <div className="grid h-[calc(100vh-210px)] grid-cols-1 gap-4 overflow-hidden md:grid-cols-4">
@@ -215,82 +176,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   Нет заказов на этом этапе
                 </div>
               ) : (
-                columnRequests.map((req) => {
-                  const isHighPriority = req.priority?.toLowerCase() === 'high' || req.priority?.toLowerCase() === 'высокий';
-                  const partCount = getPartsCount(req.parts_json);
+                columnRequests.map((req) => (
+                  <KanbanCard
+                    key={req.request_id}
+                    request={req}
+                    onSelectRequest={onSelectRequest}
+                    onTransitionRequest={onTransitionRequest}
+                    isHighlighted={recentlyMoved.has(req.request_id)}
+                  />
+                ))
 
-                  return (
-                    <div
-                      key={req.request_id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, req.request_id)}
-                      onClick={() => onSelectRequest(req)}
-                      className="group relative flex cursor-pointer flex-col gap-2.5 overflow-hidden rounded-[20px] border border-white/80 bg-white/92 p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--accent-primary)] hover:shadow-md active:scale-[0.98]"
-                    >
-                      {isHighPriority && (
-                        <div className="absolute left-0 right-0 top-0 h-1 bg-red-500 animate-pulse"></div>
-                      )}
-
-                      <div className="flex justify-between items-start gap-1">
-                        <strong className="text-[11px] font-bold text-[var(--text-primary)] font-mono">
-                          {req.request_id}
-                        </strong>
-                        <div className="flex items-center gap-1.5">
-                          {isHighPriority && (
-                            <span className="rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[8px] font-extrabold uppercase text-red-600 animate-pulse">
-                              Срочно
-                            </span>
-                          )}
-                          {req.vehicle_vin_masked && (
-                            <span className="rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[8px] font-mono text-sky-600">
-                              VIN
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-bold text-[var(--text-primary)] truncate">
-                          {req.customer_name}
-                        </div>
-                        {req.vehicle_make && (
-                          <div className="text-[10px] text-[var(--text-muted)] font-medium">
-                            {req.vehicle_make} {req.vehicle_model || ''}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-2)] px-2.5 py-2 text-[10px]">
-                          <span className="block text-[var(--text-muted)]">Деталей</span>
-                          <span className="mt-1 block font-extrabold text-[var(--text-primary)]">{partCount} шт.</span>
-                        </div>
-                        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-2)] px-2.5 py-2 text-[10px]">
-                          <span className="block text-[var(--text-muted)]">Источник</span>
-                          <span className="mt-1 block truncate font-semibold text-[var(--text-primary)]">{req.source}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px]">
-                        <span className="font-medium text-[var(--text-secondary)]">
-                          Статус:
-                        </span>
-                        <span className="font-extrabold text-[var(--text-primary)]">
-                          {renderStatus(req.status)}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-center gap-1.5 border-t border-[var(--border-subtle)] pt-1.5">
-                        <span className="text-[9px] font-medium text-[var(--text-muted)]">
-                          Создан: {formatCreatedAt(req.created_at)}
-                        </span>
-                        <span className="flex items-center gap-1 text-[9px] font-bold text-[var(--text-muted)] transition-all group-hover:text-[var(--accent-primary)]">
-                          Открыть <i className="fas fa-arrow-right text-[8px] transform group-hover:translate-x-0.5 transition-transform"></i>
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
               )}
             </div>
           </div>

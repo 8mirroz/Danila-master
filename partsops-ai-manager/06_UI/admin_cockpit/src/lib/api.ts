@@ -138,6 +138,214 @@ export type ContractCreateResponse = {
   status: string;
 };
 
+export type ContractPositionDetail = {
+  position_id: string;
+  line_no: number;
+  part_number: string;
+  description?: string | null;
+  quantity: number;
+  review_status: string;
+  selected_evidence_id?: string | null;
+  position_uuid: string;
+  completeness_status: string;
+  blocking_status: string;
+  blocking_error_code?: string | null;
+  evidence: Array<{
+    evidence_id: string;
+    source: string;
+    price: number;
+    source_url: string;
+    captured_at: string;
+    screenshot_sha256?: string | null;
+    screenshot_readability_status?: string;
+    screenshot_completeness_status?: string;
+  }>;
+};
+
+export type ContractCandidates = {
+  oem_candidates: Array<{
+    candidate_id: string;
+    oem_number: string;
+    manufacturer?: string | null;
+    source: string;
+    confidence: number;
+    verification_status: string;
+  }>;
+  analog_candidates: Array<{
+    candidate_id: string;
+    article: string;
+    brand: string;
+    source: string;
+    compatibility_score: number;
+    evidence_score: number;
+    manual_review_status: string;
+  }>;
+};
+
+export type ContractCoverage = {
+  has_data: boolean;
+  has_check: boolean;
+  has_evidence: boolean;
+  has_responsible: boolean;
+  has_workflow_gate: boolean;
+  has_test: boolean;
+  export_covered: boolean;
+  status: string;
+};
+
+export type ContractControlRequirement = {
+  requirement_id: string;
+  clause: string;
+  summary: string;
+  type: string;
+  object_scope: string;
+  criticality: string;
+  coverage_status: string;
+  implementation_element?: string;
+  coverage: ContractCoverage | null;
+};
+
+export type ContractControlGap = {
+  gap_id: string;
+  requirement_id?: string;
+  category: string;
+  risk: string;
+  priority: string;
+  status: string;
+  description: string;
+  closure_criteria: string;
+};
+
+export type ContractControlPlane = {
+  request_id: string;
+  contract_ref: string;
+  status: string;
+  audits: Array<{
+    audit_id: string;
+    status: string;
+    unresolved_critical_count: number;
+    completed_at?: string | null;
+  }>;
+  requirements: ContractControlRequirement[];
+  gaps: ContractControlGap[];
+  adrs: Array<{
+    adr_id: string;
+    requirement_id?: string | null;
+    problem: string;
+    decision: string;
+    affected_components: string;
+  }>;
+  client_approvals: Array<{
+    approval_id: string;
+    export_id: string;
+    approved_by: string;
+    approved_at: string;
+  }>;
+  purchase_authorizations: Array<{
+    authorization_id: string;
+    approval_id: string;
+    authorized_by: string;
+    authorized_at: string;
+  }>;
+  exceptions: Array<{
+    exception_id: string;
+    code: string;
+    severity: string;
+    status: string;
+    owner: string;
+    retry_count: number;
+    max_retries: number;
+    resolution?: string | null;
+  }>;
+  metrics: {
+    quality: {
+      requirement_coverage_percent: number;
+      requirements_covered: number;
+      requirements_total: number;
+      open_gaps: number;
+      blocking_exceptions: number;
+      rejected_workflow_transitions: number;
+    };
+    evidence: {
+      positions_total: number;
+      total_evidence: number;
+      positions_with_all_required_sources: number;
+      required_source_coverage_percent: number;
+      positions_with_valid_screenshots: number;
+      screenshot_coverage_percent: number;
+      stale_evidence: number;
+    };
+    cost: {
+      selected_positions: number;
+      contract_total: number;
+      average_position_total: number;
+      currency: string;
+    };
+    process: {
+      workflow_events: number;
+      elapsed_minutes?: number | null;
+      exports: number;
+      client_approvals: number;
+      purchase_authorizations: number;
+      purchases: number;
+      receipt_verifications: number;
+      archives: number;
+      purchase_locked: boolean;
+    };
+  };
+  purchases: Array<{
+    purchase_id: string;
+    authorization_id: string;
+    supplier_ref: string;
+    ordered_by: string;
+    ordered_at: string;
+    amount_total: number;
+    currency: string;
+    evidence_ref?: string | null;
+    status: string;
+    comment?: string | null;
+  }>;
+  receipt_verifications: Array<{
+    receipt_id: string;
+    purchase_id: string;
+    verified_by: string;
+    verified_at: string;
+    evidence_ref: string;
+    received_quantity: number;
+    status: string;
+    discrepancy_note?: string | null;
+  }>;
+  archives: Array<{
+    archive_id: string;
+    receipt_id: string;
+    archived_by: string;
+    archived_at: string;
+    archive_ref: string;
+    registry_hash?: string | null;
+    status: string;
+    comment?: string | null;
+  }>;
+  workflow: {
+    workflow_id: string;
+    current_stage: string;
+    current_stage_index: number;
+    blocked: boolean;
+    blocking_code?: string | null;
+    blocking_reason?: string | null;
+    stages: string[];
+    events: Array<{
+      workflow_event_id: string;
+      from_stage?: string | null;
+      to_stage: string;
+      actor_id: string;
+      reason: string;
+      allowed: boolean;
+      violations: string[];
+      created_at: string;
+    }>;
+  };
+};
+
 export async function createCrawlerContract(
   positions: ContractPositionDraft[],
 ): Promise<ContractCreateResponse> {
@@ -150,6 +358,61 @@ export async function createCrawlerContract(
       actor_id: 'operator',
     }),
   });
+}
+
+export async function fetchContractControlPlane(requestId: string): Promise<ContractControlPlane> {
+  return apiJson<ContractControlPlane>(`/api/contracts/${requestId}/control-plane`);
+}
+
+export async function fetchContractPositions(requestId: string): Promise<ContractPositionDetail[]> {
+  return apiJson<ContractPositionDetail[]>(`/api/contracts/${requestId}/positions`);
+}
+
+export async function fetchContractCandidates(requestId: string, positionId: string): Promise<ContractCandidates> {
+  return apiJson<ContractCandidates>(`/api/contracts/${requestId}/positions/${positionId}/candidates`);
+}
+
+export async function registerContractOemCandidate(
+  requestId: string,
+  positionId: string,
+  data: {
+    oem_number: string;
+    manufacturer?: string;
+    source: string;
+    source_url?: string;
+    compatibility_evidence: Array<{ evidence_type: string; source: string; source_url?: string }>;
+  },
+): Promise<{ candidate_id: string; verification_status: string }> {
+  return apiJson<{ candidate_id: string; verification_status: string }>(
+    `/api/contracts/${requestId}/positions/${positionId}/oem-candidates`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor_id: 'operator', data }),
+    },
+  );
+}
+
+export async function registerContractAnalogCandidate(
+  requestId: string,
+  positionId: string,
+  data: {
+    article: string;
+    brand: string;
+    source: string;
+    oem_candidate_id?: string;
+    independent_confirmations: number;
+    compatibility_evidence: Array<{ evidence_type: string; source: string; source_url?: string }>;
+  },
+): Promise<{ candidate_id: string; manual_review_status: string }> {
+  return apiJson<{ candidate_id: string; manual_review_status: string }>(
+    `/api/contracts/${requestId}/positions/${positionId}/analog-candidates`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor_id: 'operator', data }),
+    },
+  );
 }
 
 export function createEventSource(tenantId?: string): EventSource {

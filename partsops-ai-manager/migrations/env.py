@@ -11,7 +11,13 @@ from settings import settings
 from database import engine
 
 # Import all models to register them on SQLModel.metadata
-from models import PartRequest, SupplierOffer, RequestEvent, MatchEvidence, ERPSyncLog, GoldenSample  # noqa
+from models import (AdaptationDecisionRecord, ClientApproval, ContractArchiveRecord, ContractAuditRun,
+                    ContractExceptionRecord, ContractExport, ContractGap, ContractPosition,
+                    ContractPurchaseRecord, ContractReceiptVerification, ContractRequirement, ERPSyncLog,
+                    GoldenSample, MatchEvidence, OEMCandidate, PartRequest, PriceEvidence,
+                    PurchaseAuthorization, RequirementCoverage, RequestEvent, SupplierOffer,
+                    AnalogCandidate, CompatibilityEvidence, ContractWorkflowState,
+                    ContractWorkflowEvent)  # noqa
 from suppliers import Supplier, SupplierCatalogItem, Invoice  # noqa
 
 # Alembic Config object

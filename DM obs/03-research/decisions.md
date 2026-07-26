@@ -135,3 +135,15 @@ P0: Extract intake pipeline to app.agents.legacy_intake_pipeline
 ## ⚖️ Decision | 2026-07-21T00:31:36+03:00
 
 Learn: gallery-dl Pinterest scraping skill + Genesis workflow
+
+## ⚖️ Decision | 2026-07-25T11:46:55+03:00
+
+PartsOps AI Manager Admin Cockpit Premium UI Redesign and Concept Design Reference
+
+## ⚖️ Decision | 2026-07-25T13:56:10+03:00
+
+Implemented 6 Reference Design Sections in Admin Cockpit UI (Deep Graphite Theme, Radar Charts, LLM Telemetry, Cryptographic Audit Log)
+
+## ⚖️ Decision | 2026-07-26T16:36:49+03:00
+
+Implemented Batch OEM Search, Job Report Screen, and XLSX export via openpyxl

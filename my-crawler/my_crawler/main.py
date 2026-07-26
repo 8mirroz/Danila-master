@@ -256,7 +256,8 @@ async def run_site_crawler(site: str, requests: list[Request], headless_mode: bo
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
-    """The crawler entry point."""
+    """The crawler entry point. Delegates to the orchestrator for health contracts."""
+    from .orchestrator import run as orchestrator_run
 
     # -- Clean old screenshots if requested --
     if should_clean_screenshots():
@@ -274,32 +275,11 @@ async def main() -> None:
 
     print(f"Found {len(articles)} articles to scrape: {articles}")
 
-    # -- Build requests --
-    requests = build_requests(articles)
-    print(f"Prepared {len(requests)} crawler tasks. Starting site-specific crawler runs...")
-
-    # -- Crawler configuration --
+    # -- Delegate to orchestrator --
     headless_mode = is_headless()
-    request_batches = partition_requests_by_site(requests)
-    collected_records: list[dict] = []
-    for site in SITE_LABELS:
-        site_requests = request_batches[site]
-        if not site_requests:
-            continue
-        print(f"[{site}] Running {len(site_requests)} request(s)")
-        site_records = await run_site_crawler(site, site_requests, headless_mode)
-        print(f"[{site}] Collected {len(site_records)} record(s)")
-        collected_records.extend(site_records)
+    exit_code = await orchestrator_run(articles, headless_mode)
+    sys.exit(exit_code)
 
-    # -- Export results --
-    print("Scraping completed! Exporting collected data...")
-    try:
-        csv_path, json_path = export_results(collected_records)
-        print(f"Successfully exported results to:")
-        print(f"  CSV:  {os.path.abspath(csv_path)}")
-        print(f"  JSON: {os.path.abspath(json_path)}")
-    except Exception as e:
-        print(f"Failed to export data: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

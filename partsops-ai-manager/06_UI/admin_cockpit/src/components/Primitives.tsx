@@ -21,6 +21,7 @@ interface TopCommandBarProps {
   envName?: string;
   erpSyncTime?: string;
   onResetActive?: () => void;
+  roleSwitcherNode?: React.ReactNode;
 }
 export const TopCommandBar: React.FC<TopCommandBarProps> = ({
   searchQuery,
@@ -28,6 +29,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
   envName = "Копия Production",
   erpSyncTime = "38 сек. назад",
   onResetActive,
+  roleSwitcherNode,
 }) => {
   return (
     <header className="col-span-full h-14 border-b border-[var(--border-default)] bg-[var(--surface-1)] px-4 flex items-center justify-between gap-4 z-50 shadow-sm">
@@ -61,6 +63,11 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
 
       {/* Env control & Health info */}
       <div className="flex items-center gap-4 text-xs">
+        {roleSwitcherNode && (
+          <div className="hidden md:flex border-r border-[var(--border-default)] pr-4 mr-2">
+            {roleSwitcherNode}
+          </div>
+        )}
         <div className="hidden md:flex flex-col text-right border-l border-[var(--border-default)] pl-4">
           <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Среда</span>
           <span className="font-semibold text-[var(--text-secondary)]">{envName}</span>
@@ -466,7 +473,7 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 // 11. ActionButton
 // ==========================================
 interface ActionButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'success';
+  variant?: 'primary' | 'secondary' | 'danger' | 'success' | 'warning';
   icon?: string;
   loading?: boolean;
 }
@@ -485,9 +492,11 @@ export const ActionButton: React.FC<ActionButtonProps> = ({
       case 'primary': return 'border-transparent bg-[var(--accent-primary)] text-white shadow-sm hover:bg-[var(--accent-primary-strong)]';
       case 'danger': return 'border-transparent bg-[var(--accent-danger)] text-white hover:bg-red-700';
       case 'success': return 'border-transparent bg-[var(--accent-success)] text-white hover:bg-emerald-700';
+      case 'warning': return 'border-transparent bg-amber-500 text-white hover:bg-amber-600';
       default: return 'border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)]';
     }
   };
+
 
   return (
     <button

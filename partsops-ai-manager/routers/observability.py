@@ -340,15 +340,19 @@ async def sse_stream(request: Request, tenant_id: Optional[str] = None):
               # Send events only when data changes
               events = []
 
-              if request_count != last_request_count:
+              status_counts = {status: sum(1 for r in requests if r.status == status) for status in ["NEW", "PART_EXTRACTION", "OFFER_MATCHING", "APPROVAL_GATE", "APPROVED", "INVOICE_DRAFTED", "ERP_SYNC", "CLOSED", "CANCELLED"]}
+              
+              if request_count != last_request_count or status_counts != getattr(event_generator, 'last_status_counts', None):
                 events.append({
                   "type": "requests_updated",
                   "data": {
                     "total": request_count,
-                    "by_status": {status: sum(1 for r in requests if r.status == status) for status in ["NEW", "PART_EXTRACTION", "OFFER_MATCHING", "APPROVAL_GATE", "APPROVED", "INVOICE_DRAFTED", "ERP_SYNC", "CLOSED", "CANCELLED"]}
+                    "by_status": status_counts,
+                    "timestamp": datetime.now().isoformat()
                   }
                 })
                 last_request_count = request_count
+                event_generator.last_status_counts = status_counts
 
               if llm_cost != last_llm_cost or llm_count != last_llm_count:
                 events.append({

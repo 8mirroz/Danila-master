@@ -11,6 +11,7 @@ them at engine init.
 from typing import Optional, List, Dict
 from datetime import datetime
 from enum import Enum
+import uuid
 from sqlmodel import SQLModel, Field
 
 
@@ -201,6 +202,21 @@ class EventType(str, Enum):
     PII_MASKED = "PII_MASKED"
     IDEMPOTENCY_HIT = "IDEMPOTENCY_HIT"
     SLA_BREACHED = "SLA_BREACHED"
+    CONTRACT_AUDITED = "CONTRACT_AUDITED"
+    REQUIREMENT_MAPPED = "REQUIREMENT_MAPPED"
+    GAP_REGISTERED = "GAP_REGISTERED"
+    ADR_RECORDED = "ADR_RECORDED"
+    EXPORT_VALIDATED = "EXPORT_VALIDATED"
+    CLIENT_APPROVED = "CLIENT_APPROVED"
+    PURCHASE_AUTHORIZED = "PURCHASE_AUTHORIZED"
+    PURCHASE_RECORDED = "PURCHASE_RECORDED"
+    RECEIPT_VERIFIED = "RECEIPT_VERIFIED"
+    CONTRACT_ARCHIVED = "CONTRACT_ARCHIVED"
+    OEM_CANDIDATE_VERIFIED = "OEM_CANDIDATE_VERIFIED"
+    ANALOG_CANDIDATE_VERIFIED = "ANALOG_CANDIDATE_VERIFIED"
+    COMPATIBILITY_EVIDENCE_RECORDED = "COMPATIBILITY_EVIDENCE_RECORDED"
+    CONTRACT_WORKFLOW_CHANGED = "CONTRACT_WORKFLOW_CHANGED"
+    CONTRACT_EXCEPTION_UPDATED = "CONTRACT_EXCEPTION_UPDATED"
 
 
 # ──────────────────────────────────────────────
@@ -551,6 +567,7 @@ class ContractPosition(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     tenant_id: str = Field(default="default", index=True)
     position_id: str = Field(index=True, unique=True)
+    position_uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), index=True)
     request_id: str = Field(index=True)
     contract_ref: str = Field(index=True)
     line_no: int
@@ -559,6 +576,22 @@ class ContractPosition(SQLModel, table=True):
     quantity: int = Field(default=1)
     selected_evidence_id: Optional[str] = None
     review_status: str = Field(default="pending")  # pending|auto_selected|review|approved
+    position_version: int = Field(default=1)
+    vehicle_identity_status: str = Field(default="unknown")  # identified|partial|unknown|exception
+    vehicle_data_source: Optional[str] = None
+    vin_checked_at: Optional[datetime] = None
+    criticality: str = Field(default="Medium")  # Critical|High|Medium|Low
+    delivery_deadline_at: Optional[datetime] = None
+    max_delivery_days: Optional[int] = None
+    safety_related: bool = Field(default=False)
+    warranty_impact: bool = Field(default=False)
+    requirement_id: Optional[str] = Field(default=None, index=True)
+    completeness_status: str = Field(default="partial")  # complete|partial|missing|blocked
+    blocking_status: str = Field(default="blocked")  # clear|blocked|warning
+    blocking_error_code: Optional[str] = None
+    change_reason: Optional[str] = None
+    selected_reason: Optional[str] = None
+    calculation_json: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -575,9 +608,109 @@ class PriceEvidence(SQLModel, table=True):
     currency: str = Field(default="RUB")
     source_url: str
     captured_at: datetime
+    freshness_ttl_hours: int = Field(default=24)
+    expires_at: Optional[datetime] = None
+    availability_status: str = Field(default="available")  # available|unavailable|unknown|changed
+    package_quantity: int = Field(default=1)
+    unit: str = Field(default="piece")
+    condition: str = Field(default="new")
+    vat_included: bool = Field(default=True)
+    available_quantity: Optional[int] = None
+    warehouse: Optional[str] = None
+    delivery_region: Optional[str] = None
+    delivery_eta_days: Optional[int] = None
+    order_status: str = Field(default="observed")  # observed|rechecked|unavailable|ordered
     screenshot_ref: str
     screenshot_sha256: Optional[str] = None
+    screenshot_readability_status: str = Field(default="unknown")  # readable|partial|unreadable|unknown
+    screenshot_completeness_status: str = Field(default="partial")  # complete|partial|missing
+    screenshot_validation_json: Optional[str] = None
+    html_sha256: Optional[str] = None
     adapter_run_id: Optional[str] = None
+    parser_version: Optional[str] = None
+    retry_count: int = Field(default=0)
+    unavailable_reason: Optional[str] = None
+    comparability_status: str = Field(default="REQUIRES_REVIEW")
+    evidence_status: str = Field(default="pending")  # pending|valid|stale|invalid
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class OEMCandidate(SQLModel, table=True):
+    """Original manufacturer candidate for a contract position."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    candidate_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    position_id: str = Field(index=True)
+    oem_number: str = Field(index=True)
+    manufacturer: Optional[str] = None
+    source: str
+    source_url: Optional[str] = None
+    evidence_ref: Optional[str] = None
+    confidence: float = Field(default=0.0)
+    lifecycle_status: str = Field(default="active")  # active|superseded|obsolete|unknown
+    previous_article: Optional[str] = None
+    replacement_article: Optional[str] = None
+    verification_status: str = Field(default="pending")  # pending|verified|rejected|needs_review
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AnalogCandidate(SQLModel, table=True):
+    """Analog or replacement candidate linked to a verified OEM/position."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    candidate_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    position_id: str = Field(index=True)
+    oem_candidate_id: Optional[str] = Field(default=None, index=True)
+    article: str = Field(index=True)
+    brand: str
+    manufacturer: Optional[str] = None
+    source: str
+    source_url: Optional[str] = None
+    cross_reference_source: Optional[str] = None
+    interchange_type: str = Field(default="unknown")  # direct|conditional|kit|unknown
+    lifecycle_status: str = Field(default="active")
+    previous_article: Optional[str] = None
+    replacement_article: Optional[str] = None
+    independent_confirmations: int = Field(default=0)
+    compatibility_score: int = Field(default=0)
+    evidence_score: int = Field(default=0)
+    quality_tier: str = Field(default="PREMIUM_AFTERMARKET")  # OES|PREMIUM_AFTERMARKET|BUDGET|SPEC_MATCH
+    risk_score: int = Field(default=15)  # 0-100%
+    risk_factors_json: Optional[str] = None
+    price_delta_percent: Optional[float] = None
+    eta_delta_days: Optional[int] = None
+    manual_review_status: str = Field(default="pending")  # pending|approved|rejected|needs_review
+    rejection_reason: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CompatibilityEvidence(SQLModel, table=True):
+    """Evidence used to score OEM or analog applicability."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    evidence_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    position_id: str = Field(index=True)
+    candidate_type: str  # OEM|ANALOG
+    candidate_id: str = Field(index=True)
+    evidence_type: str  # vin_oem_catalog|official_brand_catalog|tecdoc|cross_reference|spec_match
+    source: str
+    source_url: Optional[str] = None
+    score_points: int = Field(default=0)
+    captured_at: datetime = Field(default_factory=datetime.utcnow)
+    evidence_ref: Optional[str] = None
+    evidence_hash: Optional[str] = None
+    readability_status: str = Field(default="unknown")  # readable|partial|unreadable|unknown
+    completeness_status: str = Field(default="partial")  # complete|partial|missing
+    freshness_status: str = Field(default="current")  # current|stale|unknown
+    created_by: str = Field(default="agent")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -589,6 +722,245 @@ class ContractExport(SQLModel, table=True):
     request_id: str = Field(index=True)
     contract_ref: str = Field(index=True)
     template_name: str
+    document_version: str = Field(default="v1.0")
+    registry_hash: Optional[str] = None
+    diff_status: str = Field(default="validated")  # validated|mismatch|manual_override
     content_json: str
+    internal_registry_path: Optional[str] = None
+    internal_registry_sha256: Optional[str] = None
+    client_document_path: Optional[str] = None
+    client_document_sha256: Optional[str] = None
     created_by: str = Field(default="system")
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContractAuditRun(SQLModel, table=True):
+    """Contract-control audit run for one request; produces requirements, gaps and gates."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    audit_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    contract_ref: str = Field(index=True)
+    input_documents_json: str = Field(default="[]")
+    existing_elements_json: str = Field(default="[]")
+    status: str = Field(default="completed")  # required|in_progress|completed|blocked
+    unresolved_critical_count: int = Field(default=0)
+    created_by: str = Field(default="system")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+
+
+class ContractWorkflowState(SQLModel, table=True):
+    """Current contract-specific Workflow v2 stage, separate from the legacy request state."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    workflow_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True, unique=True)
+    contract_ref: str = Field(index=True)
+    current_stage: str = Field(default="00_CONTRACT_AUDIT_REQUIRED", index=True)
+    current_stage_index: int = Field(default=0)
+    blocked: bool = Field(default=True)
+    blocking_code: Optional[str] = None
+    blocking_reason: Optional[str] = None
+    updated_by: str = Field(default="system")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContractWorkflowEvent(SQLModel, table=True):
+    """Append-only history of Workflow v2 stage changes and rejected transitions."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    workflow_event_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    from_stage: Optional[str] = None
+    to_stage: str
+    actor_id: str = Field(default="system")
+    reason: str
+    allowed: bool = Field(default=True)
+    violations_json: str = Field(default="[]")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContractRequirement(SQLModel, table=True):
+    """Extracted or baseline contract requirement with traceable implementation coverage."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    requirement_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    contract_ref: str = Field(index=True)
+    source: str
+    clause: Optional[str] = None
+    page: Optional[int] = None
+    summary: str
+    exact_fragment: Optional[str] = None
+    requirement_type: str  # CONTRACTUAL_MUST|CONTRACTUAL_CONDITIONAL|INTERNAL_CONTROL|INFERRED|UNRESOLVED
+    object_scope: str
+    applies_when: Optional[str] = None
+    responsible: str = Field(default="agent")
+    required_evidence: str = Field(default="audit_event")
+    criticality: str = Field(default="High")  # Critical|High|Medium|Low
+    coverage_status: str = Field(default="Missing")  # Covered|Partial|Missing|Conflict
+    implementation_element: Optional[str] = None
+    comment: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RequirementCoverage(SQLModel, table=True):
+    """Coverage matrix row. A field alone is not enough: data, checks, evidence, owner, gate and test are tracked."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    coverage_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    requirement_id: str = Field(index=True)
+    has_data: bool = Field(default=False)
+    has_check: bool = Field(default=False)
+    has_evidence: bool = Field(default=False)
+    has_responsible: bool = Field(default=False)
+    has_workflow_gate: bool = Field(default=False)
+    has_test: bool = Field(default=False)
+    export_covered: bool = Field(default=False)
+    status: str = Field(default="Missing")  # Covered|Partial|Missing|Conflict
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContractGap(SQLModel, table=True):
+    """Gap analysis record created from the contract audit and implementation coverage."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    gap_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    requirement_id: Optional[str] = Field(default=None, index=True)
+    category: str
+    description: str
+    source: str
+    risk: str
+    probability: str = Field(default="Medium")
+    impact: str = Field(default="High")
+    priority: str = Field(default="P1")
+    proposed_change: str
+    affected_tables: str = Field(default="")
+    affected_workflow_statuses: str = Field(default="")
+    required_tests: str = Field(default="")
+    closure_criteria: str
+    status: str = Field(default="open")  # open|accepted|closed
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    resolved_at: Optional[datetime] = None
+
+
+class AdaptationDecisionRecord(SQLModel, table=True):
+    """ADR proving why the plan changed after audit or gap analysis."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    adr_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    problem: str
+    requirement_id: Optional[str] = Field(default=None, index=True)
+    current_state: str
+    decision: str
+    rationale: str
+    alternatives: str = Field(default="")
+    affected_components: str = Field(default="")
+    change_risk: str = Field(default="Medium")
+    migration: str = Field(default="")
+    tests: str = Field(default="")
+    rollback: str = Field(default="")
+    created_by: str = Field(default="system")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ContractExceptionRecord(SQLModel, table=True):
+    """Controlled exception with evidence, owner, retry policy and export impact."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    exception_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    position_id: Optional[str] = Field(default=None, index=True)
+    code: str = Field(index=True)
+    severity: str = Field(default="BLOCKING")
+    description: str
+    evidence_ref: Optional[str] = None
+    retry_count: int = Field(default=0)
+    max_retries: int = Field(default=3)
+    owner: str = Field(default="operator")
+    escalation_due_at: Optional[datetime] = None
+    resolution: Optional[str] = None
+    export_impact: str = Field(default="blocks_export")
+    status: str = Field(default="open")  # open|resolved|accepted
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    resolved_at: Optional[datetime] = None
+
+
+class ClientApproval(SQLModel, table=True):
+    """Documented customer approval. Purchase authorization depends on this record."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    approval_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    export_id: str = Field(index=True)
+    approved_by: str
+    approved_at: datetime = Field(default_factory=datetime.utcnow)
+    evidence_ref: Optional[str] = None
+    comment: Optional[str] = None
+
+
+class PurchaseAuthorization(SQLModel, table=True):
+    """Explicit lock release for procurement after customer approval."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    authorization_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    approval_id: str = Field(index=True)
+    authorized_by: str
+    authorized_at: datetime = Field(default_factory=datetime.utcnow)
+    status: str = Field(default="authorized")
+    comment: Optional[str] = None
+
+
+class ContractPurchaseRecord(SQLModel, table=True):
+    """Proof that procurement executed after explicit purchase authorization."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    purchase_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    authorization_id: str = Field(index=True)
+    supplier_ref: str
+    ordered_by: str
+    ordered_at: datetime = Field(default_factory=datetime.utcnow)
+    amount_total: float = Field(default=0.0)
+    currency: str = Field(default="RUB")
+    evidence_ref: Optional[str] = None
+    status: str = Field(default="purchased")
+    comment: Optional[str] = None
+
+
+class ContractReceiptVerification(SQLModel, table=True):
+    """Receipt verification locks actual delivery evidence to a purchase."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    receipt_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    purchase_id: str = Field(index=True)
+    verified_by: str
+    verified_at: datetime = Field(default_factory=datetime.utcnow)
+    evidence_ref: str
+    received_quantity: int = Field(default=0)
+    status: str = Field(default="verified")
+    discrepancy_note: Optional[str] = None
+
+
+class ContractArchiveRecord(SQLModel, table=True):
+    """Final immutable archive pointer for the completed contract execution package."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: str = Field(default="default", index=True)
+    archive_id: str = Field(index=True, unique=True)
+    request_id: str = Field(index=True)
+    receipt_id: str = Field(index=True)
+    archived_by: str
+    archived_at: datetime = Field(default_factory=datetime.utcnow)
+    archive_ref: str
+    registry_hash: Optional[str] = None
+    status: str = Field(default="archived")
+    comment: Optional[str] = None

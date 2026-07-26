@@ -26,7 +26,11 @@ else:
 def init_db():
     # Import all models so SQLModel.metadata knows about them
     from models import (PartRequest, SupplierOffer, RequestEvent, MatchEvidence, ERPSyncLog, GoldenSample,
-                        ContractPosition, PriceEvidence, ContractExport)  # noqa
+                        ContractPosition, PriceEvidence, ContractExport, ContractAuditRun,
+                        ContractRequirement, RequirementCoverage, ContractGap, AdaptationDecisionRecord,
+                        ContractExceptionRecord, ClientApproval, PurchaseAuthorization, OEMCandidate,
+                        AnalogCandidate, CompatibilityEvidence, ContractWorkflowState,
+                        ContractWorkflowEvent)  # noqa
     from suppliers import Supplier, SupplierCatalogItem, Invoice  # noqa
     SQLModel.metadata.create_all(engine)
 

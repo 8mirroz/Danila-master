@@ -92,7 +92,7 @@ class EvidenceGates:
            
         line_items = evidence.get("line_items", [])
         for item in line_items:
-            margin = item.get("margin_rate", 0.0)  # Use margin_rate instead of margin
+            margin = item.get("margin_rate", item.get("margin", 0.0))
             if margin < 0.10:
                 return _gate_result(False, f"Маржа ниже допустимого минимума 10% для {item.get('part_name')}", {"margin": margin})
             if margin > 0.50 and request.status != RequestState.APPROVED:
@@ -238,27 +238,27 @@ class PolicyEngine:
                 return False
                
         # Check pricing & margin
-                if not request.pricing_evidence_json:
-                    return False
-                try:
-                    evidence = json.loads(request.pricing_evidence_json)
-                except Exception:
-                    return False
-           
-                line_items = evidence.get("line_items", [])
-                if not line_items:
-                    return False
-           
-                for item in line_items:
-                    margin = item.get("margin_rate", 0.0)  # Use margin_rate instead of margin
-                    if margin < 0.10 or margin > 0.50:
-                        return False
-               
-                # Check supplier reliability
-                for item in line_items:
-                    reliability = item.get("supplier_reliability", 1.0)
-                    if reliability < 0.80:
-                        return False
+        if not request.pricing_evidence_json:
+            return False
+        try:
+            evidence = json.loads(request.pricing_evidence_json)
+        except Exception:
+            return False
+
+        line_items = evidence.get("line_items", [])
+        if not line_items:
+            return False
+
+        for item in line_items:
+            margin = item.get("margin_rate", item.get("margin", 0.0))
+            if margin < 0.10 or margin > 0.50:
+                return False
+
+        # Check supplier reliability
+        for item in line_items:
+            reliability = item.get("supplier_reliability", 1.0)
+            if reliability < 0.80:
+                return False
                
         # Check gates (PII_SAFE, EVENT_CHAIN_VALID, MATCH_CONFIDENCE, PRICING_POLICY, DELIVERY_SAFE)
         payload_to_check = {

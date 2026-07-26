@@ -1,13 +1,31 @@
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, select
 import pytest
 import io
+import json
+import struct
+import zlib
 
 from database import engine
 from main import app
 from suppliers import seed_database
 
 client = TestClient(app, headers={"Authorization": "Bearer test-token"})
+
+
+def write_png(path, width: int = 640, height: int = 360):
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+
+    scanline = b"\x00" + (b"\xff\xff\xff" * width)
+    raw = scanline * height
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
 
 @pytest.fixture(autouse=True)
 def setup_db():
@@ -220,6 +238,86 @@ def test_supplier_table_file_import():
     logs = client.get(f"/api/suppliers/{supplier_id}/logs")
     assert logs.status_code == 200
     assert any(log["event_type"] == "supplier_table_imported" for log in logs.json()["logs"])
+
+
+def test_contract_crawler_results_upload_imports_price_evidence(tmp_path):
+    screenshot = tmp_path / "price.png"
+    write_png(screenshot)
+    created = client.post("/api/contracts", json={
+        "positions": [{"part_number": "OC90", "description": "filter", "quantity": 1}],
+        "actor_id": "operator",
+    })
+    assert created.status_code == 201
+    request_id = created.json()["request_id"]
+    position = client.get(f"/api/contracts/{request_id}/positions").json()[0]
+    position_id = position["position_id"]
+
+    oem = client.post(f"/api/contracts/{request_id}/positions/{position_id}/oem-candidates", json={
+        "actor_id": "operator",
+        "data": {
+            "oem_number": "OC90",
+            "manufacturer": "BMW",
+            "source": "vin_oem_catalog",
+            "compatibility_evidence": [
+                {"evidence_type": "vin_oem_catalog", "source": "BMW ETK"},
+                {"evidence_type": "official_brand_catalog", "source": "BMW catalog"},
+                {"evidence_type": "cross_reference", "source": "validated cross"},
+            ],
+        },
+    })
+    assert oem.status_code == 201
+    analog = client.post(f"/api/contracts/{request_id}/positions/{position_id}/analog-candidates", json={
+        "actor_id": "operator",
+        "data": {
+            "article": "OC90",
+            "brand": "MANN",
+            "source": "tecdoc",
+            "oem_candidate_id": oem.json()["candidate_id"],
+            "independent_confirmations": 2,
+            "compatibility_evidence": [
+                {"evidence_type": "vin_oem_catalog", "source": "BMW ETK"},
+                {"evidence_type": "official_brand_catalog", "source": "MANN catalog"},
+                {"evidence_type": "tecdoc", "source": "TecDoc"},
+                {"evidence_type": "cross_reference", "source": "validated cross"},
+                {"evidence_type": "spec_match", "source": "dimensions"},
+            ],
+        },
+    })
+    assert analog.status_code == 201
+
+    payload = {"items": [{
+        "site": "exist.ru",
+        "article": "OC90",
+        "price": "1 250 ₽",
+        "url": "https://exist.ru/price/OC90",
+        "capturedAt": datetime.now(timezone.utc).isoformat(),
+        "screenshot": str(screenshot),
+        "stock_qty": 8,
+        "delivery_days": 2,
+    }]}
+    uploaded = client.post(
+        f"/api/contracts/{request_id}/crawler-results/upload",
+        files={"file": ("crawler-results.json", io.BytesIO(json.dumps(payload).encode("utf-8")), "application/json")},
+    )
+    assert uploaded.status_code == 200
+    result = uploaded.json()
+    assert result["evidence_created"] == 1
+    assert result["adapter_stats"]["normalized"] == 1
+
+    positions = client.get(f"/api/contracts/{request_id}/positions").json()
+    evidence = positions[0]["evidence"][0]
+    assert evidence["source"] == "exist.ru"
+    assert evidence["price"] == 1250
+    assert evidence["screenshot_sha256"]
+    assert evidence["screenshot_readability_status"] == "readable"
+    assert evidence["screenshot_completeness_status"] == "complete"
+
+    orchestrated = client.post(f"/api/contracts/{request_id}/orchestrate", json={"actor_id": "contract-agent"})
+    assert orchestrated.status_code == 200
+    orchestration = orchestrated.json()
+    assert orchestration["ok"] is True
+    assert orchestration["job_name"] == "contract_orchestrate"
+    assert orchestration["result"]["processed"] == 1
 
 
 def test_supplier_table_row_update_and_bulk_update():
