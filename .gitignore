@@ -1,57 +1,90 @@
-# Python
+# ==========================================
+# Danila Master Unified GitIgnore Policy
+# ==========================================
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.egg-info/
 .venv/
 venv/
 env/
-.env
-.env.*.local
+.env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-*.db.bak
-
-# Artifacts
-*.bak
-*.tmp
-*.log
-*.pid
-webui.db
-
-# Frontend build
+# --- Node.js / Frontend ---
 node_modules/
 dist/
 build/
 .vite/
+.next/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Playwright / automation
-.playwright-mcp/
-.playwright-cli/
+# --- Databases & Local Storage ---
+*.db
+*.sqlite
+*.sqlite3
+*.db.bak
+webui.db
+partsops-ai-manager/08_DATA/
+partsops-ai-manager/database.db
 
-# macOS
+# --- Environment & Secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Backups & Temporary Files ---
+*.bak
+*.bak2
+*.backup
+*.tmp
+*~
+*.swp
+*.swo
+*.log
+*.pid
+__TRASH__/
+
+# --- OS Artifacts ---
 .DS_Store
 .AppleDouble
 .LSOverride
-Icon^M
+Thumbs.db
+Icon?
 
-# Project tooling
-__TRASH__/
-.pytest_cache/
+# --- Browser & Automation Testing ---
+.playwright-cli/
+.playwright-mcp/
 playwright-report/
 test-results/
+.browser-profile/
 
-# Crawler / scraping artifacts
+# --- Crawler & Scraping Runtime State ---
 autodoc_*.png
 autodoc_*.json
 exist_*.png
 exist_*.json
 rossko_*.png
 rossko_*.json
-# Keep the crawler implementation versioned; runtime state and customer/article input stay local.
+my-crawler/results/
+my-crawler/screenshots/
+my-crawler/storage/
+my-crawler/articles.txt
+my-crawler/*_debug.png
+versions_screenshots/
+
+# Crawler Implementation Whitelist (keep code versioned, ignore runtime output)
 my-crawler/*
 !my-crawler/Dockerfile
 !my-crawler/README.md
@@ -64,12 +97,12 @@ my-crawler/*
 !my-crawler/tests/**
 my-crawler/**/__pycache__/
 my-crawler/**/*.py[cod]
-versions_screenshots/
+my-crawler/**/*.egg-info/
 
-# Obsidian sync
+# --- Obsidian Sync & Agent Caches ---
+DM obs/obsidian_sync.log
 "DM obs/obsidian_sync.log"
-DM\ obs/obsidian_sync.log
-
-# Agent OS cache
 .hermes/
 partsops-ai-manager/.hermes/
+.kilo/
+
