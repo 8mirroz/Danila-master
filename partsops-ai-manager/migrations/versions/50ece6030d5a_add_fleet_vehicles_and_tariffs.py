@@ -102,7 +102,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_servicetariff_tenant_id'), table_name='servicetariff')
     op.drop_table('servicetariff')
 
-    op.drop_index(op.f('ix_fleetvehicle_status'), table_name='fleetvehicle')
-    op.drop_index(op.f('ix_fleetvehicle_vin'), table_name='fleetvehicle')
-    op.drop_index(op.f('ix_fleetvehicle_tenant_id'), table_name='fleetvehicle')
+    op.drop_index(op.f('ix_fleetvehicle_status'), table_name='fleetvehicle', if_exists=True)
+    op.drop_index(op.f('ix_fleetvehicle_vin'), table_name='fleetvehicle', if_exists=True)
+    op.drop_index(op.f('ix_fleetvehicle_tenant_id'), table_name='fleetvehicle', if_exists=True)
     op.drop_table('fleetvehicle')

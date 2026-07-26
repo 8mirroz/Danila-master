@@ -1,0 +1,373 @@
+name: PartsOps CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-lint:
+    name: 🛡️ Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Verify YAML & Workflow Syntax
+        run: |
+          echo "Checking YAML syntax..."
+          # Basic syntax verification
+          python3 -c "import yaml, sys; yaml.safe_load(open('.github/workflows/ci.yml'))"
+
+  python-quality:
+    name: 🐍 Python Quality & Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Lint with Ruff
+        run: |
+          # Use ruff to check formatting and syntax
+          ruff check . --exclude=venv
+
+  python-types:
+    name: 🏷️ Python Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mypy types-PyYAML types-requests
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Type Check with Mypy
+        run: |
+          # Basic type validation, ignoring legacy/venv
+          mypy . --ignore-missing-imports --exclude=venv
+
+  unit-tests:
+    name: 🧪 Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Unit Tests
+        env:
+          TESTING: '1'
+          PARTSOPS_API_TOKEN: 'test-token'
+        run: |
+          PYTHONPATH=. pytest tests/ -v -m "not integration and not regression and not security" --junitxml=junit-unit.xml
+
+      - name: Upload JUnit XML
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-unit-report
+          path: junit-unit.xml
+
+  integration-tests:
+    name: 🔗 Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Integration Tests
+        env:
+          TESTING: '1'
+          PARTSOPS_API_TOKEN: 'test-token'
+        run: |
+          # Run full suite including integration, ignoring known skips
+          PYTHONPATH=. pytest tests/ -v --cov=. --cov-report=xml:coverage.xml --junitxml=junit-integration.xml
+
+      - name: Upload Test Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-artifacts
+          path: |
+            junit-integration.xml
+            coverage.xml
+
+  algorithm-regression:
+    name: 🧮 Algorithm Regression Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Matcher and Analog Resolver Tests
+        env:
+          TESTING: '1'
+        run: |
+          PYTHONPATH=. pytest tests/test_matcher.py tests/test_matcher_n_plus_one.py tests/test_analog_resolver.py -v --junitxml=junit-algorithms.xml
+
+      - name: Upload Algorithm Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-algorithms-report
+          path: junit-algorithms.xml
+
+  security-tests:
+    name: 🛡️ Security & PII Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest safety bandit
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Safety Check (Dependencies)
+        run: |
+          # Check requirements for known vulnerabilities
+          safety check -r requirements.txt || echo "Vulnerabilities found, logging warning"
+
+      - name: Run Bandit (Static Analysis)
+        run: |
+          # Check project for security flaws
+          bandit -r . -x ./venv,./tests -ll || echo "Security issues found, review report"
+
+      - name: Run PII and RBAC Tests
+        env:
+          TESTING: '1'
+        run: |
+          PYTHONPATH=. pytest tests/test_pii.py tests/test_secure_pii.py tests/test_rbac_isolation.py tests/test_rbac_isolation_stress.py -v --junitxml=junit-security.xml
+
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-security-report
+          path: junit-security.xml
+
+  migration-tests:
+    name: 🗄️ Database Migration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install alembic sqlmodel
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Verify Migration Upgrade (Empty DB -> Head)
+        env:
+          DATABASE_URL: 'sqlite:///migration_ci_test.db'
+        run: |
+          alembic upgrade head
+
+      - name: Verify Migration Downgrade (Head -> Base)
+        env:
+          DATABASE_URL: 'sqlite:///migration_ci_test.db'
+        run: |
+          alembic downgrade base
+
+      - name: Re-Verify Upgrade (Base -> Head)
+        env:
+          DATABASE_URL: 'sqlite:///migration_ci_test.db'
+        run: |
+          alembic upgrade head
+
+  frontend-quality:
+    name: 🎨 Frontend Quality & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Admin Cockpit checks
+      - name: Install Admin Cockpit deps
+        working-directory: 06_UI/admin_cockpit
+        run: |
+          npm ci
+
+      - name: Lint Admin Cockpit
+        working-directory: 06_UI/admin_cockpit
+        run: |
+          npm run lint || echo "Lint warnings found"
+
+      - name: Typecheck and Build Admin Cockpit
+        working-directory: 06_UI/admin_cockpit
+        run: |
+          npm run build
+
+      # Client Portal checks
+      - name: Install Client Portal deps
+        working-directory: 06_UI/client_portal
+        run: |
+          npm ci
+
+      - name: Typecheck and Build Client Portal
+        working-directory: 06_UI/client_portal
+        run: |
+          npm run build
+
+  final-gate:
+    name: 🏁 Final Gate
+    runs-on: ubuntu-latest
+    needs:
+      - workflow-lint
+      - python-quality
+      - python-types
+      - unit-tests
+      - integration-tests
+      - algorithm-regression
+      - security-tests
+      - migration-tests
+      - frontend-quality
+    if: always()
+    steps:
+      - name: Evaluate Build Status
+        run: |
+          # If any of the dependent jobs failed, fail the build
+          # workflow-lint
+          # python-quality
+          # python-types
+          # unit-tests
+          # integration-tests
+          # algorithm-regression
+          # security-tests
+          # migration-tests
+          # frontend-quality
+          
+          echo "Checking job statuses..."
+          
+          # GitHub Actions doesn't easily expose individual job status to other jobs in a list, 
+          # but since 'needs' contains all jobs, this job will only execute after all complete.
+          # The 'if: always()' ensures it runs. We can check if any needed job is not successful.
+          
+          RESULT_WORKFLOW_LINT="${{ needs.workflow-lint.result }}"
+          RESULT_PYTHON_QUALITY="${{ needs.python-quality.result }}"
+          RESULT_PYTHON_TYPES="${{ needs.python-types.result }}"
+          RESULT_UNIT_TESTS="${{ needs.unit-tests.result }}"
+          RESULT_INTEGRATION_TESTS="${{ needs.integration-tests.result }}"
+          RESULT_ALGORITHM_REGRESSION="${{ needs.algorithm-regression.result }}"
+          RESULT_SECURITY_TESTS="${{ needs.security-tests.result }}"
+          RESULT_MIGRATION_TESTS="${{ needs.migration-tests.result }}"
+          RESULT_FRONTEND_QUALITY="${{ needs.frontend-quality.result }}"
+          
+          echo "workflow-lint: $RESULT_WORKFLOW_LINT"
+          echo "python-quality: $RESULT_PYTHON_QUALITY"
+          echo "python-types: $RESULT_PYTHON_TYPES"
+          echo "unit-tests: $RESULT_UNIT_TESTS"
+          echo "integration-tests: $RESULT_INTEGRATION_TESTS"
+          echo "algorithm-regression: $RESULT_ALGORITHM_REGRESSION"
+          echo "security-tests: $RESULT_SECURITY_TESTS"
+          echo "migration-tests: $RESULT_MIGRATION_TESTS"
+          echo "frontend-quality: $RESULT_FRONTEND_QUALITY"
+          
+          if [ "$RESULT_WORKFLOW_LINT" != "success" ] || \
+             [ "$RESULT_PYTHON_QUALITY" != "success" ] || \
+             [ "$RESULT_PYTHON_TYPES" != "success" ] || \
+             [ "$RESULT_UNIT_TESTS" != "success" ] || \
+             [ "$RESULT_INTEGRATION_TESTS" != "success" ] || \
+             [ "$RESULT_ALGORITHM_REGRESSION" != "success" ] || \
+             [ "$RESULT_SECURITY_TESTS" != "success" ] || \
+             [ "$RESULT_MIGRATION_TESTS" != "success" ] || \
+             [ "$RESULT_FRONTEND_QUALITY" != "success" ]; then
+            echo "❌ CI failed. One or more checks failed. Blocking merge."
+            exit 1
+          fi
+          
+          echo "✅ All CI checks passed successfully. Safe to merge."

@@ -1,0 +1,229 @@
+{
+  "stats": {
+    "total_matches_parsed": 34,
+    "unique_warnings": 4,
+    "project_owned_count": 2,
+    "dependency_owned_count": 1,
+    "future_incompatible_count": 31
+  },
+  "by_type": {
+    "DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).": 31,
+    "StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.": 1,
+    "PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_cycle.py)": 1,
+    "RuntimeWarning: ERP_WEBHOOK_SECRET is not set. Generated a one-time secret for this process. Set ERP_WEBHOOK_SECRET env var to a persistent value in production.": 1
+  },
+  "inventory": {
+    "project-owned": [
+      {
+        "file": "master/partsops-ai-manager/tests/test_e2e_cycle.py",
+        "line": 101,
+        "type": "PytestCollectionWarning",
+        "message": "cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_cycle.py)"
+      },
+      {
+        "file": "master/partsops-ai-manager/erp_adapter.py",
+        "line": 52,
+        "type": "RuntimeWarning",
+        "message": "ERP_WEBHOOK_SECRET is not set. Generated a one-time secret for this process. Set ERP_WEBHOOK_SECRET env var to a persistent value in production."
+      }
+    ],
+    "dependency-owned": [
+      {
+        "file": "master/partsops-ai-manager/venv/lib/python3.12/site-packages/fastapi/testclient.py",
+        "line": 1,
+        "type": "StarletteDeprecationWarning",
+        "message": "Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead."
+      }
+    ],
+    "runtime-critical": [],
+    "future-incompatible": [
+      {
+        "file": "master/partsops-ai-manager/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py",
+        "line": 727,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/automation/runner.py",
+        "line": 84,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/automation/runner.py",
+        "line": 51,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/automation/jobs/auto_advance_job.py",
+        "line": 43,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/automation/jobs/sla_watchdog_job.py",
+        "line": 19,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/tests/test_automation_pipeline.py",
+        "line": 179,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/tests/test_automation_pipeline.py",
+        "line": 184,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/automation/jobs/supplier_recalc_job.py",
+        "line": 22,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/delivery.py",
+        "line": 221,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/delivery.py",
+        "line": 222,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/delivery.py",
+        "line": 272,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/delivery.py",
+        "line": 277,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/delivery.py",
+        "line": 355,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/delivery.py",
+        "line": 356,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/delivery.py",
+        "line": 401,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/delivery.py",
+        "line": 406,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/tests/test_erp_adapter.py",
+        "line": 113,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/tests/test_erp_adapter.py",
+        "line": 161,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/tests/test_erp_adapter.py",
+        "line": 218,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/tests/test_erp_adapter.py",
+        "line": 248,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/agents/processing_agent.py",
+        "line": 483,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/agents/processing_agent.py",
+        "line": 407,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/agents/processing_agent.py",
+        "line": 514,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/agents/reporting_agent.py",
+        "line": 311,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/client_portal.py",
+        "line": 41,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/app/agents/delivery_agent.py",
+        "line": 463,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/routers/requests.py",
+        "line": 660,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/routers/requests.py",
+        "line": 667,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/routers/requests.py",
+        "line": 706,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/routers/requests.py",
+        "line": 713,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      },
+      {
+        "file": "master/partsops-ai-manager/routers/requests.py",
+        "line": 871,
+        "type": "DeprecationWarning",
+        "message": "datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
+      }
+    ],
+    "low-risk": []
+  }
+}

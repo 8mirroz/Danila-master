@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import threading
 
 
@@ -66,7 +66,7 @@ class BudgetGuard:
         if config is None:
             return {"allowed": True, "reason": "no budget config (unlimited)"}
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         hour_ago = now - timedelta(hours=1)
         day_ago = now - timedelta(days=1)
 
@@ -105,7 +105,7 @@ class BudgetGuard:
     ) -> None:
         """Записать использование токенов после вызова."""
         record = UsageRecord(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
             model=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -117,7 +117,7 @@ class BudgetGuard:
 
     def get_usage_stats(self, model: Optional[str] = None) -> Dict:
         """Статистика использования (за текущий день/час)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         day_ago = now - timedelta(days=1)
         hour_ago = now - timedelta(hours=1)
 

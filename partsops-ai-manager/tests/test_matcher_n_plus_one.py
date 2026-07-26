@@ -1,7 +1,7 @@
 """Tests for matcher N+1 fix."""
 import pytest
 from unittest.mock import patch
-from sqlmodel import Session
+from sqlmodel import Session, delete
 
 from database import engine, init_db
 from suppliers import SupplierCatalogItem, Supplier
@@ -12,8 +12,8 @@ from matcher import match_part_from_db
 def session():
     init_db()
     with Session(engine) as s:
-        s.query(SupplierCatalogItem).delete()
-        s.query(Supplier).delete()
+        s.exec(delete(SupplierCatalogItem))
+        s.exec(delete(Supplier))
         s.commit()
 
         sup = Supplier(supplier_id="sup1", name="Test Supplier", reliability_score=0.90)

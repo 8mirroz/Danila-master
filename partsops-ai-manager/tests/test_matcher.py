@@ -2,7 +2,7 @@
 Tests for 6-component matcher.py.
 """
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, delete
 from database import engine, init_db
 from suppliers import SupplierCatalogItem, Supplier
 from matcher import match_part_from_db
@@ -12,8 +12,8 @@ def session():
     init_db()
     with Session(engine) as s:
         # Clear out tables for isolated tests
-        s.query(SupplierCatalogItem).delete()
-        s.query(Supplier).delete()
+        s.exec(delete(SupplierCatalogItem))
+        s.exec(delete(Supplier))
         s.commit()
         
         # Insert test supplier
