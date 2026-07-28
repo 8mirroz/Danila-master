@@ -63,7 +63,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
       {
         id: 'nav-orders',
-        label: 'Импорт заказов',
+        label: 'Кастом',
         description: 'Загрузка файлов и создание новых запросов',
         icon: 'fa-file-arrow-up',
         shortcut: 'G O',

@@ -280,7 +280,6 @@ function App() {
     { id: 'kanban', label: 'Канбан-доска', icon: 'list', group: 'main' as const },
     { id: 'suppliers', label: 'Каталог поставщиков', icon: 'car', group: 'main' as const },
     { id: 'orders', label: 'Кастом', icon: 'cloud-arrow-up', group: 'main' as const },
-    { id: 'contract_control', label: 'Договорный контроль', icon: 'user-shield', group: 'main' as const },
     { id: 'matching', label: 'Матрица подбора', icon: 'rotate', group: 'main' as const },
     { id: 'pricing', label: 'Калькулятор цен', icon: 'pencil', group: 'main' as const },
     { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'robot', group: 'admin' as const },

@@ -154,9 +154,9 @@ test.describe('PartsOps AI Manager E2E', () => {
 
   test('Create new request via Order Import page', async ({ page }) => {
     await openCommandPalette(page);
-    await clickPaletteButton(page, 'Импорт заказов');
+    await clickPaletteButton(page, 'Кастом');
 
-    await expect(page.locator('text=Вход запроса')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(':has-text("Ввод запроса")').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('Kanban board loads and shows requests', async ({ page }) => {
