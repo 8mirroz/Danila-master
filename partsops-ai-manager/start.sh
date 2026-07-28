@@ -36,6 +36,10 @@ export API_SERVER_KEY="${HERMES_API_KEY}"
 cleanup() {
   echo ""
   echo "Shutting down child processes..."
+  if [ -n "${PIPELINE_WORKER_PID:-}" ] && kill -0 "${PIPELINE_WORKER_PID}" 2>/dev/null; then
+    echo "Stopping Pipeline Worker (PID ${PIPELINE_WORKER_PID})..."
+    kill "${PIPELINE_WORKER_PID}" 2>/dev/null || true
+  fi
   if [ -n "${HERMES_PID:-}" ] && kill -0 "${HERMES_PID}" 2>/dev/null; then
     echo "Stopping Hermes Sidecar (PID ${HERMES_PID})..."
     kill "${HERMES_PID}" 2>/dev/null || true
@@ -51,6 +55,7 @@ cleanup() {
   exit 0
 }
 trap cleanup SIGINT SIGTERM EXIT
+PIPELINE_WORKER_PID=""
 
 # 1. Start Hermes native API Server through the gateway platform (Port 8642)
 echo "Starting Hermes native API Server (127.0.0.1:8642)..."
@@ -91,9 +96,20 @@ elif [ -d "partsops-ai-manager/venv" ]; then
 fi
 
 export PARTSOPS_CORS_ORIGINS=${PARTSOPS_CORS_ORIGINS:-"http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:3000,http://127.0.0.1:3000"}
+export PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+:$PYTHONPATH}"
 
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
+
+# 2b. Optional durable pipeline worker (Kanban queue consumers)
+if [ "${PARTSOPS_START_PIPELINE_WORKER:-0}" = "1" ]; then
+  echo "Starting Pipeline Worker (PARTSOPS_START_PIPELINE_WORKER=1)..."
+  python -m app.automation.pipeline_worker --poll-seconds "${PARTSOPS_PIPELINE_POLL_SECONDS:-1}" &
+  PIPELINE_WORKER_PID=$!
+else
+  echo "[i] Pipeline worker not started (set PARTSOPS_START_PIPELINE_WORKER=1 to enable)."
+  echo "    Queued pipeline runs stay in 'queued' until a worker claims them."
+fi
 
 # 3. Start Frontend (Vite - Port 5173)
 echo "Starting Frontend (Vite)..."
@@ -109,6 +125,13 @@ echo " All services running:"
 echo " Backend:  http://localhost:8000"
 echo " Frontend: http://localhost:5173"
 echo " Hermes:   http://127.0.0.1:8642 (Internal)"
+if [ -n "${PIPELINE_WORKER_PID}" ]; then
+  echo " Worker:   pipeline_worker PID ${PIPELINE_WORKER_PID}"
+fi
 echo "======================================================="
 
-wait ${BACKEND_PID} ${FRONTEND_PID}
+if [ -n "${PIPELINE_WORKER_PID}" ]; then
+  wait ${BACKEND_PID} ${FRONTEND_PID} ${PIPELINE_WORKER_PID}
+else
+  wait ${BACKEND_PID} ${FRONTEND_PID}
+fi

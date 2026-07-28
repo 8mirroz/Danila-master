@@ -37,7 +37,11 @@ services:
       - PARTSOPS_CORS_ORIGINS=${PARTSOPS_CORS_ORIGINS:-http://localhost:5173,http://localhost:5176}
       - HERMES_API_URL=http://hermes:8642
       - HERMES_API_KEY=${HERMES_API_KEY:?HERMES_API_KEY must be provided}
-      - TESTING=1
+      # local compose default is demo-friendly; override TESTING=0 for STAGE-like runs
+      - TESTING=${TESTING:-1}
+      - SEED_ON_START=${SEED_ON_START:-1}
+      - PARTSOPS_ENV=${PARTSOPS_ENV:-dev}
+      - DATABASE_URL=${DATABASE_URL:-}
     depends_on:
       hermes:
         condition: service_healthy
@@ -49,6 +53,28 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # Durable Kanban pipeline consumer (optional profile)
+  pipeline-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    profiles:
+      - worker
+    command: ["python", "-m", "app.automation.pipeline_worker", "--poll-seconds", "1"]
+    environment:
+      - PARTSOPS_API_TOKEN=${PARTSOPS_API_TOKEN:-test-token}
+      - HERMES_API_URL=http://hermes:8642
+      - HERMES_API_KEY=${HERMES_API_KEY:?HERMES_API_KEY must be provided}
+      - TESTING=${TESTING:-1}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - PARTSOPS_PIPELINE_WORKER_ID=${PARTSOPS_PIPELINE_WORKER_ID:-compose-worker-1}
+      - PYTHONPATH=/app
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - .:/app
 
   frontend:
     build:
