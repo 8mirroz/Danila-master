@@ -182,3 +182,7 @@ Redesigned new table form with a premium drag and drop zone, hover transitions, 
 ## 🧠 Durable Fact | 2026-07-28T18:39:41+03:00
 
 Fixed Suppliers tab content wrapping in App.tsx to enable true edge-to-edge layout for workspace view, eliminating double paddings and clipping
+
+## 🧠 Durable Fact | 2026-07-28T19:18:33+03:00
+
+Grouped monitoring/tech menu items in sidebar under Admin section
