@@ -1,11 +1,46 @@
 # PartsOps Hermes Profile Configuration
 model:
-  provider: openrouter
-  name: meta-llama/llama-3.3-70b-instruct:free
-
-fallback_model:
+  # NVIDIA NIM primary: strong Russian operational responses, streaming,
+  # structured output, and tool-use support without exposing provider secrets.
   provider: nvidia
-  model: meta/llama-3.3-70b-instruct
+  name: z-ai/glm-5.2
+
+# Ordered NIM-only failover chain. Hermes tries the next entry only after the
+# current provider returns a retryable/auth/availability failure; accepted runs
+# are never replayed by the PartsOps broker.
+fallback_providers:
+  # Frontier reasoning / agentic reserve.
+  - provider: nvidia
+    model: nvidia/nemotron-3-ultra-550b-a55b
+  # Models supplied in the NVIDIA NIM package, ordered by operational reserve
+  # value and expected response speed.
+  - provider: nvidia
+    model: deepseek-ai/deepseek-v4-flash
+  - provider: nvidia
+    model: stepfun-ai/step-3.7-flash
+  - provider: nvidia
+    model: minimaxai/minimax-m3
+  - provider: nvidia
+    model: deepseek-ai/deepseek-v4-pro
+  - provider: nvidia
+    model: poolside/laguna-xs-2.1
+  - provider: nvidia
+    model: nvidia/ising-calibration-1.5-31b
+  # NVIDIA catalog currently exposes this ID, but its completion endpoint can
+  # reject requests; keep it last as an experimental reserve.
+  - provider: nvidia
+    model: moonshotai/kimi-k2.6
+  # Existing stable NIM reserve retained after the supplied candidates.
+  - provider: nvidia
+    model: meta/llama-3.3-70b-instruct
+
+platforms:
+  api_server:
+    enabled: true
+  telegram:
+    enabled: false
+  slack:
+    enabled: false
 
 partsops_policy:
   reasoning: low

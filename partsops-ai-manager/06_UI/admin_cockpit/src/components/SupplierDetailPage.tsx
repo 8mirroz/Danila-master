@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, apiJson } from '../lib/api';
+import { Icon } from './Primitives';
+import { gsap } from 'gsap';
 import type {
   SupplierAnalyticsRecord,
   SupplierLogRecord,
@@ -70,6 +72,8 @@ export function SupplierDetailPage({
   const [replacingTable, setReplacingTable] = useState(false);
   const [newTableName, setNewTableName] = useState('');
   const [newTableFile, setNewTableFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [tableEditorName, setTableEditorName] = useState('');
   const [tableEditorStatus, setTableEditorStatus] = useState('active');
   const [replacementVersionName, setReplacementVersionName] = useState('');
@@ -218,6 +222,25 @@ export function SupplierDetailPage({
     setRatingDraft(String(supplier.rating_manual ?? Number((supplier.reliability_score * 5).toFixed(1))));
     setRatingReason('');
   }, [supplier]);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setNewTableFile(e.dataTransfer.files[0]);
+    }
+  };
 
   const handleCreateTable = async () => {
     if (!newTableName.trim()) {
@@ -623,6 +646,24 @@ export function SupplierDetailPage({
     return Array.from(new Set(logs.map((log) => log.event_type))).sort((left, right) => left.localeCompare(right));
   }, [logs]);
 
+  useEffect(() => {
+    if (!loading && supplier) {
+      gsap.fromTo('.premium-header-content', 
+        { opacity: 0, y: 15 }, 
+        { opacity: 1, y: 0, duration: 0.6, ease: 'power2.out', stagger: 0.1 }
+      );
+    }
+  }, [loading, supplierId, supplier]);
+
+  useEffect(() => {
+    if (!loading && supplier) {
+      gsap.fromTo('.premium-tab-content',
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.4, ease: 'power1.out' }
+      );
+    }
+  }, [loading, activeTab, supplier]);
+
   if (loading) {
     return <div className="h-full animate-pulse rounded-3xl border border-slate-200 bg-white/70" />;
   }
@@ -637,65 +678,86 @@ export function SupplierDetailPage({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[var(--bg-app)]">
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-6 text-white shadow-xl">
-        <div className="mb-5 flex items-center justify-between gap-4">
-          <button
-            onClick={onBack}
-            className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/85 transition hover:bg-white/10 hover:text-white"
-          >
-            <i className="fas fa-arrow-left mr-2" />
-            Назад к каталогу
-          </button>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => onEditSupplier(supplier)}
-              className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/85 transition hover:bg-white/10 hover:text-white"
-            >
-              Редактировать
-            </button>
-            <button
-              onClick={handleArchiveSupplier}
-              className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm font-bold text-rose-100 transition hover:bg-rose-500/20"
-            >
-              Архивировать
-            </button>
-          </div>
-        </div>
+      <div className="relative overflow-hidden bg-[linear-gradient(135deg,#0b1329_0%,#1a1f3c_100%)] p-6 text-white border-b border-white/5 shadow-xl">
+        {/* Ambient Glows */}
+        <div className="absolute top-[-40%] left-[-10%] w-[350px] h-[350px] rounded-full bg-blue-500/10 blur-[90px] pointer-events-none" />
+        <div className="absolute bottom-[-40%] right-[-10%] w-[350px] h-[350px] rounded-full bg-indigo-500/10 blur-[90px] pointer-events-none" />
 
-        <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-          <div>
-            <div className="mb-2 flex items-center gap-2">
-              <span className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] ${
-                supplier.status === 'active'
-                  ? 'bg-emerald-400/15 text-emerald-200'
-                  : supplier.status === 'blocked'
-                  ? 'bg-rose-400/15 text-rose-200'
-                  : 'bg-amber-400/15 text-amber-200'
-              }`}>
-                {supplier.status}
-              </span>
-              <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-white/70">
-                {supplier.last_sync_status}
-              </span>
+        <div className="relative z-10 premium-header-content">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white/90 transition hover:bg-white/10 hover:text-white hover:scale-105 active:scale-95 duration-200"
+            >
+              <Icon name="arrow-left" size={12} />
+              Назад к каталогу
+            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => onEditSupplier(supplier)}
+                className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white/90 transition hover:bg-white/10 hover:text-white hover:scale-105 active:scale-95 duration-200"
+              >
+                <Icon name="pencil" size={12} />
+                Редактировать
+              </button>
+              <button
+                onClick={handleArchiveSupplier}
+                className="flex items-center gap-2 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-xs font-bold text-rose-100 transition hover:bg-rose-500/20 hover:scale-105 active:scale-95 duration-200"
+              >
+                <Icon name="trash" size={12} />
+                Архивировать
+              </button>
             </div>
-            <h2 className="text-3xl font-black tracking-tight">{supplier.name}</h2>
-            <p className="mt-2 text-sm text-slate-300">
-              {supplier.city} • {supplier.specialization || 'General sourcing'}
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {supplier.categories.map((category) => (
-                <span key={category} className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white/85">
-                  {category}
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2.5">
+                <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.24em] border ${
+                  supplier.status === 'active'
+                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                    : supplier.status === 'blocked'
+                    ? 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                    : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                }`}>
+                  {supplier.status}
                 </span>
-              ))}
-            </div>
-          </div>
+                <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[9px] font-black uppercase tracking-[0.24em] text-white/70">
+                  {supplier.last_sync_status}
+                </span>
+              </div>
+              
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center font-extrabold text-lg text-white shrink-0 shadow-lg select-none uppercase">
+                  {supplier.name
+                    .replace(/^(ООО|ИП|АО|ЗАО|ИП|ооо|ип|ао|зао)\s+["«]?/i, '')
+                    .replace(/["»]/g, '')
+                    .trim()
+                    .slice(0, 2) || 'П'}
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black tracking-tight text-white leading-tight">{supplier.name}</h2>
+                  <p className="mt-1.5 text-xs text-slate-400 font-medium">
+                    {supplier.city} • {supplier.specialization || 'General sourcing'}
+                  </p>
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <MetricBox label="Надежность" value={`${Math.round(supplier.reliability_score * 100)}%`} />
-            <MetricBox label="Manual rating" value={supplier.rating_manual ? supplier.rating_manual.toFixed(1) : '—'} />
-            <MetricBox label="Таблиц" value={`${supplier.active_table_count}/${supplier.table_count}`} />
-            <MetricBox label="SLA" value={`${supplier.avg_delivery_days} дн.`} />
+              <div className="flex flex-wrap gap-2 pt-1">
+                {supplier.categories.map((category) => (
+                  <span key={category} className="rounded-full bg-white/5 border border-white/5 px-3 py-1 text-[10px] font-semibold text-white/85">
+                    {category}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <MetricBox label="Надежность" value={`${Math.round(supplier.reliability_score * 100)}%`} />
+              <MetricBox label="Manual rating" value={supplier.rating_manual ? supplier.rating_manual.toFixed(1) : '—'} />
+              <MetricBox label="Таблиц" value={`${supplier.active_table_count}/${supplier.table_count}`} />
+              <MetricBox label="SLA" value={`${supplier.avg_delivery_days} дн.`} />
+            </div>
           </div>
         </div>
       </div>
@@ -712,8 +774,8 @@ export function SupplierDetailPage({
         </div>
       )}
 
-      <div className="border-b border-slate-200 bg-white/80 px-6 py-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="border-b border-slate-200 bg-white px-6 py-3">
+        <div className="flex flex-wrap gap-2.5">
           <TabButton label="Overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <TabButton label="Profile" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
           <TabButton label="Tables" active={activeTab === 'tables'} onClick={() => setActiveTab('tables')} />
@@ -723,14 +785,14 @@ export function SupplierDetailPage({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-6 premium-tab-content">
         {activeTab === 'overview' && (
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <Panel title="Операционный профиль">
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3.5 md:grid-cols-2">
                 <DetailRow label="Контакт" value={supplier.contact_person || '—'} />
-                <DetailRow label="Телефон" value={supplier.phone || '—'} />
-                <DetailRow label="Email" value={supplier.email || '—'} />
+                <DetailRow label="Телефон" value={supplier.phone || '—'} isLink linkType="tel" />
+                <DetailRow label="Email" value={supplier.email || '—'} isLink linkType="mailto" />
                 <DetailRow label="Владелец" value={supplier.account_owner || '—'} />
                 <DetailRow label="Payment terms" value={supplier.payment_terms || '—'} />
                 <DetailRow label="Delivery terms" value={supplier.delivery_terms || '—'} />
@@ -778,37 +840,98 @@ export function SupplierDetailPage({
         )}
 
         {activeTab === 'tables' && (
-          <div className="grid gap-4 xl:grid-cols-[320px_1fr_320px]">
+          <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
             <Panel title="Таблицы поставщика">
               <div className="space-y-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Новая таблица</label>
-                  <input
-                    value={newTableName}
-                    onChange={(event) => setNewTableName(event.target.value)}
-                    placeholder="Например: Q3 OEM price list"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none"
-                  />
-                  <label className="mt-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Файл импорта
-                  </label>
-                  <input
-                    type="file"
-                    accept=".csv,.xlsx,.json,.txt,.tsv"
-                    onChange={(event) => setNewTableFile(event.target.files?.[0] ?? null)}
-                    className="mt-1 block w-full text-xs text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-slate-700"
-                  />
-                  {newTableFile && (
-                    <div className="mt-2 text-xs font-semibold text-slate-500">
-                      {newTableFile.name}
-                    </div>
-                  )}
+                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                      Название таблицы
+                    </label>
+                    <input
+                      value={newTableName}
+                      onChange={(event) => setNewTableName(event.target.value)}
+                      placeholder="Например: Q3 OEM price list"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition focus:border-[var(--accent-primary)] focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                      Файл импорта
+                    </span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      id="input-file-upload"
+                      className="hidden"
+                      accept=".csv,.xlsx,.json,.txt,.tsv"
+                      onChange={(e) => setNewTableFile(e.target.files?.[0] ?? null)}
+                    />
+                    
+                    {!newTableFile ? (
+                      <div
+                        onDragEnter={handleDrag}
+                        onDragLeave={handleDrag}
+                        onDragOver={handleDrag}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`group border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-300 relative flex flex-col items-center justify-center gap-2 select-none ${
+                          dragActive
+                            ? 'border-[var(--accent-primary)] bg-blue-50/60 scale-[1.02] shadow-[0_4px_20px_rgba(37,99,235,0.08)]'
+                            : 'border-slate-200 bg-slate-50/50 hover:border-[var(--accent-primary)] hover:bg-slate-50 hover:scale-[1.01]'
+                        }`}
+                      >
+                        <Icon 
+                          name="cloud-arrow-up" 
+                          size={24} 
+                          className={`transition-colors duration-300 ${
+                            dragActive ? 'text-[var(--accent-primary)]' : 'text-slate-400 group-hover:text-[var(--accent-primary)]'
+                          }`}
+                        />
+                        <span className="text-[12px] font-bold text-slate-700">
+                          Перетащите файл сюда
+                        </span>
+                        <span className="text-[10px] font-medium text-slate-400">
+                          или кликните для выбора
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 flex items-center justify-between gap-3 shadow-inner">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                            <Icon name="folder-open" size={16} className="text-[var(--accent-primary)]" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-bold text-slate-800 truncate" title={newTableFile.name}>
+                              {newTableFile.name}
+                            </div>
+                            <div className="text-[10px] font-semibold text-slate-400">
+                              {(newTableFile.size / 1024).toFixed(1)} KB
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNewTableFile(null);
+                          }}
+                          className="w-7 h-7 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:border-slate-300 transition-colors shadow-sm"
+                          title="Удалить файл"
+                        >
+                          <Icon name="times" size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => void (newTableFile ? handleImportTable() : handleCreateTable())}
-                    disabled={creatingTable}
-                    className="mt-2 w-full rounded-xl bg-[var(--accent-primary)] px-3 py-2 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-50"
+                    disabled={creatingTable || (!newTableName.trim() && !newTableFile)}
+                    className="w-full rounded-2xl bg-[var(--accent-primary)] px-4 py-3 text-xs font-bold text-white transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] hover:shadow-[0_4px_12px_rgba(37,99,235,0.25)] disabled:opacity-50 disabled:scale-100 disabled:shadow-none cursor-pointer flex items-center justify-center gap-2"
                   >
-                    {creatingTable ? 'Создание...' : newTableFile ? 'Импортировать таблицу' : 'Добавить пустую таблицу'}
+                    {creatingTable && <Icon name="spinner" size={12} className="animate-spin" />}
+                    {creatingTable ? 'Создание...' : 'Создать таблицу'}
                   </button>
                 </div>
                 {tables.map((table) => (
@@ -1041,7 +1164,7 @@ export function SupplierDetailPage({
                       </button>
                     </div>
                   </div>
-                  <div className="overflow-hidden rounded-2xl border border-slate-200">
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200 w-full">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
@@ -1408,8 +1531,10 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       onClick={onClick}
-      className={`rounded-2xl px-4 py-2 text-sm font-bold transition ${
-        active ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+      className={`rounded-2xl px-5 py-2 text-xs font-bold tracking-wide transition-all duration-200 ${
+        active 
+          ? 'bg-[var(--accent-primary)] text-white shadow-[0_4px_12px_rgba(37,99,235,0.25)] scale-[1.02]' 
+          : 'bg-white text-[var(--text-secondary)] border border-[var(--border-default)] hover:border-slate-300 hover:text-[var(--text-primary)] hover:bg-[var(--state-hover)] shadow-sm'
       }`}
     >
       {label}
@@ -1419,8 +1544,8 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm">
-      <h3 className="mb-4 text-lg font-black text-slate-900">{title}</h3>
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_8px_30px_rgba(0,0,0,0.02)] transition-all">
+      <h3 className="mb-4 text-base font-extrabold tracking-tight text-slate-900">{title}</h3>
       {children}
     </section>
   );
@@ -1428,18 +1553,27 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function MetricBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</div>
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 transition-all duration-300 hover:bg-white/10 hover:scale-[1.02] hover:border-white/20 hover:shadow-[0_8px_32px_-10px_rgba(255,255,255,0.05)]">
+      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">{label}</div>
       <div className="mt-1 text-2xl font-black text-white">{value}</div>
     </div>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, isLink, linkType }: { label: string; value: string; isLink?: boolean; linkType?: 'tel' | 'mailto' }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-[0_2px_8px_rgba(15,23,42,0.02)] hover:shadow-md transition-all hover:scale-[1.01]">
       <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
-      <div className="mt-1 text-sm font-semibold text-slate-700">{value}</div>
+      {isLink && value !== '—' ? (
+        <a 
+          href={`${linkType}:${value}`} 
+          className="mt-1 block text-sm font-semibold text-[var(--accent-primary)] hover:underline"
+        >
+          {value}
+        </a>
+      ) : (
+        <div className="mt-1 text-sm font-semibold text-slate-700">{value}</div>
+      )}
     </div>
   );
 }

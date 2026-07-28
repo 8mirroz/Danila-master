@@ -1,6 +1,5 @@
 import React from 'react';
 import { StatusBadge } from './Primitives';
-import { TransitionActions } from './TransitionActions';
 
 type Request = {
   id: number;
@@ -21,7 +20,6 @@ type Request = {
 interface KanbanCardProps {
   request: Request;
   onSelectRequest: (req: Request) => void;
-  onTransitionRequest?: (requestId: string, targetState: string, reason: string) => Promise<void>;
   isHighlighted?: boolean;
 }
 
@@ -46,7 +44,6 @@ const formatRelativeTime = (dateStr?: string) => {
 export const KanbanCard: React.FC<KanbanCardProps> = ({
   request,
   onSelectRequest,
-  onTransitionRequest,
   isHighlighted = false,
 }) => {
   const getPriorityStripe = (priority?: string) => {
@@ -60,6 +57,10 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
     <div
       role="button"
       tabIndex={0}
+      draggable={true}
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', request.request_id);
+      }}
       onClick={() => onSelectRequest(request)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -127,22 +128,6 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
         </div>
       </div>
 
-      {/* Actions (reveal on hover) */}
-      {onTransitionRequest && (
-        <div
-          className="pt-3 mt-2 border-t border-slate-100 opacity-0 max-h-0 group-hover:opacity-100 group-hover:max-h-32 overflow-hidden transition-all duration-300 ease-in-out"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <TransitionActions
-            status={request.status}
-            requestId={request.request_id}
-            onTransition={(targetState, reason) =>
-              onTransitionRequest(request.request_id, targetState, reason)
-            }
-            compact
-          />
-        </div>
-      )}
     </div>
   );
 };

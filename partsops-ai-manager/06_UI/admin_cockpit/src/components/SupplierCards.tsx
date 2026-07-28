@@ -1,5 +1,6 @@
 import React from 'react';
 import type { SupplierRecord } from './supplierTypes';
+import { Icon } from './Primitives';
 
 interface SupplierCardsProps {
   suppliers: SupplierRecord[];
@@ -33,26 +34,36 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {suppliers.map((s) => {
         const isSelected = selectedSupplierId === s.supplier_id;
         const activeStatus = s.status === 'active' ? 'Active' : s.status === 'blocked' ? 'Blocked' : 'Pending';
+        const categories = (s.categories.length ? s.categories : s.specialization.split(','))
+          .map((spec) => spec.trim())
+          .filter(Boolean);
+
+        const initials = s.name
+          .replace(/^(ООО|ИП|АО|ЗАО|ИП|ооо|ип|ао|зао)\s+["«]?/i, '')
+          .replace(/["»]/g, '')
+          .trim()
+          .slice(0, 2);
 
         return (
           <div
             key={s.supplier_id}
             onClick={() => onSelectSupplier(isSelected ? null : s)}
-            className={`p-5 rounded-2xl cursor-pointer transition-all duration-300 flex flex-col justify-between h-[230px] border shadow-sm ${
+            className={`group relative flex min-h-[248px] cursor-pointer flex-col overflow-hidden rounded-[24px] border p-5 shadow-sm transition-all duration-300 ${
               isSelected
-                ? 'bg-emerald-50/40 ring-2 ring-[var(--accent-primary)] border-transparent scale-[1.02]'
-                : 'bg-white/80 backdrop-blur-md border-[var(--border-default)] hover:shadow-md hover:-translate-y-1 hover:border-[var(--accent-primary)]/40'
+                ? 'border-[rgba(37,99,235,0.28)] bg-[linear-gradient(180deg,rgba(37,99,235,0.08),rgba(255,255,255,0.94))] ring-2 ring-[rgba(37,99,235,0.18)]'
+                : 'border-[var(--border-default)] bg-white/90 hover:-translate-y-0.5 hover:border-[rgba(37,99,235,0.18)] hover:shadow-md'
             }`}
           >
+            <div className={`absolute inset-x-0 top-0 h-1.5 ${isSelected ? 'bg-[var(--accent-primary)]' : 'bg-gradient-to-r from-emerald-400 via-sky-400 to-indigo-400 opacity-80'}`} />
+
             <div>
-              {/* Header row: Status badge + Rating */}
-              <div className="flex items-center justify-between mb-3">
+              <div className="mb-4 flex items-start justify-between gap-3">
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                  className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
                     activeStatus === 'Active'
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                       : activeStatus === 'Blocked'
@@ -62,29 +73,35 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                 >
                   {activeStatus}
                 </span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2 text-right">
                   {renderStars(s.reliability_score)}
-                  <span className="text-[10px] font-bold text-slate-500">
+                  <span className="text-xs font-bold text-slate-500">
                     {(s.reliability_score * 100).toFixed(0)}%
                   </span>
                 </div>
               </div>
 
-              {/* Title & City */}
-              <h3 className="font-extrabold text-sm text-slate-800 line-clamp-1 mb-1">
-                {s.name}
-              </h3>
-              <div className="text-[11px] text-slate-400 font-semibold flex items-center mb-3">
-                <i className="fas fa-location-dot text-[10px] text-slate-400 mr-1.5" />
-                {s.city}
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center font-bold text-xs text-[var(--text-secondary)] shrink-0 shadow-sm select-none uppercase">
+                  {initials || 'П'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="line-clamp-2 text-[15px] font-black leading-tight text-slate-900 mb-0.5">
+                    {s.name}
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500">
+                    <Icon name="circle-info" size={10} className="text-slate-400" />
+                    <span className="truncate">{s.city || '—'}</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+              <div className="mb-4 flex flex-wrap gap-2">
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
                   {s.active_table_count}/{s.table_count} таблиц
                 </span>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
                     s.last_sync_status === 'synced'
                       ? 'bg-emerald-50 text-emerald-700'
                       : s.last_sync_status === 'stale'
@@ -94,32 +111,34 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                 >
                   {s.last_sync_status}
                 </span>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
+                  SLA {s.avg_delivery_days} дн.
+                </span>
               </div>
 
-              {/* Specialization Tags */}
-              <div className="flex flex-wrap gap-1.5 mb-4 max-h-[56px] overflow-hidden">
-                {(s.categories.length ? s.categories : s.specialization.split(',')).slice(0, 3).map((spec: string) => (
+              <div className="mb-4 flex flex-wrap gap-1.5">
+                {categories.slice(0, 4).map((spec: string) => (
                   <span
                     key={spec}
-                    className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-semibold"
+                    className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600"
                   >
-                    {spec.trim()}
+                    {spec}
                   </span>
                 ))}
-                {(s.categories.length ? s.categories : s.specialization.split(',')).length > 3 && (
-                  <span className="text-[10px] text-slate-400 font-bold self-center pl-1">
-                    +{(s.categories.length ? s.categories : s.specialization.split(',')).length - 3}
+                {categories.length > 4 && (
+                  <span className="self-center pl-1 text-[10px] font-bold text-slate-400">
+                    +{categories.length - 4}
                   </span>
                 )}
               </div>
 
-              <div className="mb-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenTables(s);
                   }}
-                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
                 >
                   Таблицы
                 </button>
@@ -128,7 +147,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                     event.stopPropagation();
                     onEditSupplier(s);
                   }}
-                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
                 >
                   Редактировать
                 </button>
@@ -137,38 +156,55 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                     event.stopPropagation();
                     onArchiveSupplier(s);
                   }}
-                  className="rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700 transition hover:border-rose-300 hover:text-rose-800"
+                  className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-bold text-rose-700 transition hover:border-rose-300 hover:text-rose-800"
                 >
                   Архив
                 </button>
               </div>
             </div>
 
-            {/* Footer row: Contact person + SLA delivery */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-auto">
-              <div className="min-w-0">
-                <div className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">
-                  Контакт
+            <div className="mt-auto border-t border-slate-100 pt-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                    Контакт
+                  </div>
+                  <div className="flex items-center gap-1.5 truncate text-[12px] font-bold text-slate-700">
+                    <span className="truncate">{s.contact_person || '—'}</span>
+                    {s.contact_person && (
+                      <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                        {s.phone && (
+                          <a
+                            href={`tel:${s.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-slate-400 hover:text-[var(--accent-primary)] transition-colors p-0.5"
+                            title={`Позвонить: ${s.phone}`}
+                          >
+                            <Icon name="phone" size={12} />
+                          </a>
+                        )}
+                        {s.email && (
+                          <a
+                            href={`mailto:${s.email}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-slate-400 hover:text-[var(--accent-primary)] transition-colors p-0.5"
+                            title={`Написать: ${s.email}`}
+                          >
+                            <Icon name="envelope" size={12} />
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="text-[11px] font-bold text-slate-700 truncate max-w-[120px]">
-                  {s.contact_person}
+                <div className="sm:text-right">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                    Надежность / SLA
+                  </div>
+                  <div className="text-[12px] font-bold text-slate-700">
+                    {Math.round(s.reliability_score * 100)}% · {s.avg_delivery_days} дн.
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">
-                  SLA Доставка
-                </div>
-                <span
-                  className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                    s.avg_delivery_days <= 1
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : s.avg_delivery_days <= 3
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {s.avg_delivery_days} дн.
-                </span>
               </div>
             </div>
           </div>

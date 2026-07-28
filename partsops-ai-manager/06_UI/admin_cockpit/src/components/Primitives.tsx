@@ -1,20 +1,255 @@
 import React from 'react';
+import { gsap } from 'gsap';
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowsClockwise,
+  Bell,
+  BookOpen,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  CaretUp,
+  Check,
+  CheckCircle,
+  CloudArrowUp,
+  Envelope,
+  File as FileIcon,
+  FolderOpen,
+  Info,
+  List,
+  MagnifyingGlass,
+  PaperPlaneRight,
+  Paperclip,
+  PencilSimple,
+  Phone,
+  Plus,
+  Robot,
+  SpinnerGap,
+  Stop,
+  Trash,
+  Warning,
+  WarningDiamond,
+  Waveform,
+  X,
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import { getStatusBadgeClasses, getStatusLabel } from '../lib/workflow';
+import { useFocusTrap, useKeydown } from '../lib/focus';
 
-// ==========================================
+// =========================================
+// 0. Icon system (typed, Phosphor)
+// =========================================
+const ICON_MAP = {
+  'wave-square': Waveform,
+  'magnifying-glass': MagnifyingGlass,
+  search: MagnifyingGlass,
+  'chevron-left': CaretLeft,
+  'chevron-right': CaretRight,
+  'chevron-up': CaretUp,
+  'chevron-down': CaretDown,
+  'arrow-left': ArrowLeft,
+  'arrow-right': ArrowRight,
+  'arrow-rotate-right': ArrowsClockwise,
+  rotate: ArrowsClockwise,
+  spinner: SpinnerGap,
+  stop: Stop,
+  robot: Robot,
+  car: FileIcon,
+  envelope: Envelope,
+  phone: Phone,
+  'cloud-arrow-up': CloudArrowUp,
+  'file-arrow-up': CloudArrowUp,
+  'file-import': CloudArrowUp,
+  paperclip: Paperclip,
+  'paper-plane': PaperPlaneRight,
+  pencil: PencilSimple,
+  trash: Trash,
+  check: Check,
+  'square-check': CheckCircle,
+  'circle-check': CheckCircle,
+  plus: Plus,
+  'x-mark': X,
+  times: X,
+  'exclamation-triangle': Warning,
+  warning: Warning,
+  radiation: WarningDiamond,
+  'circle-info': Info,
+  'folder-open': FolderOpen,
+  'book-open': BookOpen,
+  bell: Bell,
+  list: List,
+  'user-shield': Robot,
+  'code-fork': ArrowsClockwise,
+} as const;
+
+export type IconName = keyof typeof ICON_MAP;
+
+export interface IconProps {
+  name: string;
+  size?: number;
+  weight?: 'thin' | 'light' | 'regular' | 'bold' | 'fill' | 'duotone';
+  className?: string;
+}
+
+/** Normalizes legacy Font Awesome names (`fa-*`, `fas *`) to typed Phosphor icons. */
+const normalizeIconName = (raw: string): string =>
+  raw
+    .trim()
+    .replace(/^fa[sr]?\s+/, '')
+    .replace(/^fa-/, '')
+    .replace(/\s+text-red-\d+$/, '')
+    .replace(/\s+text-\[.*?\]$/, '')
+    .split(/\s+/)[0];
+
+export const Icon: React.FC<IconProps> = ({ name, size = 16, weight = 'regular', className }) => {
+  const key = normalizeIconName(name) as IconName;
+  const Cmp: PhosphorIcon = ICON_MAP[key] ?? FileIcon;
+  return <Cmp size={size} weight={weight} className={className} aria-hidden="true" />;
+};
+
+// =========================================
 // 1. AppFrame
-// ==========================================
-export const AppFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// =========================================
+export const AppFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="h-screen w-screen flex flex-col bg-[var(--bg-app)] text-[var(--text-primary)] overflow-hidden">
+    {children}
+  </div>
+);
+
+// =========================================
+// 2. Button (canonical) + ActionButton (compat alias)
+// =========================================
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'warning' | 'ghost';
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  icon?: string;
+  loading?: boolean;
+  size?: 'sm' | 'md';
+}
+
+const getButtonVariantClass = (variant: ButtonVariant, disabled?: boolean): string => {
+  if (disabled) return 'cursor-not-allowed border-[var(--border-default)] bg-slate-100 text-slate-400';
+  switch (variant) {
+    case 'primary':
+      return 'border-transparent bg-[var(--accent-primary)] text-white shadow-[0_8px_20px_-8px_rgba(37,99,235,0.55)] hover:bg-[var(--accent-primary-strong)]';
+    case 'danger':
+      return 'border-transparent bg-[var(--accent-danger)] text-white hover:bg-[#be123c]';
+    case 'success':
+      return 'border-transparent bg-[var(--accent-success)] text-white hover:bg-[#0b815a]';
+    case 'warning':
+      return 'border-transparent bg-[var(--accent-warning)] text-white hover:bg-[#b45309]';
+    case 'ghost':
+      return 'border-transparent bg-transparent text-[var(--text-secondary)] hover:bg-[var(--state-hover)]';
+    default:
+      return 'border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]';
+  }
+};
+
+export const Button: React.FC<ButtonProps> = ({
+  variant = 'secondary',
+  icon,
+  loading = false,
+  size = 'md',
+  children,
+  className = '',
+  disabled,
+  ...props
+}) => {
+  const sizing = size === 'sm' ? 'px-3 py-1.5 text-[11px]' : 'px-4 py-2.5 text-xs';
   return (
-    <div className="h-screen w-screen flex flex-col bg-[var(--bg-app)] text-[var(--text-primary)] overflow-hidden">
-      {children}
-    </div>
+    <button
+      disabled={disabled || loading}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border font-semibold transition-all ${sizing} ${getButtonVariantClass(variant, disabled)} ${className}`}
+      {...props}
+    >
+      {loading ? <Icon name="spinner" size={14} className="animate-spin" /> : icon ? <Icon name={icon} size={14} /> : null}
+      {children != null && <span>{children}</span>}
+    </button>
   );
 };
 
-// ==========================================
-// 2. TopCommandBar
-// ==========================================
+/** @deprecated Back-compat alias for Button. */
+export const ActionButton = Button;
+
+// =========================================
+// 3. IconButton (icon-only, requires aria-label)
+// =========================================
+interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  icon: string;
+  label: string;
+  size?: number;
+  variant?: 'default' | 'ghost' | 'onDark';
+}
+
+export const IconButton: React.FC<IconButtonProps> = ({
+  icon,
+  label,
+  size = 16,
+  variant = 'default',
+  className = '',
+  ...props
+}) => {
+  const variantClass =
+    variant === 'onDark'
+      ? 'border-white/15 bg-white/5 text-white/80 hover:bg-white/12 hover:text-white'
+      : variant === 'ghost'
+        ? 'border-transparent bg-transparent text-[var(--text-muted)] hover:bg-[var(--state-hover)] hover:text-[var(--text-primary)]'
+        : 'border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]';
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-control)] border transition-all ${variantClass} ${className}`}
+      {...props}
+    >
+      <Icon name={icon} size={size} />
+    </button>
+  );
+};
+
+// =========================================
+// 4. Card (canonical) + SectionCard (compat alias)
+// =========================================
+interface CardProps {
+  title?: string;
+  icon?: string;
+  headerActions?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  padded?: boolean;
+}
+
+export const Card: React.FC<CardProps> = ({
+  title,
+  icon,
+  headerActions,
+  children,
+  className = '',
+  padded = true,
+}) => (
+  <section className={`panel-card-tight overflow-hidden flex flex-col ${className}`}>
+    {title && (
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--border-default)] px-5 py-4">
+        <div className="flex items-center gap-2">
+          {icon && <Icon name={icon} size={14} className="text-[var(--accent-primary)]" />}
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)]">{title}</h3>
+        </div>
+        {headerActions && <div>{headerActions}</div>}
+      </div>
+    )}
+    <div className={`flex-1 ${padded ? 'p-5' : ''}`}>{children}</div>
+  </section>
+);
+
+/** @deprecated Back-compat alias for Card. */
+export const SectionCard = Card;
+
+// =========================================
+// 5. TopCommandBar (64px, burger slot for drawers)
+// =========================================
 interface TopCommandBarProps {
   searchQuery: string;
   onSearchChange: (val: string) => void;
@@ -22,137 +257,131 @@ interface TopCommandBarProps {
   erpSyncTime?: string;
   onResetActive?: () => void;
   roleSwitcherNode?: React.ReactNode;
+  onOpenNavDrawer?: () => void;
+  onOpenQueueDrawer?: () => void;
 }
+
 export const TopCommandBar: React.FC<TopCommandBarProps> = ({
   searchQuery,
   onSearchChange,
-  envName = "Копия Production",
-  erpSyncTime = "38 сек. назад",
+  envName = 'Копия Production',
+  erpSyncTime,
   onResetActive,
   roleSwitcherNode,
-}) => {
-  return (
-    <header className="col-span-full h-14 border-b border-[var(--border-default)] bg-[var(--surface-1)] px-4 flex items-center justify-between gap-4 z-50 shadow-sm">
-      {/* Brand logo & title */}
-      <div 
-        className="flex items-center gap-3 cursor-pointer select-none"
-        onClick={onResetActive}
-      >
-        <div className="w-8 h-8 rounded-md bg-[var(--accent-primary)] text-white flex items-center justify-center font-bold text-lg shadow-sm">
-          <i className="fas fa-wave-square text-sm"></i>
+  onOpenNavDrawer,
+  onOpenQueueDrawer,
+}) => (
+  <header className="col-span-full h-16 border-b border-[var(--border-default)] bg-[var(--surface-1)] px-4 flex items-center justify-between gap-3 z-50 shadow-[var(--shadow-sm)]">
+    <div className="flex items-center gap-2 min-w-0">
+      {onOpenNavDrawer && (
+        <IconButton icon="list" label="Открыть меню навигации" className="lg:hidden" onClick={onOpenNavDrawer} />
+      )}
+      <div className="flex items-center gap-3 cursor-pointer select-none min-w-0" onClick={onResetActive}>
+        <div className="w-9 h-9 rounded-[14px] bg-[linear-gradient(135deg,#1d4ed8,#3b82f6)] text-white flex items-center justify-center shadow-[0_10px_24px_-10px_rgba(37,99,235,0.7)] shrink-0">
+          <Icon name="wave-square" size={18} weight="bold" />
         </div>
-        <div>
-          <h1 className="text-sm font-bold tracking-tight text-[var(--text-primary)]">PartsOps AI Manager</h1>
+        <div className="min-w-0">
+          <h1 className="text-sm font-bold tracking-tight text-[var(--text-primary)] truncate">PartsOps AI Manager</h1>
           <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">Операционный пульт закупок</span>
         </div>
       </div>
+    </div>
 
-      {/* Global Search Field */}
-      <div className="flex-1 max-w-md">
-        <div className="relative">
-          <i className="fas fa-magnifying-glass absolute left-3 top-2.5 text-[var(--text-muted)] text-xs"></i>
-          <input
-            type="text"
-            placeholder="Глобальный поиск (CMD + K для действий)..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-[var(--surface-2)] border border-[var(--border-default)] rounded-md pl-9 pr-3 py-1.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none focus:border-[var(--accent-primary)] transition-all font-sans"
-          />
-        </div>
+    <div className="flex-1 max-w-md hidden sm:block">
+      <div className="relative">
+        <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" aria-hidden="true" />
+        <input
+          type="text"
+          placeholder="Глобальный поиск (CMD + K для действий)..."
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="w-full bg-[var(--surface-2)] border border-[var(--border-default)] rounded-[var(--radius-control)] pl-9 pr-3 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none focus:border-[var(--accent-primary)] transition-all font-sans"
+        />
       </div>
+    </div>
 
-      {/* Env control & Health info */}
-      <div className="flex items-center gap-4 text-xs">
-        {roleSwitcherNode && (
-          <div className="hidden md:flex border-r border-[var(--border-default)] pr-4 mr-2">
-            {roleSwitcherNode}
-          </div>
-        )}
-        <div className="hidden md:flex flex-col text-right border-l border-[var(--border-default)] pl-4">
-          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Среда</span>
-          <span className="font-semibold text-[var(--text-secondary)]">{envName}</span>
-        </div>
-        <div className="hidden md:flex flex-col text-right border-l border-[var(--border-default)] pl-4">
+    <div className="flex items-center gap-3 text-xs shrink-0">
+      {roleSwitcherNode && <div className="hidden md:flex border-r border-[var(--border-default)] pr-3">{roleSwitcherNode}</div>}
+      <div className="hidden xl:flex flex-col text-right border-l border-[var(--border-default)] pl-3 shrink-0 whitespace-nowrap">
+        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Среда</span>
+        <span className="font-semibold text-[var(--text-secondary)]">{envName}</span>
+      </div>
+      {erpSyncTime && (
+        <div className="hidden xl:flex flex-col text-right border-l border-[var(--border-default)] pl-3 shrink-0 whitespace-nowrap">
           <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">ERP Синхронизация</span>
           <span className="font-semibold text-[var(--text-secondary)]">{erpSyncTime}</span>
         </div>
-      </div>
-    </header>
-  );
-};
+      )}
+      {onOpenQueueDrawer && (
+        <IconButton icon="bell" label="Открыть очередь запросов" className="xl:hidden" onClick={onOpenQueueDrawer} />
+      )}
+    </div>
+  </header>
+);
 
-// ==========================================
-// 3. LeftNavRail
-// ==========================================
+// =========================================
+// 6. LeftNavRail (deep-blue gradient + drawer mode)
+// =========================================
+interface NavItem { id: string; label: string; icon: string; }
+
 interface LeftNavRailProps {
   activeTab: string;
   onChangeTab: (tab: string) => void;
-  items: Array<{ id: string; label: string; icon: string }>;
+  items: NavItem[];
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  drawerOpen?: boolean;
+  onCloseDrawer?: () => void;
 }
+
 export const LeftNavRail: React.FC<LeftNavRailProps> = ({
   activeTab,
   onChangeTab,
   items,
   isCollapsed,
   onToggleCollapse,
+  drawerOpen = false,
+  onCloseDrawer,
 }) => {
-  return (
-    <aside 
-      className={`sidebar-glass flex flex-col justify-between overflow-y-auto transition-all duration-300 ease-in-out select-none flex-shrink-0 ${
-        isCollapsed ? 'w-16' : 'w-60'
-      }`}
-    >
-      <div className="py-4 px-3 flex flex-col gap-1">
-        {/* Sidebar Header & Toggle */}
-        <div className={`flex items-center mb-4 ${isCollapsed ? 'justify-center' : 'justify-between px-3'}`}>
-          {!isCollapsed && (
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider animate-fadeIn">
-              Рабочий стол
-            </span>
+  const drawerRef = React.useRef<HTMLElement | null>(null);
+  useFocusTrap(drawerRef, drawerOpen);
+  useKeydown('Escape', () => { if (drawerOpen && onCloseDrawer) onCloseDrawer(); }, [drawerOpen, onCloseDrawer]);
+
+  const railBody = (inDrawer: boolean) => (
+    <>
+      <div className="py-4 px-3 flex flex-col gap-1 flex-1 overflow-y-auto min-h-0">
+        <div className={`flex items-center mb-4 ${isCollapsed && !inDrawer ? 'justify-center' : 'justify-between px-3'}`}>
+          {(!isCollapsed || inDrawer) && (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--sidebar-muted)] animate-fadeIn">Рабочий стол</span>
           )}
-          <button 
-            onClick={onToggleCollapse}
-            className="w-7 h-7 rounded-full bg-emerald-950/40 border border-emerald-800/30 hover:bg-emerald-800/20 hover:border-emerald-700/50 flex items-center justify-center text-xs text-slate-300 transition-all duration-200 shadow-sm hover:scale-105 active:scale-95"
-            title={isCollapsed ? "Развернуть меню" : "Свернуть меню"}
-          >
-            <i className={`fas ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-left'} text-[10px]`}></i>
-          </button>
+          {inDrawer ? (
+            <IconButton icon="x-mark" label="Закрыть меню" variant="onDark" onClick={onCloseDrawer} />
+          ) : (
+            <button
+              onClick={onToggleCollapse}
+              aria-label={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+              title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+              className="w-7 h-7 rounded-full bg-white/10 border border-white/15 hover:bg-white/20 flex items-center justify-center text-white/80 transition-all duration-200 hover:scale-105 active:scale-95"
+            >
+              <Icon name={isCollapsed ? 'chevron-right' : 'chevron-left'} size={12} />
+            </button>
+          )}
         </div>
 
-        {/* Menu Items */}
         {items.map((item) => {
           const isActive = activeTab === item.id;
+          const collapsedView = isCollapsed && !inDrawer;
           return (
             <button
               key={item.id}
-              onClick={() => onChangeTab(item.id)}
-              className={`relative group w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-xs font-semibold transition-all duration-200 text-left ${
-                isActive
-                  ? 'sidebar-button-glass-active shadow-sm'
-                  : 'sidebar-button-glass-inactive hover:bg-white/5'
-              }`}
+              onClick={() => { onChangeTab(item.id); if (inDrawer && onCloseDrawer) onCloseDrawer(); }}
+              className={`relative group w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-xs font-semibold transition-all duration-200 text-left ${isActive ? 'sidebar-button-glass-active' : 'sidebar-button-glass-inactive'}`}
             >
-              {/* Active vertical line indicator */}
-              {isActive && (
-                <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full bg-[#10b981] shadow-[0_0_8px_#10b981]" />
-              )}
-              
-              <i 
-                className={`fas ${item.icon} w-4 text-center text-sm transition-transform duration-200 group-hover:scale-110 ${
-                  isActive ? 'text-[#10b981]' : 'text-slate-400 group-hover:text-white'
-                }`}
-              />
-
-              {!isCollapsed && (
-                <span className="animate-fadeIn">{item.label}</span>
-              )}
-
-              {/* Premium Glassmorphism Tooltip for Collapsed State */}
-              {isCollapsed && (
-                <div className="absolute left-16 px-3 py-1.5 rounded-md bg-emerald-950/95 backdrop-blur-md text-emerald-100 text-[11px] font-bold tracking-wide border border-emerald-800/80 shadow-[0_4px_12px_rgba(4,47,31,0.4)] opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-2 group-hover:translate-x-0 whitespace-nowrap z-50 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <Icon name={item.icon} size={16} className={`shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-white' : 'text-[var(--sidebar-muted)] group-hover:text-white'}`} />
+              {!collapsedView && <span className="animate-fadeIn truncate">{item.label}</span>}
+              {collapsedView && (
+                <div className="absolute left-16 px-3 py-1.5 rounded-[10px] bg-[#0b1b33]/95 backdrop-blur-md text-white/90 text-[11px] font-bold tracking-wide border border-white/15 shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-2 group-hover:translate-x-0 whitespace-nowrap z-50 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-300" />
                   {item.label}
                 </div>
               )}
@@ -161,46 +390,112 @@ export const LeftNavRail: React.FC<LeftNavRailProps> = ({
         })}
       </div>
 
-      {/* Sidebar Footer info */}
-      {isCollapsed ? (
-        <div className="p-4 border-t border-emerald-800/20 flex flex-col items-center gap-3 text-xs text-slate-400">
+      {isCollapsed && !inDrawer ? (
+        <div className="p-4 border-t border-white/10 shrink-0 flex flex-col items-center gap-3 text-xs text-[var(--sidebar-muted)]">
           <div title="ID Оператора: OP-4819" className="hover:text-white transition-colors cursor-help">
-            <i className="fas fa-user-shield text-[13px]"></i>
+            <Icon name="user-shield" size={14} />
           </div>
-          <div title="Версия системы: v6.0.4" className="hover:text-white transition-colors cursor-help">
-            <i className="fas fa-code-fork text-[13px]"></i>
-          </div>
+          <div title="Версия системы: v6.0.4" className="hover:text-white transition-colors cursor-help text-[10px] font-bold">v6</div>
         </div>
       ) : (
-        <div className="p-4 border-t border-emerald-800/20 text-[10px] text-slate-400 space-y-1.5 bg-emerald-950/20">
-          <div className="flex justify-between">
-            <span>ID Оператора:</span>
-            <span className="font-semibold text-slate-300">OP-4819</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Версия системы:</span>
-            <span className="font-semibold text-slate-300">v6.0.4</span>
-          </div>
+        <div className="p-4 border-t border-white/10 shrink-0 text-[10px] text-[var(--sidebar-muted)] space-y-1.5">
+          <div className="flex justify-between"><span>ID Оператора:</span><span className="font-semibold text-white/80">OP-4819</span></div>
+          <div className="flex justify-between"><span>Версия системы:</span><span className="font-semibold text-white/80">v6.0.4</span></div>
         </div>
       )}
-    </aside>
+    </>
   );
-};
 
-// ==========================================
-// 4. RightQueueRail
-// ==========================================
-export const RightQueueRail: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <aside className="border-l border-[var(--border-default)] bg-[var(--surface-1)] flex flex-col h-full overflow-hidden">
-      {children}
-    </aside>
+    <>
+      <aside className={`sidebar-shell flex flex-col justify-between h-full transition-all duration-300 ease-in-out select-none flex-shrink-0 hidden lg:flex ${isCollapsed ? 'w-16' : 'w-60'}`}>
+        {railBody(false)}
+      </aside>
+      {drawerOpen && (
+        <>
+          <div className="drawer-backdrop lg:hidden" onClick={onCloseDrawer} aria-hidden="true" />
+          <aside
+            ref={drawerRef as React.RefObject<HTMLElement>}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Меню навигации"
+            className="drawer-panel drawer-panel-left sidebar-shell flex flex-col justify-between select-none lg:hidden w-72"
+          >
+            {railBody(true)}
+          </aside>
+        </>
+      )}
+    </>
   );
 };
 
-// ==========================================
-// 5. WorkspaceHeader
-// ==========================================
+// =========================================
+// 7. RightQueueRail (soft white rail + drawer mode)
+// =========================================
+interface RightQueueRailProps {
+  children: React.ReactNode;
+  drawerOpen?: boolean;
+  onCloseDrawer?: () => void;
+}
+
+export const RightQueueRail: React.FC<RightQueueRailProps> = ({ children, drawerOpen = false, onCloseDrawer }) => {
+  const drawerRef = React.useRef<HTMLElement | null>(null);
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
+  useFocusTrap(drawerRef, drawerOpen);
+  useKeydown('Escape', () => { if (drawerOpen && onCloseDrawer) onCloseDrawer(); }, [drawerOpen, onCloseDrawer]);
+
+  React.useLayoutEffect(() => {
+    if (!contentRef.current) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const ctx = gsap.context(() => {
+      if (reduceMotion) {
+        gsap.set(contentRef.current, { opacity: 1, x: 0 });
+        return;
+      }
+      gsap.fromTo(
+        contentRef.current,
+        { opacity: 0, x: drawerOpen ? 24 : 10 },
+        { opacity: 1, x: 0, duration: 0.34, ease: 'power3.out' }
+      );
+    }, contentRef.current);
+    return () => ctx.revert();
+  }, [drawerOpen]);
+
+  return (
+    <>
+      <aside className="queue-rail hidden xl:flex border-l border-[var(--border-default)] bg-[var(--surface-1)] flex-col h-full overflow-hidden w-[340px] flex-shrink-0">
+        <div ref={contentRef} data-queue-rail-motion className="flex h-full min-h-0 min-w-0 flex-col">
+          {children}
+        </div>
+      </aside>
+      {drawerOpen && (
+        <>
+          <div className="drawer-backdrop" onClick={onCloseDrawer} aria-hidden="true" />
+          <aside
+            ref={drawerRef as React.RefObject<HTMLElement>}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Очередь запросов"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') onCloseDrawer?.();
+            }}
+            className="queue-rail drawer-panel drawer-panel-right flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-end px-4 py-2 border-b border-[var(--border-default)]">
+              <span className="sr-only">Очередь запросов</span>
+              <IconButton icon="x-mark" label="Закрыть очередь" onClick={onCloseDrawer} />
+            </div>
+            <div ref={contentRef} className="flex-1 min-h-0 min-w-0 overflow-y-auto" data-queue-rail-motion>{children}</div>
+          </aside>
+        </>
+      )}
+    </>
+  );
+};
+
+// =========================================
+// 8. WorkspaceHeader (compact; fake telemetry removed)
+// =========================================
 interface WorkspaceHeaderProps {
   title: string;
   requestId: string;
@@ -214,11 +509,12 @@ interface WorkspaceHeaderProps {
   vehicleModel?: string;
   onBack?: () => void;
 }
+
 export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
   title,
   requestId,
   status,
-  priority = "Normal",
+  priority = 'Normal',
   customerName,
   customerPhone,
   customerEmail,
@@ -227,210 +523,114 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
   vehicleModel,
   onBack,
 }) => {
+  const isUrgent = ['high', 'urgent', 'высокий', 'срочный'].includes(priority.toLowerCase());
   return (
     <div className="panel-card-tight mb-4 flex flex-col gap-3 p-4">
-      {/* Top inline control bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="rounded-full border border-[var(--border-default)] bg-[var(--surface-2)] px-2.5 py-1 font-mono text-[10px] font-semibold text-[var(--text-secondary)] shrink-0">
-            {requestId}
-          </span>
-          <h2 className="text-sm font-bold text-[var(--text-primary)] truncate max-w-[280px] md:max-w-[450px]">
-            {title || customerName || "Постоянный клиент"}
-          </h2>
-          <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase shrink-0 ${
-            priority.toLowerCase() === 'high' || priority.toLowerCase() === 'urgent'
-              ? 'bg-red-50 text-red-700 border border-red-200'
-              : 'bg-slate-100 text-slate-700 border border-slate-200'
-          }`}>
-            {priority === 'high' || priority === 'Высокий' ? 'Высокий' : priority === 'urgent' || priority === 'Срочный' ? 'Срочный' : 'Обычный'}
+          <span className="rounded-full border border-[var(--border-default)] bg-[var(--surface-2)] px-2.5 py-1 font-mono text-[10px] font-semibold text-[var(--text-secondary)] shrink-0">{requestId}</span>
+          <h2 className="text-sm font-bold text-[var(--text-primary)] truncate max-w-[280px] md:max-w-[450px]">{title || customerName || 'Постоянный клиент'}</h2>
+          <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase shrink-0 border ${isUrgent ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+            {isUrgent ? (priority.toLowerCase() === 'urgent' || priority === 'Срочный' ? 'Срочный' : 'Высокий') : 'Обычный'}
           </span>
           {vehicleMake && (
-            <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded font-medium shrink-0">
-              <i className="fas fa-car mr-1 text-[9px]"></i>
-              {vehicleMake} {vehicleModel || ''}
-            </span>
+            <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded font-medium shrink-0">{vehicleMake} {vehicleModel || ''}</span>
           )}
         </div>
-
         <div className="flex items-center gap-3">
-          {/* AI Telemetry Badge (Inline stats) */}
-          <div className="hidden lg:flex items-center gap-3 bg-[var(--surface-2)] border border-[var(--border-default)] px-2.5 py-0.5 rounded-md text-[10px] font-medium text-[var(--text-secondary)]">
-            <span className="flex items-center gap-1 font-semibold text-[var(--accent-primary)]">
-              <i className="fas fa-robot text-[9px]"></i> PartsOps-AI
-            </span>
-            <span className="text-[var(--border-strong)]">|</span>
-            <span>Модель: <strong className="text-[var(--text-primary)]">Gemini 3.5</strong></span>
-            <span className="text-[var(--border-strong)]">|</span>
-            <span className="flex items-center gap-1">
-              Уверенность: <strong className="text-green-600">94%</strong>
-            </span>
-            <span className="text-[var(--border-strong)]">|</span>
-            <span>Задержка: <strong className="text-[var(--text-primary)]">1.2s</strong></span>
-          </div>
-
           <StatusBadge status={status} />
-          {onBack && (
-            <button 
-              onClick={onBack}
-            className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] transition-all hover:bg-[var(--surface-2)]"
-            >
-              <i className="fas fa-arrow-left text-[10px]"></i> Закрыть
-            </button>
-          )}
+          {onBack && <Button size="sm" icon="arrow-left" onClick={onBack} className="rounded-full">Закрыть</Button>}
         </div>
       </div>
 
-      {/* Second Line: Sub-metadata row (Contacts, VIN, dynamic details) */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-2 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)]">
-        {/* Contact list */}
         <div className="flex items-center gap-3 text-[var(--text-muted)]">
-          {customerEmail && (
-            <span className="flex items-center gap-1">
-              <i className="fas fa-envelope text-[10px]"></i>
-              <span className="text-[var(--text-secondary)] font-medium">{customerEmail}</span>
-            </span>
-          )}
-          {customerPhone && (
-            <span className="flex items-center gap-1">
-              <i className="fas fa-phone text-[10px]"></i>
-              <span className="text-[var(--text-secondary)] font-medium">{customerPhone}</span>
-            </span>
-          )}
+          {customerEmail && <span className="text-[var(--text-secondary)] font-medium">{customerEmail}</span>}
+          {customerPhone && <span className="text-[var(--text-secondary)] font-medium">{customerPhone}</span>}
         </div>
-
-        {/* VIN */}
         {vin && (
           <div className="flex items-center gap-1 font-mono text-[10px] text-[var(--text-muted)] bg-[var(--surface-2)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
             <span className="font-sans uppercase text-[9px] font-bold text-[var(--text-muted)]">VIN</span>
             <span className="text-[var(--text-secondary)] font-semibold">{vin}</span>
           </div>
         )}
-
-        {/* Small screen telemetry fallback */}
-        <div className="lg:hidden flex items-center gap-2 text-[10px]">
-          <span className="font-semibold text-[var(--text-primary)] bg-slate-100 px-1.5 py-0.5 rounded">AI: Gemini 3.5 (94%)</span>
-        </div>
       </div>
     </div>
   );
 };
 
-// ==========================================
-// 6. SectionCard
-// ==========================================
-interface SectionCardProps {
-  title?: string;
-  icon?: string;
-  headerActions?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}
-export const SectionCard: React.FC<SectionCardProps> = ({
-  title,
-  icon,
-  headerActions,
-  children,
-  className = "",
-}) => {
-  return (
-    <section className={`panel-card-tight overflow-hidden flex flex-col ${className}`}>
-      {title && (
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border-default)] px-5 py-4">
-          <div className="flex items-center gap-2">
-            {icon && <i className={`fas ${icon} text-[12px] text-[var(--accent-primary)]`}></i>}
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)]">{title}</h3>
-          </div>
-          {headerActions && <div>{headerActions}</div>}
-        </div>
-      )}
-      <div className="flex-1 p-5">{children}</div>
-    </section>
-  );
-};
-
-// ==========================================
-// 7. SubnavPills
-// ==========================================
+// =========================================
+// 9. SubnavPills
+// =========================================
 interface SubnavPillsProps {
   activeTab: string;
-  onChangeTab: (id: any) => void;
+  onChangeTab: (id: string) => void;
   tabs: Array<{ id: string; label: string; icon: string; badge?: string }>;
 }
-export const SubnavPills: React.FC<SubnavPillsProps> = ({
-  activeTab,
-  onChangeTab,
-  tabs,
-}) => {
-  return (
-    <div className="flex items-center border border-[var(--border-default)] bg-[var(--surface-1)] p-1 rounded-lg gap-1 shadow-sm">
-      {tabs.map((tab) => {
-        const isActive = activeTab === tab.id;
-        return (
-          <button
-            key={tab.id}
-            onClick={() => onChangeTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-xs font-semibold transition-all ${
-              isActive
-                ? 'bg-[var(--state-selected)] text-[var(--accent-primary)] border border-blue-200'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-2)] border border-transparent'
-            }`}
-          >
-            <i className={`fas ${tab.icon} text-xs`}></i>
-            <span>{tab.label}</span>
-            {tab.badge && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                {tab.badge}
-              </span>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-};
 
-// ==========================================
-// 8. DataTable
-// ==========================================
+export const SubnavPills: React.FC<SubnavPillsProps> = ({ activeTab, onChangeTab, tabs }) => (
+  <div className="flex items-center border border-[var(--border-default)] bg-[var(--surface-1)] p-1 rounded-[var(--radius-control)] gap-1 shadow-[var(--shadow-sm)]">
+    {tabs.map((tab) => {
+      const isActive = activeTab === tab.id;
+      return (
+        <button
+          key={tab.id}
+          onClick={() => onChangeTab(tab.id)}
+          className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-[10px] text-xs font-semibold transition-all ${isActive ? 'bg-[var(--state-selected)] text-[var(--accent-primary)] border border-[rgba(37,99,235,0.25)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-2)] border border-transparent'}`}
+        >
+          <Icon name={tab.icon} size={14} />
+          <span>{tab.label}</span>
+          {tab.badge && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">{tab.badge}</span>}
+        </button>
+      );
+    })}
+  </div>
+);
+
+// =========================================
+// 10. DataTable (16px padding, hover, numeric right-align)
+// =========================================
+export interface TableColumn { key: string; label: string; numeric?: boolean; }
+
 interface DataTableProps {
-  headers: string[];
+  headers?: string[];
+  columns?: TableColumn[];
   children: React.ReactNode;
 }
-export const DataTable: React.FC<DataTableProps> = ({ headers, children }) => {
+
+export const DataTable: React.FC<DataTableProps> = ({ headers, columns, children }) => {
+  const cols: TableColumn[] = columns ?? (headers ?? []).map((h, i) => ({ key: `h${i}`, label: h }));
   return (
-    <div className="w-full overflow-x-auto rounded-[18px] border border-[var(--border-default)] bg-[var(--surface-1)]">
-      <table className="w-full text-left border-collapse text-xs">
+    <div className="w-full overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--surface-1)]">
+      <table className="table-base">
         <thead>
-          <tr className="border-b border-[var(--border-default)] bg-[var(--surface-2)] text-[var(--text-secondary)] font-semibold select-none">
-            {headers.map((h, idx) => (
-              <th key={idx} className="px-4 py-3 uppercase tracking-[0.14em] text-[10px]">{h}</th>
+          <tr>
+            {cols.map((c) => (
+              <th key={c.key} className={c.numeric ? 'cell-num' : ''} scope="col">{c.label}</th>
             ))}
           </tr>
         </thead>
-        <tbody>
-          {children}
-        </tbody>
+        <tbody>{children}</tbody>
       </table>
     </div>
   );
 };
 
-// ==========================================
-// 9. MetricTile
-// ==========================================
+// =========================================
+// 11. MetricTile (white default; gradient variant)
+// =========================================
+export type MetricGradient = 'blue' | 'violet' | 'teal' | 'amber';
+
 interface MetricTileProps {
   label: string;
   value: string | number;
   delta?: string;
   tone?: 'emerald' | 'amber' | 'cyan' | 'violet' | 'danger' | 'neutral';
+  gradient?: MetricGradient;
+  icon?: string;
 }
-export const MetricTile: React.FC<MetricTileProps> = ({
-  label,
-  value,
-  delta,
-  tone = 'neutral',
-}) => {
+
+export const MetricTile: React.FC<MetricTileProps> = ({ label, value, delta, tone = 'neutral', gradient, icon }) => {
   const getToneClasses = () => {
     switch (tone) {
       case 'emerald': return 'bg-green-50 text-green-700 border-green-200';
@@ -442,9 +642,27 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     }
   };
 
+  if (gradient) {
+    return (
+      <div className={`kpi-gradient kpi-gradient-${gradient} min-h-[108px] p-4`}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/75">{label}</span>
+          {icon && <Icon name={icon} size={16} className="text-white/70" />}
+        </div>
+        <div className="mt-4 flex items-end justify-between gap-2">
+          <strong className="text-[32px] font-bold tracking-[-0.04em] text-white">{value}</strong>
+          {delta && <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1 text-[10px] font-semibold text-white">{delta}</span>}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="panel-card-tight min-h-[108px] overflow-hidden p-4">
-      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">{label}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">{label}</span>
+        {icon && <Icon name={icon} size={16} className="text-[var(--accent-primary)]" />}
+      </div>
       <div className="mt-4 flex items-end justify-between gap-2">
         <strong className="text-[32px] font-bold tracking-[-0.04em] text-[var(--text-primary)]">{value}</strong>
         {delta && (
@@ -457,172 +675,134 @@ export const MetricTile: React.FC<MetricTileProps> = ({
   );
 };
 
-// ==========================================
-// 10. StatusBadge
-// ==========================================
-export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${getStatusBadgeClasses(status)}`}>
-      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-      {getStatusLabel(status)}
-    </span>
-  );
-};
+// =========================================
+// 12. StatusBadge
+// =========================================
+export const StatusBadge: React.FC<{ status: string }> = ({ status }) => (
+  <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${getStatusBadgeClasses(status)}`}>
+    <span className="w-1.5 h-1.5 rounded-full bg-current" />
+    {getStatusLabel(status)}
+  </span>
+);
 
-// ==========================================
-// 11. ActionButton
-// ==========================================
-interface ActionButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'success' | 'warning';
-  icon?: string;
-  loading?: boolean;
+// =========================================
+// 13. Input + SearchField
+// =========================================
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
 }
-export const ActionButton: React.FC<ActionButtonProps> = ({
-  variant = 'secondary',
-  icon,
-  loading = false,
-  children,
-  className = "",
-  disabled,
-  ...props
-}) => {
-  const getVariantClass = () => {
-    if (disabled) return 'cursor-not-allowed border-[var(--border-default)] bg-slate-100 text-slate-400';
-    switch (variant) {
-      case 'primary': return 'border-transparent bg-[var(--accent-primary)] text-white shadow-sm hover:bg-[var(--accent-primary-strong)]';
-      case 'danger': return 'border-transparent bg-[var(--accent-danger)] text-white hover:bg-red-700';
-      case 'success': return 'border-transparent bg-[var(--accent-success)] text-white hover:bg-emerald-700';
-      case 'warning': return 'border-transparent bg-amber-500 text-white hover:bg-amber-600';
-      default: return 'border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)]';
-    }
-  };
 
-
+export const Input: React.FC<InputProps> = ({ label, className = '', id, ...props }) => {
+  const generatedId = React.useId();
+  const inputId = id ?? generatedId;
   return (
-    <button
-      disabled={disabled || loading}
-      className={`flex items-center justify-center gap-1.5 rounded-[16px] border px-4 py-2.5 text-xs font-semibold transition-all ${getVariantClass()} ${className}`}
-      {...props}
-    >
-      {loading ? (
-        <i className="fas fa-spinner animate-spin text-xs"></i>
-      ) : icon ? (
-        <i className={`fas ${icon} text-xs`}></i>
-      ) : null}
-      <span>{children}</span>
-    </button>
-  );
-};
-
-// ==========================================
-// 12. SearchField
-// ==========================================
-interface SearchFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  placeholder?: string;
-}
-export const SearchField: React.FC<SearchFieldProps> = ({
-  placeholder = "Поиск...",
-  className = "",
-  value,
-  onChange,
-  ...props
-}) => {
-  return (
-    <div className={`relative ${className}`}>
-      <i className="fas fa-magnifying-glass absolute left-3 top-2.5 text-[var(--text-muted)] text-xs"></i>
+    <div className={`flex flex-col gap-1 ${className}`}>
+      {label && (
+        <label htmlFor={inputId} className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">{label}</label>
+      )}
       <input
-        type="text"
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        className="w-full rounded-[16px] border border-[var(--border-default)] bg-[var(--surface-1)] pl-9 pr-3 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none transition-all focus:border-[var(--accent-primary)] font-sans"
+        id={inputId}
+        className="border border-[var(--border-default)] rounded-[var(--radius-control)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] bg-[var(--surface-1)] transition-all"
         {...props}
       />
     </div>
   );
 };
 
-// ==========================================
-// 13. Dropzone
-// ==========================================
+interface SearchFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  placeholder?: string;
+}
+
+export const SearchField: React.FC<SearchFieldProps> = ({ placeholder = 'Поиск...', className = '', value, onChange, ...props }) => (
+  <div className={`relative ${className}`}>
+    <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" aria-hidden="true" />
+    <input
+      type="text"
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] pl-9 pr-3 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none transition-all focus:border-[var(--accent-primary)] font-sans"
+      {...props}
+    />
+  </div>
+);
+
+// =========================================
+// 14. ModalShell (light 32px, focus-trap, Escape)
+// =========================================
+interface ModalShellProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  widthClass?: string;
+}
+
+export const ModalShell: React.FC<ModalShellProps> = ({ open, onClose, title, subtitle, children, footer, widthClass = 'max-w-2xl' }) => {
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+  useFocusTrap(panelRef, open);
+  useKeydown('Escape', () => { if (open) onClose(); }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`modal-panel relative z-[90] w-full ${widthClass} max-h-[88vh] flex flex-col overflow-hidden animate-fadeIn`}
+      >
+        <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-4 border-b border-[var(--border-subtle)]">
+          <div>
+            <h2 className="text-base font-bold text-[var(--text-primary)]">{title}</h2>
+            {subtitle && <p className="text-[11px] text-[var(--text-muted)] mt-1">{subtitle}</p>}
+          </div>
+          <IconButton icon="x-mark" label="Закрыть диалог" variant="ghost" onClick={onClose} />
+        </div>
+        <div className="flex-1 overflow-y-auto px-7 py-5">{children}</div>
+        {footer && <div className="px-7 py-4 border-t border-[var(--border-subtle)] bg-[var(--surface-2)]">{footer}</div>}
+      </div>
+    </div>
+  );
+};
+
+// =========================================
+// 15. Dropzone
+// =========================================
 interface DropzoneProps {
   title: string;
   description: string;
   onImport: (text: string) => void;
-  onFileUpload?: (file: File) => Promise<string>; // returns artifact_id
+  onFileUpload?: (file: File) => Promise<string>;
   acceptLabel?: string;
 }
-export const Dropzone: React.FC<DropzoneProps> = ({
-  title,
-  description,
-  onImport,
-  onFileUpload,
-  acceptLabel = "Разрешены файлы JSON или TXT",
-}) => {
+
+export const Dropzone: React.FC<DropzoneProps> = ({ title, description, onImport, onFileUpload, acceptLabel = 'Разрешены файлы JSON или TXT' }) => {
   const [dragActive, setDragActive] = React.useState(false);
   const [pasteText, setPasteText] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState(0);
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      await handleFile(file);
-    }
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      await handleFile(file);
-    }
-  };
-
   const handleFile = async (file: File) => {
     if (!onFileUpload) {
-      // Fallback to text reading for backward compatibility
       const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          onImport(event.target.result as string);
-        }
-      };
+      reader.onload = (event) => { if (event.target?.result) onImport(event.target.result as string); };
       reader.readAsText(file);
       return;
     }
-
     setUploading(true);
     setUploadProgress(0);
-    
     try {
-      // Simulate progress for UX
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 10, 90));
-      }, 100);
-      
+      const progressInterval = setInterval(() => { setUploadProgress((p) => Math.min(p + 10, 90)); }, 100);
       await onFileUpload(file);
-      
       clearInterval(progressInterval);
       setUploadProgress(100);
-      
-      // File upload handler should manage the complete flow (import from artifact, etc.)
-      // Don't call onImport for file uploads - the handler manages the full flow
     } catch (error) {
-      console.error('File upload error:', error);
       const errorMsg = error instanceof Error ? error.message : 'Ошибка загрузки файла';
       onImport(`[ОШИБКА загрузки ${file.name}]: ${errorMsg}`);
     } finally {
@@ -634,51 +814,27 @@ export const Dropzone: React.FC<DropzoneProps> = ({
   return (
     <div className="flex flex-col gap-4 text-xs">
       <div
-        onDragEnter={handleDrag}
-        onDragOver={handleDrag}
-        onDragLeave={handleDrag}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${
-          dragActive
-            ? 'border-[var(--accent-primary)] bg-[var(--state-selected)] shadow-[0_0_12px_rgba(0,180,157,0.1)]'
-            : 'border-[var(--border-strong)] hover:border-[var(--accent-primary)]/50 bg-[var(--surface-2)]'
-        }`}
+        onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+        onDrop={async (e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) await handleFile(e.dataTransfer.files[0]); }}
+        className={`border-2 border-dashed rounded-[var(--radius-card)] p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${dragActive ? 'border-[var(--accent-primary)] bg-[var(--state-selected)]' : 'border-[var(--border-strong)] hover:border-[var(--accent-primary)]/50 bg-[var(--surface-2)]'}`}
       >
-        <i className="fas fa-cloud-arrow-up text-2xl text-[var(--accent-primary)] mb-3 animate-bounce"></i>
+        <CloudArrowUp size={28} className="text-[var(--accent-primary)] mb-3" aria-hidden="true" />
         <strong className="text-xs text-[var(--text-primary)] font-semibold block mb-1">{title}</strong>
         <p className="text-[11px] text-[var(--text-secondary)] max-w-xs leading-relaxed">{description}</p>
         <span className="text-[9px] text-[var(--text-muted)] font-mono mt-3 uppercase tracking-wider block">{acceptLabel}</span>
-        
-        {/* File input for click-to-upload */}
-        <input
-          type="file"
-          className="hidden"
-          id="dropzone-file-input"
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.json,.csv"
-          onChange={handleFileSelect}
-          disabled={uploading}
-        />
-        <label
-          htmlFor="dropzone-file-input"
-          className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-2)] cursor-pointer transition-all"
-        >
-          <i className="fas fa-paperclip"></i>
-          Или выберите файл
+        <input type="file" className="hidden" id="dropzone-file-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.json,.csv" onChange={async (e) => { if (e.target.files?.[0]) await handleFile(e.target.files[0]); }} disabled={uploading} />
+        <label htmlFor="dropzone-file-input" className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-2)] cursor-pointer transition-all">
+          <Paperclip size={14} aria-hidden="true" /> Или выберите файл
         </label>
       </div>
 
-      {/* Upload progress */}
       {uploading && (
         <div className="w-full">
-          <div className="flex justify-between text-[10px] text-[var(--text-muted)] mb-1">
-            <span>Загрузка файла...</span>
-            <span>{uploadProgress}%</span>
-          </div>
+          <div className="flex justify-between text-[10px] text-[var(--text-muted)] mb-1"><span>Загрузка файла...</span><span>{uploadProgress}%</span></div>
           <div className="w-full h-2 bg-[var(--surface-3)] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[var(--accent-primary)] transition-all duration-300 ease-out"
-              style={{ width: `${uploadProgress}%` }}
-            ></div>
+            <div className="h-full bg-[var(--accent-primary)] transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }} />
           </div>
         </div>
       )}
@@ -690,81 +846,42 @@ export const Dropzone: React.FC<DropzoneProps> = ({
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
           placeholder="Вставьте JSON поставщиков или текст запроса клиента..."
-          className="w-full border border-[var(--border-default)] rounded-xl p-3 bg-[var(--surface-1)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]/20 font-mono shadow-inner transition-all duration-200"
+          className="w-full border border-[var(--border-default)] rounded-[var(--radius-control)] p-3 bg-[var(--surface-1)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]/20 font-mono transition-all duration-200"
           disabled={uploading}
         />
-        <ActionButton 
-          variant="primary" 
-          icon="fa-paper-plane"
-          disabled={!pasteText.trim() || uploading}
-          onClick={() => {
-            onImport(pasteText);
-            setPasteText('');
-          }}
-        >
+        <Button variant="primary" icon="paper-plane" disabled={!pasteText.trim() || uploading} onClick={() => { onImport(pasteText); setPasteText(''); }}>
           Распознать и обработать
-        </ActionButton>
+        </Button>
       </div>
     </div>
   );
 };
 
-// ==========================================
-// 14. ReviewPanel
-// ==========================================
-interface ReviewItem {
-  name: string;
-  quantity: number;
-}
-interface ReviewPanelProps {
-  items: ReviewItem[];
-  onChange: (items: ReviewItem[]) => void;
-  onConfirm: () => void;
-}
-export const ReviewPanel: React.FC<ReviewPanelProps> = ({
-  items,
-  onChange,
-  onConfirm,
-}) => {
+// =========================================
+// 16. ReviewPanel
+// =========================================
+interface ReviewItem { name: string; quantity: number; }
+interface ReviewPanelProps { items: ReviewItem[]; onChange: (items: ReviewItem[]) => void; onConfirm: () => void; }
+
+export const ReviewPanel: React.FC<ReviewPanelProps> = ({ items, onChange, onConfirm }) => {
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [editName, setEditName] = React.useState('');
   const [editQty, setEditQty] = React.useState(1);
   const [newName, setNewName] = React.useState('');
   const [newQty, setNewQty] = React.useState(1);
 
-  const startEdit = (idx: number, item: ReviewItem) => {
-    setEditingIndex(idx);
-    setEditName(item.name);
-    setEditQty(item.quantity);
-  };
-
   const saveEdit = (idx: number) => {
-    const updated = [...items];
-    updated[idx] = { name: editName, quantity: editQty };
-    onChange(updated);
-    setEditingIndex(null);
+    const updated = [...items]; updated[idx] = { name: editName, quantity: editQty }; onChange(updated); setEditingIndex(null);
   };
-
-  const deleteItem = (idx: number) => {
-    const updated = items.filter((_, i) => i !== idx);
-    onChange(updated);
-  };
-
-  const addItem = () => {
-    if (!newName.trim()) return;
-    onChange([...items, { name: newName, quantity: newQty }]);
-    setNewName('');
-    setNewQty(1);
-  };
+  const deleteItem = (idx: number) => { onChange(items.filter((_, i) => i !== idx)); };
+  const addItem = () => { if (!newName.trim()) return; onChange([...items, { name: newName, quantity: newQty }]); setNewName(''); setNewQty(1); };
 
   return (
     <div className="flex flex-col gap-4 text-xs">
-      <div className="border border-[var(--border-default)] rounded-lg overflow-hidden bg-[var(--surface-1)] shadow-sm">
+      <div className="border border-[var(--border-default)] rounded-[var(--radius-control)] overflow-hidden bg-[var(--surface-1)] shadow-[var(--shadow-sm)]">
         <div className="bg-[var(--surface-2)] border-b border-[var(--border-default)] px-4 py-2 flex items-center justify-between font-bold text-[11px] text-[var(--text-secondary)] uppercase tracking-wider">
-          <span>Список распознанных деталей</span>
-          <span>найдено {items.length} дет.</span>
+          <span>Список распознанных деталей</span><span>найдено {items.length} дет.</span>
         </div>
-        
         {items.length === 0 ? (
           <div className="p-6 text-center text-[var(--text-secondary)]">Детали не найдены. Пожалуйста, добавьте детали вручную.</div>
         ) : (
@@ -775,19 +892,8 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
                 <div key={idx} className="p-3 flex items-center justify-between gap-3 hover:bg-[var(--surface-2)] transition-all">
                   {isEditing ? (
                     <div className="flex-1 flex gap-2">
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 border border-[var(--border-strong)] rounded px-2 py-1 text-xs"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        value={editQty}
-                        onChange={(e) => setEditQty(Number(e.target.value))}
-                        className="w-16 border border-[var(--border-strong)] rounded px-2 py-1 text-xs"
-                      />
+                      <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 border border-[var(--border-strong)] rounded px-2 py-1 text-xs" />
+                      <input type="number" min="1" value={editQty} onChange={(e) => setEditQty(Number(e.target.value))} className="w-16 border border-[var(--border-strong)] rounded px-2 py-1 text-xs" />
                     </div>
                   ) : (
                     <div className="flex-1">
@@ -795,14 +901,13 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
                       <div className="text-[var(--text-secondary)] mt-0.5">Количество: <span className="font-semibold">{item.quantity}</span> шт.</div>
                     </div>
                   )}
-
                   <div className="flex items-center gap-1">
                     {isEditing ? (
-                      <ActionButton variant="success" icon="fa-check" onClick={() => saveEdit(idx)} />
+                      <Button variant="success" icon="check" size="sm" onClick={() => saveEdit(idx)} />
                     ) : (
-                      <ActionButton icon="fa-pencil" onClick={() => startEdit(idx, item)} />
+                      <Button icon="pencil" size="sm" onClick={() => { setEditingIndex(idx); setEditName(item.name); setEditQty(item.quantity); }} />
                     )}
-                    <ActionButton icon="fa-trash text-red-500" onClick={() => deleteItem(idx)} />
+                    <Button variant="danger" icon="trash" size="sm" onClick={() => deleteItem(idx)} />
                   </div>
                 </div>
               );
@@ -811,170 +916,122 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
         )}
       </div>
 
-      {/* Manual part addition form */}
-      <div className="bg-[var(--surface-2)] border border-[var(--border-default)] rounded-lg p-3 flex flex-col md:flex-row gap-3 items-end">
+      <div className="bg-[var(--surface-2)] border border-[var(--border-default)] rounded-[var(--radius-control)] p-3 flex flex-col md:flex-row gap-3 items-end">
         <div className="flex-1 flex flex-col gap-1 w-full">
           <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Добавить деталь вручную</label>
-          <input
-            type="text"
-            placeholder="например, Передние тормозные колодки OEM 34116852253"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="border border-[var(--border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] bg-[var(--surface-1)]"
-          />
+          <input type="text" placeholder="например, Передние тормозные колодки OEM 34116852253" value={newName} onChange={(e) => setNewName(e.target.value)} className="border border-[var(--border-default)] rounded-[var(--radius-control)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] bg-[var(--surface-1)]" />
         </div>
         <div className="w-full md:w-20 flex flex-col gap-1">
           <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Кол-во</label>
-          <input
-            type="number"
-            min="1"
-            value={newQty}
-            onChange={(e) => setNewQty(Number(e.target.value))}
-            className="border border-[var(--border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] bg-[var(--surface-1)]"
-          />
+          <input type="number" min="1" value={newQty} onChange={(e) => setNewQty(Number(e.target.value))} className="border border-[var(--border-default)] rounded-[var(--radius-control)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] bg-[var(--surface-1)]" />
         </div>
-        <ActionButton 
-          variant="secondary" 
-          icon="fa-plus" 
-          disabled={!newName.trim()}
-          onClick={addItem}
-          className="w-full md:w-auto"
-        >
-          Добавить
-        </ActionButton>
+        <Button variant="secondary" icon="plus" disabled={!newName.trim()} onClick={addItem} className="w-full md:w-auto">Добавить</Button>
       </div>
 
-      {/* Confirm Button */}
       <div className="flex justify-end pt-2 border-t border-[var(--border-subtle)]">
-        <ActionButton variant="primary" icon="fa-square-check" onClick={onConfirm}>
-          Подтвердить проверку и перейти к подбору
-        </ActionButton>
+        <Button variant="primary" icon="square-check" onClick={onConfirm}>Подтвердить проверку и перейти к подбору</Button>
       </div>
     </div>
   );
 };
 
-// ==========================================
-// 15. SplitPane
-// ==========================================
-export const SplitPane: React.FC<{ left: React.ReactNode; right: React.ReactNode }> = ({ left, right }) => {
-  return (
-    <div className="grid grid-cols-[1fr_340px] h-full overflow-hidden">
-      <div className="overflow-y-auto p-4">{left}</div>
-      <div className="overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface-1)] p-4">{right}</div>
-    </div>
-  );
-};
+// =========================================
+// 17. SplitPane
+// =========================================
+export const SplitPane: React.FC<{ left: React.ReactNode; right: React.ReactNode }> = ({ left, right }) => (
+  <div className="grid grid-cols-[1fr_340px] h-full overflow-hidden">
+    <div className="overflow-y-auto p-4">{left}</div>
+    <div className="overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface-1)] p-4">{right}</div>
+  </div>
+);
 
-// ==========================================
-// 16. EmptyState
-// ==========================================
-interface EmptyStateProps {
-  title: string;
-  description: string;
-  icon?: string;
-  actionNode?: React.ReactNode;
-}
-export const EmptyState: React.FC<EmptyStateProps> = ({
-  title,
-  description,
-  icon = "fa-folder-open",
-  actionNode,
-}) => {
-  return (
-    <div className="flex flex-col items-center justify-center text-center p-8 bg-[var(--surface-1)] border border-[var(--border-default)] rounded-lg min-h-[300px] shadow-sm select-none">
-      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-[var(--text-muted)] text-xl border border-slate-200">
-        <i className={`fas ${icon}`}></i>
-      </div>
-      <h3 className="text-sm font-bold text-[var(--text-primary)] block mb-1">{title}</h3>
-      <p className="text-[11px] text-[var(--text-secondary)] max-w-xs leading-relaxed mb-4">{description}</p>
-      {actionNode && <div>{actionNode}</div>}
-    </div>
-  );
-};
+// =========================================
+// 18. EmptyState
+// =========================================
+interface EmptyStateProps { title: string; description: string; icon?: string; actionNode?: React.ReactNode; }
 
-// ==========================================
-// 17. InlineAlert
-// ==========================================
-interface InlineAlertProps {
-  message: string | React.ReactNode;
-  type?: 'warning' | 'danger' | 'success' | 'info';
-}
-export const InlineAlert: React.FC<InlineAlertProps> = ({
-  message,
-  type = 'info',
-}) => {
+export const EmptyState: React.FC<EmptyStateProps> = ({ title, description, icon = 'folder-open', actionNode }) => (
+  <div className="flex flex-col items-center justify-center text-center p-8 bg-[var(--surface-1)] border border-[var(--border-default)] rounded-[var(--radius-card)] min-h-[300px] shadow-[var(--shadow-sm)] select-none">
+    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-[var(--text-muted)] border border-slate-200">
+      <Icon name={icon} size={24} />
+    </div>
+    <h3 className="text-sm font-bold text-[var(--text-primary)] block mb-1">{title}</h3>
+    <p className="text-[11px] text-[var(--text-secondary)] max-w-xs leading-relaxed mb-4">{description}</p>
+    {actionNode && <div>{actionNode}</div>}
+  </div>
+);
+
+// =========================================
+// 19. InlineAlert
+// =========================================
+interface InlineAlertProps { message: string | React.ReactNode; type?: 'warning' | 'danger' | 'success' | 'info'; }
+
+export const InlineAlert: React.FC<InlineAlertProps> = ({ message, type = 'info' }) => {
   const getAlertClasses = () => {
     switch (type) {
-      case 'warning': return 'bg-amber-50 border-amber-200 text-amber-800 fa-exclamation-triangle';
-      case 'danger': return 'bg-red-50 border-red-200 text-red-800 fa-radiation';
-      case 'success': return 'bg-green-50 border-green-200 text-green-800 fa-circle-check';
-      default: return 'bg-blue-50 border-blue-200 text-blue-800 fa-circle-info';
+      case 'warning': return { container: 'bg-amber-50 border-amber-200 text-amber-800', icon: 'exclamation-triangle' };
+      case 'danger': return { container: 'bg-red-50 border-red-200 text-red-800', icon: 'radiation' };
+      case 'success': return { container: 'bg-green-50 border-green-200 text-green-800', icon: 'circle-check' };
+      default: return { container: 'bg-blue-50 border-blue-200 text-blue-800', icon: 'circle-info' };
     }
   };
-
-  const classes = getAlertClasses();
-
+  const { container, icon } = getAlertClasses();
   return (
-    <div className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 mb-4 shadow-sm ${classes.split(' ').slice(0, 3).join(' ')}`}>
-      <i className={`fas ${classes.split(' ').slice(3).join(' ')} mt-0.5 text-sm`}></i>
+    <div className={`p-3 rounded-[var(--radius-control)] border text-xs flex items-start gap-2.5 mb-4 shadow-[var(--shadow-sm)] ${container}`}>
+      <Icon name={icon} size={16} className="mt-0.5 shrink-0" />
       <span className="leading-normal font-medium">{message}</span>
     </div>
   );
 };
 
-// ==========================================
-// 18. StepGate
-// ==========================================
-interface StepGateProps {
-  currentStep: number;
-  steps: string[];
-  onStepClick?: (idx: number) => void;
-}
-export const StepGate: React.FC<StepGateProps> = ({
-  currentStep,
-  steps,
-  onStepClick,
-}) => {
-  return (
-    <div className="flex items-center w-full justify-between border border-[var(--border-default)] bg-[var(--surface-1)] p-2.5 rounded-lg mb-4 shadow-sm select-none">
-      {steps.map((step, idx) => {
-        const isCompleted = idx < currentStep;
-        const isCurrent = idx === currentStep;
-        const isClickable = onStepClick && idx <= currentStep; // can go backwards or switch to current
+// =========================================
+// 20. StepGate
+// =========================================
+interface StepGateProps { currentStep: number; steps: string[]; onStepClick?: (idx: number) => void; }
 
-        return (
-          <React.Fragment key={idx}>
-            <div 
-              onClick={() => isClickable && onStepClick && onStepClick(idx)}
-              className={`flex items-center gap-2 px-2 py-1 rounded transition-all ${
-                isClickable ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'
-              }`}
-            >
-              {/* Circle Index Indicator */}
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all ${
-                isCurrent 
-                  ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)] shadow-sm'
-                  : isCompleted 
-                  ? 'bg-green-500 text-white border-green-500'
-                  : 'bg-white text-[var(--text-muted)] border-[var(--border-strong)]'
-              }`}>
-                {isCompleted ? <i className="fas fa-check text-[8px]"></i> : idx + 1}
-              </span>
-              <span className={`text-[11px] font-semibold transition-all ${
-                isCurrent ? 'text-[var(--accent-primary)] font-bold' : isCompleted ? 'text-green-700' : 'text-[var(--text-muted)]'
-              }`}>
-                {step}
-              </span>
-            </div>
-            
-            {/* Horizontal Line Connector */}
-            {idx < steps.length - 1 && (
-              <div className={`flex-1 h-[2px] mx-2 ${idx < currentStep ? 'bg-green-300' : 'bg-[var(--border-default)]'}`}></div>
-            )}
-          </React.Fragment>
-        );
-      })}
+export const StepGate: React.FC<StepGateProps> = ({ currentStep, steps, onStepClick }) => (
+  <div className="flex items-center w-full justify-between border border-[var(--border-default)] bg-[var(--surface-1)] p-2.5 rounded-[var(--radius-control)] mb-4 shadow-[var(--shadow-sm)] select-none">
+    {steps.map((step, idx) => {
+      const isCompleted = idx < currentStep;
+      const isCurrent = idx === currentStep;
+      const isClickable = onStepClick && idx <= currentStep;
+      return (
+        <React.Fragment key={idx}>
+          <div
+            onClick={() => isClickable && onStepClick && onStepClick(idx)}
+            className={`flex items-center gap-2 px-2 py-1 rounded transition-all ${isClickable ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}
+          >
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all ${isCurrent ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)] shadow-sm' : isCompleted ? 'bg-green-500 text-white border-green-500' : 'bg-white text-[var(--text-muted)] border-[var(--border-strong)]'}`}>
+              {isCompleted ? <Icon name="check" size={8} /> : idx + 1}
+            </span>
+            <span className={`text-[11px] font-semibold transition-all ${isCurrent ? 'text-[var(--accent-primary)] font-bold' : isCompleted ? 'text-green-700' : 'text-[var(--text-muted)]'}`}>{step}</span>
+          </div>
+          {idx < steps.length - 1 && <div className={`flex-1 h-[2px] mx-2 ${idx < currentStep ? 'bg-green-300' : 'bg-[var(--border-default)]'}`} />}
+        </React.Fragment>
+      );
+    })}
+  </div>
+);
+
+// =========================================
+// 21. Skeleton
+// =========================================
+export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={`skeleton rounded-[var(--radius-control)] ${className}`} />
+);
+
+// =========================================
+// 22. ErrorState
+// =========================================
+interface ErrorStateProps { title?: string; message: string; onRetry?: () => void; }
+
+export const ErrorState: React.FC<ErrorStateProps> = ({ title = 'Ошибка загрузки данных', message, onRetry }) => (
+  <div className="flex flex-col items-center justify-center text-center p-8 bg-red-50/50 border border-red-200 rounded-[var(--radius-card)] min-h-[200px] select-none">
+    <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4 text-red-500 border border-red-200">
+      <Icon name="exclamation-triangle" size={24} />
     </div>
-  );
-};
+    <h3 className="text-sm font-bold text-red-800 block mb-1">{title}</h3>
+    <p className="text-[11px] text-red-700 max-w-xs leading-relaxed mb-4">{message}</p>
+    {onRetry && <Button variant="primary" icon="arrow-rotate-right" size="sm" onClick={onRetry}>Повторить</Button>}
+  </div>
+);

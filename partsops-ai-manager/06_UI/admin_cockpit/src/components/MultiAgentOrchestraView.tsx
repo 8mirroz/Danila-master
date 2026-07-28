@@ -105,7 +105,7 @@ export function MultiAgentOrchestraView() {
           [run.request_id]: { status: 'error', message: error.detail || 'Ошибка синхронизации' },
         }));
       }
-    } catch (e) {
+    } catch {
       setVaultSyncStatus((prev) => ({
         ...prev,
         [run.request_id]: { status: 'error', message: 'Ошибка сети' },

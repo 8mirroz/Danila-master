@@ -3,16 +3,20 @@ Unit and Integration Tests for Copilot (Hermes Assistant Router).
 Tests tenant isolation, RBAC, PII masking, context building, help source retrieval, SSE streaming, stop runs, rate limits, budget guards, and migration status.
 """
 import os
+import asyncio
 import pytest
+import httpx
 from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 import main
+import routers.copilot as copilot_router
 from database import get_session
 from models_copilot import CopilotConversation, CopilotMessage, CopilotRun
 from services.help_service import get_help_sources_for_context, get_help_source_by_id
+from services.hermes_transport import HermesTransportError, is_strong_api_key
 from services.copilot_context import (
     CopilotContextRef,
     build_context_envelope,
@@ -62,6 +66,49 @@ def test_copilot_health(client: TestClient):
     assert "profile" in data
     assert data["profile"] == "partsops"
     assert "partsops-navigation" in data["skills"]
+
+
+def test_hermes_transport_rejects_placeholder_key():
+    assert not is_strong_api_key("partsops-hermes-secret-key")
+    assert not is_strong_api_key("short")
+    assert is_strong_api_key("0123456789abcdef0123456789abcdef")
+    error = HermesTransportError("missing", code="HERMES_KEY_NOT_CONFIGURED")
+    assert error.code == "HERMES_KEY_NOT_CONFIGURED"
+
+
+def test_native_hermes_transport_auth_and_sse_contract():
+    calls = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path, request.headers.get("authorization")))
+        if request.url.path == "/v1/capabilities":
+            return httpx.Response(200, json={"model": "partsops", "features": {"run_events_sse": True}})
+        if request.url.path == "/v1/runs" and request.method == "POST":
+            return httpx.Response(202, json={"run_id": "run_native"})
+        if request.url.path == "/v1/runs/run_native/events":
+            return httpx.Response(200, content=b'data: {"event":"message.delta","delta":"OK"}\n\ndata: {"event":"run.completed"}\n\n', headers={"content-type": "text/event-stream"})
+        if request.url.path == "/v1/runs/run_native/stop":
+            return httpx.Response(200, json={"status": "stopping"})
+        return httpx.Response(404)
+
+    async def scenario():
+        transport = copilot_router.HermesTransport(
+            base_url="http://hermes.test",
+            api_key="0123456789abcdef0123456789abcdef",
+            transport=httpx.MockTransport(handler),
+        )
+        capabilities = await transport.capabilities()
+        assert capabilities["model"] == "partsops"
+        started = await transport.start_run(message="hello", instructions="read-only", conversation_history=[])
+        assert started["run_id"] == "run_native"
+        events = [event async for event in transport.stream_run("run_native")]
+        assert events[0]["event"] == "message.delta"
+        assert events[1]["event"] == "run.completed"
+        await transport.stop_run("run_native")
+
+    asyncio.run(scenario())
+    assert calls
+    assert all(call[2] == "Bearer 0123456789abcdef0123456789abcdef" for call in calls)
 
 
 def test_create_and_get_conversation(client: TestClient):
@@ -174,7 +221,22 @@ def test_strict_grounding_filter():
     assert len(filtered_b) == 0
 
 
-def test_run_creation_and_sse_streaming(client: TestClient):
+def test_run_creation_and_sse_streaming(client: TestClient, monkeypatch):
+    class FakeHermesTransport:
+        async def start_run(self, **kwargs):
+            assert kwargs["message"] == "Объясни статус заказа"
+            assert "READ-ONLY" in kwargs["instructions"]
+            return {"run_id": "hermes-test-run", "model": "partsops-test"}
+
+        async def stream_run(self, hermes_run_id):
+            assert hermes_run_id == "hermes-test-run"
+            yield {"event": "message.delta", "delta": "Подтверждённый ответ."}
+            yield {"event": "run.completed", "usage": {"total_tokens": 12, "cost_usd": 0.01}}
+
+        async def stop_run(self, hermes_run_id):
+            return {"status": "stopped", "run_id": hermes_run_id}
+
+    monkeypatch.setattr(copilot_router, "HermesTransport", FakeHermesTransport)
     headers = make_auth_headers(tenant_id="tenant-stream", role="manager")
     # 1. Create conversation
     conv_res = client.post("/api/copilot/conversations", json={"title": "Stream Test"}, headers=headers)
@@ -196,6 +258,8 @@ def test_run_creation_and_sse_streaming(client: TestClient):
     assert "run.started" in content
     assert "assistant.delta" in content
     assert "run.completed" in content
+    assert '"sequence":' in content
+    assert '"correlation_id":' in content
 
 
 def test_stop_copilot_run(client: TestClient):

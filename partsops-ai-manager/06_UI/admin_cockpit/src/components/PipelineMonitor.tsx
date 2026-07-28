@@ -198,7 +198,7 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
             let parts: any[] = [];
             try {
               parts = request.parts_json ? JSON.parse(request.parts_json) : [];
-            } catch (e) {
+            } catch {
               // ignore
             }
 

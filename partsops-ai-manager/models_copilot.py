@@ -56,6 +56,7 @@ class CopilotRun(SQLModel, table=True):
     correlation_id: str = Field(index=True)
     status: str = Field(default="running", description="running|completed|failed|stopped")
     context_ref_json: str = Field(default="{}")
+    hermes_run_id: Optional[str] = Field(default=None, index=True)
     provider: str = Field(default="anthropic")
     model: str = Field(default="claude-3-5-haiku")
     tokens_used: int = Field(default=0)

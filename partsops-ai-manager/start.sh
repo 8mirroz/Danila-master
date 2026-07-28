@@ -26,6 +26,12 @@ if [ -f ".env" ]; then
   set +a
 fi
 
+if [ -z "${HERMES_API_KEY:-}" ] || [ "${#HERMES_API_KEY}" -lt 16 ] || [ "${HERMES_API_KEY}" = "partsops-hermes-secret-key" ]; then
+  echo "[!] HERMES_API_KEY must be a strong secret (at least 16 characters)."
+  exit 1
+fi
+export API_SERVER_KEY="${HERMES_API_KEY}"
+
 # Trap SIGINT/SIGTERM to kill only spawned child processes
 cleanup() {
   echo ""
@@ -46,29 +52,33 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM EXIT
 
-# 1. Start Hermes API Sidecar Gateway (Port 8642)
-echo "Starting Hermes API Gateway (127.0.0.1:8642)..."
+# 1. Start Hermes native API Server through the gateway platform (Port 8642)
+echo "Starting Hermes native API Server (127.0.0.1:8642)..."
 if command -v hermes &> /dev/null; then
-  hermes serve --profile partsops --host 127.0.0.1 --port 8642 --isolated &
+  API_SERVER_ENABLED=1 \
+  API_SERVER_PORT=8642 \
+  API_SERVER_HOST=127.0.0.1 \
+  hermes --profile partsops gateway run --force --no-supervise &
   HERMES_PID=$!
 else
-  echo "[!] Hermes CLI binary not found. Skipping live gateway daemon. Copilot will run in fallback mode."
-  HERMES_PID=""
+  echo "[!] Hermes CLI binary not found. Native Copilot cannot start."
+  exit 1
 fi
 
 # Wait bounded up to 20s for Hermes readiness if spawned
 if [ -n "${HERMES_PID}" ]; then
-  echo "Waiting for Hermes API Server readiness (max 20s)..."
+  echo "Waiting for authenticated Hermes capabilities (max 20s)..."
   WAIT_COUNTER=0
-  until curl -s http://127.0.0.1:8642/ > /dev/null || [ ${WAIT_COUNTER} -ge 20 ]; do
+  until curl -fsS -H "Authorization: Bearer ${HERMES_API_KEY}" http://127.0.0.1:8642/v1/capabilities > /dev/null || [ ${WAIT_COUNTER} -ge 20 ]; do
     sleep 1
     WAIT_COUNTER=$((WAIT_COUNTER + 1))
   done
 
   if [ ${WAIT_COUNTER} -lt 20 ]; then
-    echo "[✓] Hermes API Gateway is ready on http://127.0.0.1:8642"
+    echo "[✓] Hermes API Gateway is ready on http://127.0.0.1:8642/v1/capabilities"
   else
-    echo "[!] Hermes API Gateway did not start within 20s. Proceeding with application startup in fallback mode."
+    echo "[!] Hermes API Gateway did not become ready within 20s. Aborting startup."
+    exit 1
   fi
 fi
 

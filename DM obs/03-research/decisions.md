@@ -159,3 +159,39 @@ ADR: Alembic Migration Downgrade Safety & Warning Remediation Rules
 ## ⚖️ Decision | 2026-07-28T09:40:55+03:00
 
 Исправление интеграции Hermes Copilot: вызов Hermes CLI -z, исправленный hermes serve, авторизованный SSE, строгое цитирование источников, линейная миграция Alembic
+
+## ⚖️ Decision | 2026-07-28T14:23:05+03:00
+
+Soft UI Refactor Admin Cockpit: Light mode CSS tokens, self-hosted Plus Jakarta Sans, Phosphor icons, typed view model
+
+## ⚖️ Decision | 2026-07-28T14:28:27+03:00
+
+Fixed sidebar footer clipping and icon mapping in Admin Cockpit
+
+## ⚖️ Decision | 2026-07-28T18:00:36+03:00
+
+Removed hover actions block from Kanban cards and updated icons in Kanban board
+
+## ⚖️ Decision | 2026-07-28T18:03:23+03:00
+
+Implemented confirmation modal, animated progress bar, and algorithm execution logs during Kanban drag-and-drop transitions
+
+## ⚖️ Decision | 2026-07-28T18:04:38+03:00
+
+Fixed parameter order in KanbanBoard onTransitionRequest call and implemented live telemetry logs connected to backend transition API
+
+## ⚖️ Decision | 2026-07-28T18:08:26+03:00
+
+Added supplier initials avatar circle and phone/email action links next to contact in SupplierCards
+
+## ⚖️ Decision | 2026-07-28T18:32:05+03:00
+
+Redesigned SupplierDetailPage with premium glassmorphism layout and GSAP motion, fixed Tables tab CSS Grid column and table horizontal clipping
+
+## ⚖️ Decision | 2026-07-28T18:34:53+03:00
+
+Redesigned new table form with a premium drag and drop zone, hover transitions, file remove button, and renamed the submit button to Создать таблицу
+
+## ⚖️ Decision | 2026-07-28T18:39:41+03:00
+
+Fixed Suppliers tab content wrapping in App.tsx to enable true edge-to-edge layout for workspace view, eliminating double paddings and clipping

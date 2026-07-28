@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { gsap } from 'gsap';
 import { apiFetch } from '../lib/api';
+import { consumeSseBuffer, type HermesHealth, type HermesStreamEvent } from '../lib/hermes';
+import { Icon } from './Primitives';
+import { useFocusTrap } from '../lib/focus';
 
-type SourceChip = {
-  source_id: string;
-  title: string;
-};
+type SourceChip = { source_id: string; title: string };
 
 type NavigationAction = {
   action: 'open_screen' | 'open_request' | 'focus_control';
@@ -21,6 +22,7 @@ type ChatMessage = {
   sources?: SourceChip[];
   actions?: NavigationAction[];
   isStreaming?: boolean;
+  state?: 'complete' | 'failed' | 'stopped';
 };
 
 type HermesChatDrawerProps = {
@@ -29,53 +31,70 @@ type HermesChatDrawerProps = {
   onNavigate?: (screenId: string, requestId?: string) => void;
 };
 
+const emptyHealth: HermesHealth = {
+  status: 'offline',
+  profile: 'partsops',
+  capabilities: [],
+  skills: [],
+};
+
+const statusLabel: Record<HermesHealth['status'], string> = {
+  online: 'Онлайн',
+  degraded: 'Ограничен',
+  offline: 'Недоступен',
+};
+
+const statusTone: Record<HermesHealth['status'], string> = {
+  online: 'hermes-status--online',
+  degraded: 'hermes-status--degraded',
+  offline: 'hermes-status--offline',
+};
+
 export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
   activeScreen,
   selectedRequestId,
   onNavigate,
 }) => {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
-  const [hermesStatus, setHermesStatus] = useState<'online' | 'degraded' | 'offline'>('offline');
+  const [isOpen, setIsOpen] = useState(false);
+  const [health, setHealth] = useState<HermesHealth>(emptyHealth);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputMessage, setInputMessage] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [progressLabel, setProgressLabel] = useState('Готов к работе');
   const [selectedSourceDoc, setSelectedSourceDoc] = useState<{ title: string; content: string } | null>(null);
 
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  useFocusTrap(drawerRef, isOpen);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
-  // Check Hermes Health
   const checkHealth = useCallback(async () => {
     try {
       const res = await apiFetch('/api/copilot/health');
-      if (res.ok) {
-        const data = await res.json();
-        setHermesStatus(data.status || 'offline');
-      } else {
-        setHermesStatus('offline');
-      }
+      const data = (await res.json().catch(() => emptyHealth)) as Partial<HermesHealth>;
+      setHealth(res.ok ? { ...emptyHealth, ...data } : { ...emptyHealth, status: 'offline', error: data.error });
     } catch {
-      setHermesStatus('offline');
+      setHealth({ ...emptyHealth, status: 'offline', error: 'Broker недоступен' });
     }
   }, []);
 
   useEffect(() => {
-    checkHealth();
-    const interval = setInterval(checkHealth, 20000);
-    return () => clearInterval(interval);
+    void checkHealth();
+    const interval = window.setInterval(() => void checkHealth(), 20_000);
+    return () => window.clearInterval(interval);
   }, [checkHealth]);
 
-  // Initialize Conversation
   const initConversation = useCallback(async () => {
     try {
       const res = await apiFetch('/api/copilot/conversations', {
@@ -83,448 +102,238 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: 'Диалог с Hermes' }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setConversationId(data.id);
-        setMessages([
-          {
-            id: 'init-msg',
-            role: 'assistant',
-            content: `Привет! Я **Hermes**, твой read-only операционный помощник PartsOps.\nЧем могу помочь по текущему экрану?`,
-          },
-        ]);
-      }
-    } catch (e) {
-      console.error('Failed to init conversation:', e);
+      if (!res.ok) throw new Error('Не удалось создать защищённый контекст Hermes');
+      const data = await res.json();
+      setConversationId(data.id);
+      setProgressLabel('Контекст экрана синхронизирован');
+      setMessages([{
+        id: 'init-msg',
+        role: 'assistant',
+        content: 'Привет! Я **Hermes**, read-only операционный помощник PartsOps.\n\nОбъясню статус, блокировки и доступные шаги по текущему экрану.',
+        state: 'complete',
+      }]);
+    } catch (error) {
+      setProgressLabel(error instanceof Error ? error.message : 'Не удалось создать диалог');
     }
   }, []);
 
   useEffect(() => {
-    if (isOpen && !conversationId) {
-      initConversation();
-    }
-  }, [isOpen, conversationId, initConversation]);
+    if (isOpen && !conversationId) void initConversation();
+  }, [conversationId, initConversation, isOpen]);
 
-  // Close on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        setIsOpen(false);
+  useLayoutEffect(() => {
+    if (!isOpen || !drawerRef.current) return;
+    const root = drawerRef.current;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const ctx = gsap.context(() => {
+      if (reduceMotion) {
+        gsap.set(root, { opacity: 1, x: 0, y: 0 });
+        return;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+      gsap.fromTo(root, { opacity: 0, x: 26 }, { opacity: 1, x: 0, duration: 0.36, ease: 'power3.out' });
+      gsap.fromTo('[data-hermes-stagger]', { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.28, ease: 'power3.out', stagger: 0.05, delay: 0.08 });
+    }, root);
+    return () => ctx.revert();
   }, [isOpen]);
 
+  const updateAssistant = useCallback((assistantMsgId: string, update: Partial<ChatMessage>) => {
+    setMessages((prev) => prev.map((msg) => msg.id === assistantMsgId ? { ...msg, ...update } : msg));
+  }, []);
+
+  const applyStreamEvent = useCallback((event: HermesStreamEvent, assistantMsgId: string) => {
+    if (event.type === 'assistant.delta') {
+      setMessages((prev) => prev.map((msg) => msg.id === assistantMsgId ? { ...msg, content: msg.content + event.text } : msg));
+    } else if (event.type === 'source') {
+      setMessages((prev) => prev.map((msg) => msg.id === assistantMsgId ? { ...msg, sources: [...(msg.sources ?? []), { source_id: event.source_id, title: event.title }] } : msg));
+    } else if (event.type === 'navigation.action') {
+      const action = event.action as NavigationAction;
+      setMessages((prev) => prev.map((msg) => msg.id === assistantMsgId ? { ...msg, actions: [...(msg.actions ?? []), action] } : msg));
+    } else if (event.type === 'run.progress') {
+      setProgressLabel(event.detail || event.label || 'Hermes анализирует контекст');
+    } else if (event.type === 'run.completed') {
+      setProgressLabel('Ответ подтверждён');
+      updateAssistant(assistantMsgId, { isStreaming: false, state: 'complete' });
+    } else if (event.type === 'run.failed') {
+      setProgressLabel(event.message || 'Hermes завершил запрос с ошибкой');
+      updateAssistant(assistantMsgId, { isStreaming: false, state: 'failed', content: event.message || 'Hermes не смог подтвердить ответ по доступным данным.' });
+    } else if (event.type === 'run.stopped') {
+      setProgressLabel('Запрос остановлен оператором');
+      updateAssistant(assistantMsgId, { isStreaming: false, state: 'stopped', content: 'Запрос остановлен. Можно повторить его после проверки контекста.' });
+    }
+  }, [updateAssistant]);
+
   const handleSendMessage = async (textToSend?: string) => {
-    const query = textToSend || inputMessage.trim();
+    const query = (textToSend || inputMessage).trim();
     if (!query || !conversationId || isProcessing) return;
 
     setInputMessage('');
+    setProgressLabel('Подготавливаем защищённый контекст');
     const userMsgId = `user-${Date.now()}`;
-    const assistantMsgId = `asst-${Date.now()}`;
-
-    // Append User Message
-    const newMessages: ChatMessage[] = [
-      ...messages,
-      { id: userMsgId, role: 'user', content: query },
+    const assistantMsgId = `assistant-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      { id: userMsgId, role: 'user', content: query, state: 'complete' },
       { id: assistantMsgId, role: 'assistant', content: '', isStreaming: true, sources: [], actions: [] },
-    ];
-    setMessages(newMessages);
+    ]);
     setIsProcessing(true);
+    const abortController = new AbortController();
+    abortRef.current = abortController;
 
     try {
-      // 1. Post Run
       const runRes = await apiFetch(`/api/copilot/conversations/${conversationId}/runs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: query,
-          context_ref: {
-            screen_id: activeScreen,
-            selected_request_id: selectedRequestId || undefined,
-          },
+          context_ref: { screen_id: activeScreen, selected_request_id: selectedRequestId || undefined },
         }),
+        signal: abortController.signal,
       });
-
       if (!runRes.ok) {
         const errorData = await runRes.json().catch(() => ({}));
         throw new Error(errorData.detail || 'Не удалось запустить обработку запроса');
       }
 
       const runData = await runRes.json();
-      const runId = runData.run_id;
-      setCurrentRunId(runId);
-
-      // 2. Stream SSE events via apiFetch (supports Authorization & X-Tenant-ID headers)
-      const streamRes = await apiFetch(`/api/copilot/runs/${runId}/events`);
-      if (!streamRes.ok || !streamRes.body) {
-        throw new Error('Не удалось установить соединение с сервером ответов');
-      }
+      setCurrentRunId(runData.run_id);
+      setProgressLabel('Hermes подключает поток событий');
+      const streamRes = await apiFetch(`/api/copilot/runs/${runData.run_id}/events`, { signal: abortController.signal });
+      if (!streamRes.ok || !streamRes.body) throw new Error('Не удалось установить поток Hermes');
 
       const reader = streamRes.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
-
+      let terminalEvent = false;
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            const jsonStr = trimmed.slice(6).trim();
-            if (!jsonStr) continue;
-
-            try {
-              const evtData = JSON.parse(jsonStr);
-
-              if (evtData.type === 'assistant.delta') {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMsgId
-                      ? { ...msg, content: msg.content + evtData.text }
-                      : msg
-                  )
-                );
-              } else if (evtData.type === 'source') {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMsgId
-                      ? {
-                          ...msg,
-                          sources: [
-                            ...(msg.sources || []),
-                            { source_id: evtData.source_id, title: evtData.title },
-                          ],
-                        }
-                      : msg
-                  )
-                );
-              } else if (evtData.type === 'navigation.action') {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMsgId
-                      ? {
-                          ...msg,
-                          actions: [...(msg.actions || []), evtData.action],
-                        }
-                      : msg
-                  )
-                );
-              } else if (evtData.type === 'run.completed' || evtData.type === 'run.failed') {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMsgId ? { ...msg, isStreaming: false } : msg
-                  )
-                );
-              }
-            } catch (e) {
-              console.error('Error parsing stream event line:', e);
-            }
-          }
+        buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+        const consumed = consumeSseBuffer(buffer);
+        buffer = consumed.remainder;
+        for (const event of consumed.events) {
+          applyStreamEvent(event, assistantMsgId);
+          terminalEvent = terminalEvent || event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.stopped';
         }
+        if (done) break;
       }
-    } catch (err: any) {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMsgId
-            ? {
-                ...msg,
-                content: msg.content || err?.message || 'Сервис Hermes временно недоступен.',
-                isStreaming: false,
-              }
-            : msg
-        )
-      );
+      if (!terminalEvent && !abortController.signal.aborted) {
+        updateAssistant(assistantMsgId, { isStreaming: false, state: 'failed', content: 'Поток Hermes завершился без подтверждённого terminal-события.' });
+      }
+    } catch (error) {
+      if (!abortController.signal.aborted) {
+        const message = error instanceof Error ? error.message : 'Hermes временно недоступен';
+        setProgressLabel(message);
+        updateAssistant(assistantMsgId, { isStreaming: false, state: 'failed', content: message });
+      }
     } finally {
-      setIsProcessing(false);
+      abortRef.current = null;
       setCurrentRunId(null);
+      setIsProcessing(false);
     }
   };
 
-  const handleStopRun = async () => {
-    if (!currentRunId) return;
+  const handleStopRun = useCallback(async () => {
+    const runId = currentRunId;
+    if (!runId) return;
     try {
-      await apiFetch(`/api/copilot/runs/${currentRunId}/stop`, { method: 'POST' });
-    } catch (e) {
-      console.error('Failed to stop run:', e);
+      await apiFetch(`/api/copilot/runs/${runId}/stop`, { method: 'POST' });
+    } finally {
+      abortRef.current?.abort();
+      setProgressLabel('Останавливаем upstream Hermes');
     }
-  };
+  }, [currentRunId]);
+
+  const closeDrawer = useCallback(() => {
+    if (isProcessing) void handleStopRun();
+    abortRef.current?.abort();
+    setIsOpen(false);
+  }, [handleStopRun, isProcessing]);
 
   const handleViewSource = async (sourceId: string) => {
-    try {
-      const res = await apiFetch(`/api/copilot/sources/${sourceId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedSourceDoc({ title: data.title, content: data.content });
-      }
-    } catch (e) {
-      console.error('Failed to load help source:', e);
+    const res = await apiFetch(`/api/copilot/sources/${sourceId}`);
+    if (res.ok) {
+      const data = await res.json();
+      setSelectedSourceDoc({ title: data.title, content: data.content });
     }
   };
 
   const handleActionClick = (action: NavigationAction) => {
-    if (onNavigate) {
-      if (action.action === 'open_screen' && action.screen_id) {
-        onNavigate(action.screen_id);
-      } else if (action.action === 'open_request' && action.request_id) {
-        onNavigate('order_details', action.request_id);
-      }
-    }
+    if (action.action === 'open_screen' && action.screen_id) onNavigate?.(action.screen_id);
+    if (action.action === 'open_request' && action.request_id) onNavigate?.('order_details', action.request_id);
+  };
+
+  const resizeInput = (element: HTMLTextAreaElement) => {
+    element.style.height = 'auto';
+    element.style.height = `${Math.min(element.scrollHeight, 132)}px`;
   };
 
   return (
     <>
-      {/* Floating Hermes Launcher Button */}
       {!isOpen && (
         <button
-          onClick={() => {
-            setIsOpen(true);
-            setTimeout(() => inputRef.current?.focus(), 100);
-          }}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-full bg-slate-900 text-white border border-emerald-500/40 shadow-2xl hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all duration-200"
+          data-testid="hermes-launcher"
+          onClick={() => { setIsOpen(true); window.setTimeout(() => inputRef.current?.focus(), 120); }}
+          className="hermes-launcher fixed bottom-6 right-6 z-[80] flex items-center gap-3 rounded-full px-4 py-3 text-white transition-transform duration-200 hover:-translate-y-1 active:scale-95"
           aria-label="Открыть Hermes Помощник"
         >
-          <div className="relative">
-            <i className="fas fa-robot text-lg text-emerald-400" />
-            <span
-              className={`absolute -top-1 -right-1 h-3 w-3 rounded-full border-2 border-slate-900 ${
-                hermesStatus === 'online'
-                  ? 'bg-emerald-500'
-                  : hermesStatus === 'degraded'
-                  ? 'bg-amber-500'
-                  : 'bg-rose-500'
-              }`}
-            />
-          </div>
+          <span className="hermes-launcher__icon relative"><Icon name="robot" size={18} weight="duotone" /><span className={`hermes-health-dot ${statusTone[health.status]}`} /></span>
           <span className="text-sm font-bold tracking-tight">Hermes</span>
+          <span className="sr-only">{statusLabel[health.status]}</span>
         </button>
       )}
 
-      {/* Slide-over Hermes Drawer */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in">
-          <div className="w-full sm:w-[480px] h-full bg-slate-950 text-slate-100 flex flex-col border-l border-slate-800 shadow-2xl relative">
-            
-            {/* Header */}
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80 backdrop-blur-md">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
-                  <i className="fas fa-robot text-base" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-extrabold text-white">Hermes</h3>
-                    <span
-                      className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                        hermesStatus === 'online'
-                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                          : hermesStatus === 'degraded'
-                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                          : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-                      }`}
-                    >
-                      {hermesStatus}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">Read-Only Copilot • PartsOps</span>
+        <div className="hermes-overlay fixed inset-0 z-[80] flex justify-end" onClick={closeDrawer}>
+          <div ref={drawerRef} data-testid="hermes-drawer" role="dialog" aria-modal="true" aria-label="Hermes — read-only помощник" className="hermes-drawer relative flex h-full w-full flex-col text-slate-100" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === 'Escape') closeDrawer(); }}>
+            <div data-hermes-motion className="hermes-drawer__header flex items-center justify-between gap-3 px-5 py-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="hermes-avatar"><Icon name="robot" size={19} weight="duotone" /></div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2"><h3 className="truncate text-sm font-extrabold text-white">Hermes</h3><span className={`hermes-status ${statusTone[health.status]}`}><span className="hermes-status__dot" />{statusLabel[health.status]}</span></div>
+                  <span className="text-[10px] text-slate-400">PartsOps Copilot · профиль {health.profile}</span>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={initConversation}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
-                  title="Новый диалог"
-                >
-                  <i className="fas fa-plus text-[10px] mr-1" /> Новый чат
-                </button>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors border border-slate-700"
-                  aria-label="Закрыть"
-                >
-                  <i className="fas fa-xmark text-sm" />
-                </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button onClick={() => { setConversationId(null); setMessages([]); }} className="hermes-control-button px-2.5" title="Новый диалог"><Icon name="plus" size={13} /> Новый чат</button>
+                <button onClick={closeDrawer} className="hermes-control-button h-8 w-8" aria-label="Закрыть Hermes"><Icon name="x-mark" size={15} /></button>
               </div>
             </div>
 
-            {/* Context Chip Banner */}
-            <div className="px-4 py-2 bg-emerald-950/30 border-b border-emerald-800/30 flex items-center justify-between text-[11px] text-emerald-300">
-              <div className="flex items-center gap-2 truncate">
-                <i className="fas fa-layer-group text-xs text-emerald-400" />
-                <span>Экран: <strong className="text-white">{activeScreen}</strong></span>
-                {selectedRequestId && (
-                  <span className="text-slate-400">| Заказ: <strong className="text-emerald-300 font-mono">#{selectedRequestId}</strong></span>
-                )}
-              </div>
-              <span className="text-[9px] text-emerald-400/80 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
-                READ-ONLY
-              </span>
+            <div data-hermes-stagger className="hermes-context mx-4 mt-4 flex items-center justify-between gap-3 rounded-2xl px-3.5 py-3">
+              <div className="flex min-w-0 items-center gap-2 text-[11px] text-emerald-200"><Icon name="wave-square" size={14} className="shrink-0 text-emerald-400" /><span className="truncate">Экран <strong className="text-white">{activeScreen}</strong>{selectedRequestId && <> · заказ <strong className="font-mono text-emerald-300">#{selectedRequestId}</strong></>}</span></div>
+              <span className="hermes-readonly shrink-0">READ-ONLY</span>
             </div>
 
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs leading-relaxed" aria-live="polite">
+            <div className="mx-4 mt-3 flex items-center justify-between text-[10px] text-slate-500"><span className="flex items-center gap-1.5"><span className={`hermes-health-dot ${statusTone[health.status]}`} />{progressLabel}</span><span>{health.capabilities.length ? `${health.capabilities.length} capabilities` : 'Проверка канала'}</span></div>
+
+            <div className="hermes-messages flex-1 space-y-4 overflow-y-auto px-4 py-5" aria-live="polite">
               {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-                >
-                  <div
-                    className={`max-w-[90%] rounded-2xl p-3.5 space-y-2 border ${
-                      msg.role === 'user'
-                        ? 'bg-emerald-600 text-white border-emerald-500 rounded-br-none'
-                        : 'bg-slate-900 text-slate-200 border-slate-800 rounded-bl-none shadow-md'
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap font-sans">{msg.content}</p>
-
-                    {/* Sources Chips */}
-                    {msg.sources && msg.sources.length > 0 && (
-                      <div className="pt-2 border-t border-slate-800 space-y-1">
-                        <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block">
-                          Подтверждающие источники:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {msg.sources.map((src) => (
-                            <button
-                              key={src.source_id}
-                              onClick={() => handleViewSource(src.source_id)}
-                              className="text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-emerald-400 px-2 py-1 rounded-md border border-slate-700 flex items-center gap-1 transition-colors"
-                            >
-                              <i className="fas fa-book-open text-[9px]" />
-                              <span>{src.title}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Navigation Actions */}
-                    {msg.actions && msg.actions.length > 0 && (
-                      <div className="pt-2 border-t border-slate-800 space-y-1">
-                        <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block">
-                          Рекомендуемые действия:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {msg.actions.map((act, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => handleActionClick(act)}
-                              className="text-[10px] font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-all"
-                            >
-                              <i className="fas fa-arrow-right text-[9px]" />
-                              <span>{act.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                <div key={msg.id} data-hermes-stagger className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div className={`hermes-message max-w-[92%] space-y-2 rounded-2xl p-3.5 ${msg.role === 'user' ? 'hermes-message--user rounded-br-md' : 'hermes-message--assistant rounded-bl-md'}`}>
+                    <p className="whitespace-pre-wrap text-xs leading-relaxed">{msg.content || (msg.isStreaming ? 'Hermes формирует подтверждённый ответ…' : '')}</p>
+                    {msg.isStreaming && <span className="hermes-stream-caret" aria-label="Ответ передаётся" />}
+                    {msg.sources && msg.sources.length > 0 && <div className="hermes-message__section"><span className="hermes-eyebrow">Источники подтверждения</span><div className="flex flex-wrap gap-1.5">{msg.sources.map((src) => <button key={src.source_id} onClick={() => void handleViewSource(src.source_id)} className="hermes-chip"><Icon name="book-open" size={11} />{src.title}</button>)}</div></div>}
+                    {msg.actions && msg.actions.length > 0 && <div className="hermes-message__section"><span className="hermes-eyebrow">Безопасные действия</span><div className="flex flex-wrap gap-1.5">{msg.actions.map((action, index) => <button key={`${action.action}-${index}`} onClick={() => handleActionClick(action)} className="hermes-action-chip"><Icon name="arrow-right" size={11} />{action.label}</button>)}</div></div>}
+                    {msg.state === 'failed' && <div className="flex items-center gap-1.5 text-[10px] text-rose-300"><Icon name="warning" size={12} />Проверьте статус Hermes и повторите запрос.</div>}
                   </div>
                 </div>
               ))}
-
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Prompt Suggestions */}
-            {messages.length <= 2 && !isProcessing && (
-              <div className="px-4 pb-2 flex flex-wrap gap-1.5">
-                {[
-                  'Что можно сделать на этом экране?',
-                  'Почему этот заказ заблокирован?',
-                  'Объясни текущий статус',
-                  'Где посмотреть подтверждения?',
-                ].map((promptText, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleSendMessage(promptText)}
-                    className="text-[10px] font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-2.5 py-1.5 rounded-xl transition-all"
-                  >
-                    {promptText}
-                  </button>
-                ))}
-              </div>
-            )}
+            {messages.length <= 1 && !isProcessing && <div data-hermes-stagger className="flex flex-wrap gap-1.5 px-4 pb-3">{['Что можно сделать на этом экране?', 'Почему этот заказ заблокирован?', 'Объясни текущий статус', 'Где посмотреть подтверждения?'].map((prompt) => <button key={prompt} onClick={() => void handleSendMessage(prompt)} className="hermes-prompt-chip">{prompt}</button>)}</div>}
 
-            {/* Input Controls */}
-            <div className="p-3 border-t border-slate-800 bg-slate-900/90 backdrop-blur-md">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendMessage();
-                }}
-                className="flex items-center gap-2"
-              >
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder="Спросить Hermes о функциях, статусе, блокировках..."
-                  disabled={isProcessing}
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
-                />
-
-                {isProcessing ? (
-                  <button
-                    type="button"
-                    onClick={handleStopRun}
-                    className="px-3 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold text-xs flex items-center gap-1 transition-all"
-                  >
-                    <i className="fas fa-stop text-[10px]" /> Stop
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!inputMessage.trim()}
-                    className="px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-extrabold rounded-xl text-xs flex items-center gap-1 transition-all"
-                  >
-                    <i className="fas fa-paper-plane text-[10px]" />
-                  </button>
-                )}
+            <div className="hermes-composer px-4 pb-4 pt-3">
+              <form onSubmit={(event) => { event.preventDefault(); void handleSendMessage(); }} className="hermes-input-shell">
+                <textarea ref={inputRef} rows={1} value={inputMessage} disabled={isProcessing} onChange={(event) => { setInputMessage(event.target.value); resizeInput(event.currentTarget); }} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void handleSendMessage(); } }} placeholder="Спросить Hermes о функциях, статусе, блокировках…" aria-label="Сообщение Hermes" />
+                {isProcessing ? <button type="button" onClick={() => void handleStopRun()} className="hermes-stop-button" aria-label="Остановить запрос"><Icon name="stop" size={14} /> Стоп</button> : <button type="submit" disabled={!inputMessage.trim()} className="hermes-send-button" aria-label="Отправить сообщение"><Icon name="paper-plane" size={15} weight="bold" /></button>}
               </form>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* Help Source Document View Modal */}
-      {selectedSourceDoc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 text-slate-200 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <i className="fas fa-book-open text-emerald-400" />
-                {selectedSourceDoc.title}
-              </h3>
-              <button
-                onClick={() => setSelectedSourceDoc(null)}
-                className="text-slate-400 hover:text-white text-sm"
-              >
-                <i className="fas fa-xmark" />
-              </button>
-            </div>
-            <p className="text-xs leading-relaxed text-slate-300 whitespace-pre-wrap">
-              {selectedSourceDoc.content}
-            </p>
-            <div className="pt-2 text-right">
-              <button
-                onClick={() => setSelectedSourceDoc(null)}
-                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition-colors"
-              >
-                Понятно
-              </button>
+              <div className="mt-2 flex items-center justify-between px-1 text-[9px] text-slate-600"><span>Ответы основаны на серверном контексте и справке</span><span>⌘/Ctrl + Enter</span></div>
             </div>
           </div>
         </div>
       )}
+
+      {selectedSourceDoc && <div className="hermes-source-overlay fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setSelectedSourceDoc(null)}><div className="hermes-source-card w-full max-w-lg rounded-2xl p-5 text-slate-200" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-slate-800 pb-3"><h3 className="flex items-center gap-2 text-sm font-bold text-white"><Icon name="book-open" size={15} className="text-emerald-400" />{selectedSourceDoc.title}</h3><button onClick={() => setSelectedSourceDoc(null)} aria-label="Закрыть источник"><Icon name="x-mark" size={15} /></button></div><p className="whitespace-pre-wrap pt-4 text-xs leading-relaxed text-slate-300">{selectedSourceDoc.content}</p></div></div>}
     </>
   );
 };
