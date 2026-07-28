@@ -30,6 +30,8 @@ from routers.data_health import router as data_health_router
 from routers.contracts import router as contracts_router
 from routers.webhooks import router as webhooks_router
 from routers.analogs import router as analogs_router
+from routers.copilot import router as copilot_router
+import models_copilot
 
 load_dotenv()
 
@@ -79,6 +81,7 @@ app.include_router(data_health_router)
 app.include_router(contracts_router)
 app.include_router(webhooks_router)
 app.include_router(analogs_router)
+app.include_router(copilot_router)
 
 @app.get("/")
 def read_root():

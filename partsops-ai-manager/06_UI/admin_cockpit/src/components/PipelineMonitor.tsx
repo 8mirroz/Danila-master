@@ -141,7 +141,7 @@ export function PipelineMonitor({ requests, fetchTrigger }: PipelineMonitorProps
             const phaseStatuses = phases.map(p => getPhaseStatus(request, p));
             const overallStatus = getRequestOverallStatus(request);
             const detail = pipelineDetails[request.request_id];
-            const isLoading = loadingDetails[request.request_id];
+            const isLoading = loadingDetails[request.request_id] && !detail;
 
             return (
               <div

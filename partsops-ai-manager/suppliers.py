@@ -374,6 +374,23 @@ def seed_database(session) -> dict:
                 }, ensure_ascii=False),
             ))
 
+    # Seed an initial ERPSyncLog entry if none exists
+    from models import ERPSyncLog
+    existing_sync = session.exec(select(ERPSyncLog)).first()
+    if not existing_sync:
+        session.add(ERPSyncLog(
+            tenant_id="default",
+            sync_id="seed-sync-1",
+            request_id="CON-3640A024E2",
+            erp_document_type="SalesInvoice",
+            idempotency_key="seed-idem-1",
+            status="SUCCESS",
+            attempt_count=1,
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            last_attempt_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            succeeded_at=datetime.now(timezone.utc).replace(tzinfo=None)
+        ))
+
     session.commit()
     return {
         "added_suppliers": added_suppliers,

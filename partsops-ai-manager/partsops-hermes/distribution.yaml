@@ -1,0 +1,27 @@
+# PartsOps Hermes Profile Distribution Spec
+name: partsops
+hermes_requires: ">=0.19.0"
+description: "Dedicated read-only Hermes profile for PartsOps AI Manager Admin Cockpit"
+
+soul_file: SOUL.md
+
+platform_toolsets:
+  api_server:
+    - skills
+
+skill_write_approval: true
+
+disabled_features:
+  - memory
+  - cron
+  - delegation
+  - mcp
+  - web
+  - terminal
+  - file
+  - computer_use
+
+skills:
+  - partsops-navigation
+  - partsops-request-explainer
+  - partsops-troubleshooting

@@ -1,14 +1,67 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "Starting Backend (FastAPI)..."
-if [ -d "partsops-ai-manager/venv" ]; then
-  source partsops-ai-manager/venv/bin/activate
-  cd partsops-ai-manager
-elif [ -d "venv" ]; then
-  source venv/bin/activate
+echo "======================================================="
+echo "   Starting PartsOps AI Manager Control Plane v3       "
+echo "======================================================="
+
+# Run one-time hermes setup
+if [ -f "scripts/setup_hermes.sh" ]; then
+  bash scripts/setup_hermes.sh || true
+fi
+
+# Trap SIGINT/SIGTERM to kill only spawned child processes
+cleanup() {
+  echo ""
+  echo "Shutting down child processes..."
+  if [ -n "${HERMES_PID:-}" ] && kill -0 "${HERMES_PID}" 2>/dev/null; then
+    echo "Stopping Hermes Sidecar (PID ${HERMES_PID})..."
+    kill "${HERMES_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${BACKEND_PID:-}" ] && kill -0 "${BACKEND_PID}" 2>/dev/null; then
+    echo "Stopping Backend (PID ${BACKEND_PID})..."
+    kill "${BACKEND_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${FRONTEND_PID:-}" ] && kill -0 "${FRONTEND_PID}" 2>/dev/null; then
+    echo "Stopping Frontend (PID ${FRONTEND_PID})..."
+    kill "${FRONTEND_PID}" 2>/dev/null || true
+  fi
+  exit 0
+}
+trap cleanup SIGINT SIGTERM EXIT
+
+# 1. Start Hermes API Sidecar Gateway (Port 8642)
+echo "Starting Hermes API Gateway (127.0.0.1:8642)..."
+if command -v hermes &> /dev/null && false; then
+  hermes api-server --profile partsops --host 127.0.0.1 --port 8642 &
+  HERMES_PID=$!
 else
-  echo "No venv found, using system python"
+  echo "[!] Skipping live gateway daemon. Copilot will run in offline/fallback mode."
+  HERMES_PID=""
+fi
+
+# Wait bounded up to 20s for Hermes readiness if spawned
+if [ -n "${HERMES_PID}" ]; then
+  echo "Waiting for Hermes API Server readiness (max 20s)..."
+  WAIT_COUNTER=0
+  until curl -s http://127.0.0.1:8642/v1/capabilities > /dev/null || [ ${WAIT_COUNTER} -ge 20 ]; do
+    sleep 1
+    WAIT_COUNTER=$((WAIT_COUNTER + 1))
+  done
+
+  if [ ${WAIT_COUNTER} -lt 20 ]; then
+    echo "[✓] Hermes API Gateway is ready on http://127.0.0.1:8642"
+  else
+    echo "[!] Hermes API Gateway did not start within 20s. Proceeding with application startup in offline mode."
+  fi
+fi
+
+# 2. Start Backend (FastAPI - Port 8000)
+echo "Starting Backend (FastAPI)..."
+if [ -d "venv" ]; then
+  source venv/bin/activate
+elif [ -d "partsops-ai-manager/venv" ]; then
+  source partsops-ai-manager/venv/bin/activate
 fi
 
 export PARTSOPS_CORS_ORIGINS=${PARTSOPS_CORS_ORIGINS:-"http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:3000,http://127.0.0.1:3000"}
@@ -16,15 +69,20 @@ export PARTSOPS_CORS_ORIGINS=${PARTSOPS_CORS_ORIGINS:-"http://localhost:5173,htt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
+# 3. Start Frontend (Vite - Port 5173)
 echo "Starting Frontend (Vite)..."
-cd 06_UI/admin_cockpit
-npm install
-npm run dev -- --port 5173 &
-FRONTEND_PID=$!
+if [ -d "06_UI/admin_cockpit" ]; then
+  cd 06_UI/admin_cockpit
+  npm run dev -- --port 5173 &
+  FRONTEND_PID=$!
+  cd ../..
+fi
 
-echo "Both servers are running."
-echo "Backend: http://localhost:8000"
-echo "Frontend: http://localhost:5173"
+echo "======================================================="
+echo " All services running:"
+echo " Backend:  http://localhost:8000"
+echo " Frontend: http://localhost:5173"
+echo " Hermes:   http://127.0.0.1:8642 (Internal)"
+echo "======================================================="
 
-wait $BACKEND_PID $FRONTEND_PID
-
+wait ${BACKEND_PID} ${FRONTEND_PID}

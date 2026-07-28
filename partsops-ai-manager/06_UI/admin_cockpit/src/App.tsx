@@ -34,11 +34,11 @@ import { ContractControlPanel } from './components/ContractControlPanel';
 import { BlockedQueue } from './components/BlockedQueue';
 import { TransitionActions } from './components/TransitionActions';
 import { notify } from './lib/notify';
-import { BatchSearchModal } from './components/BatchSearchModal';
 import { JobReportView } from './components/JobReportView';
-import { RoleSwitcher } from './components/RoleSwitcher';
+import { HermesChatDrawer } from './components/HermesChatDrawer';
 import { getPermissions } from './lib/rbac';
 import type { Role } from './lib/rbac';
+import { BatchSearchModal } from './components/BatchSearchModal';
 
 type Request = {
   id: number;
@@ -99,7 +99,7 @@ function App() {
   const [activeStep, setActiveStep] = useState<number>(2);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [searchGlobalQuery, setSearchGlobalQuery] = useState('');
-  const [currentRole, setCurrentRole] = useState<Role>('ADMIN');
+  const [currentRole] = useState<Role>('ADMIN');
 
   const [requests, setRequests] = useState<Request[]>([]);
   const [normalizedParts, setNormalizedParts] = useState<Array<{ name: string; quantity: number }>>([]);
@@ -107,6 +107,52 @@ function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [suppliersForPalette, setSuppliersForPalette] = useState<any[]>([]);
+  const [lastErpSync, setLastErpSync] = useState<Date | null>(null);
+  const [erpSyncText, setErpSyncText] = useState<string>('загрузка...');
+
+  const fetchDataHealth = async () => {
+    try {
+      const res = await apiFetch('/api/admin/data-health');
+      if (res.ok) {
+        const data = await res.json();
+        const lastSyncStr = data.freshness?.last_erp_sync;
+        if (lastSyncStr) {
+          setLastErpSync(new Date(lastSyncStr));
+        } else {
+          setLastErpSync(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data health', error);
+    }
+  };
+
+  useEffect(() => {
+    void fetchDataHealth();
+  }, [fetchTrigger]);
+
+  useEffect(() => {
+    const updateSyncText = () => {
+      if (!lastErpSync) {
+        setErpSyncText('нет данных');
+        return;
+      }
+      const now = new Date();
+      const diffSeconds = Math.max(0, Math.floor((now.getTime() - lastErpSync.getTime()) / 1000));
+      if (diffSeconds < 60) {
+        setErpSyncText(`${diffSeconds} сек. назад`);
+      } else if (diffSeconds < 3600) {
+        const mins = Math.floor(diffSeconds / 60);
+        setErpSyncText(`${mins} мин. назад`);
+      } else {
+        const hours = Math.floor(diffSeconds / 3600);
+        setErpSyncText(`${hours} ч. назад`);
+      }
+    };
+    updateSyncText();
+    const interval = setInterval(updateSyncText, 5000);
+    return () => clearInterval(interval);
+  }, [lastErpSync]);
 
 
   const fetchSuppliersForPalette = async () => {
@@ -321,7 +367,7 @@ function App() {
             setSelectedReq(null);
             setActiveNav('dashboard');
           }}
-          roleSwitcherNode={<RoleSwitcher currentRole={currentRole} onRoleChange={setCurrentRole} />}
+          erpSyncTime={erpSyncText}
         />
         <div className="flex-1 flex flex-row overflow-hidden relative">
           <LeftNavRail
@@ -732,6 +778,18 @@ function App() {
             setSelectedReq(createdReq);
             setFetchTrigger((prev) => prev + 1);
             setActiveNav('report');
+          }}
+        />
+
+        <HermesChatDrawer
+          activeScreen={activeNav}
+          selectedRequestId={selectedReq?.request_id}
+          onNavigate={(screenId, reqId) => {
+            setActiveNav(screenId);
+            if (reqId) {
+              const match = requests.find((r) => r.request_id === reqId);
+              if (match) setSelectedReq(match);
+            }
           }}
         />
     </AppFrame>

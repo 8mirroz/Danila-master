@@ -1,0 +1,52 @@
+[
+  {
+    "source_id": "help-kanban-01",
+    "title": "Инструкция по работе с Канбан-доской заказов",
+    "screen_ids": ["kanban_board"],
+    "roles": ["admin", "manager"],
+    "tags": ["kanban", "workflow", "statuses"],
+    "updated_at": "2026-07-28T00:00:00Z",
+    "owner": "PartsOps Operations Team",
+    "content": "Канбан-доска отображает все активные заказы, разделенные по колонкам Workflow: DRAFT -> PARSED -> MATCHING -> PRICED -> CONTRACT_VERIFIED -> INVOICED. Перемещение заказа происходит автоматически при вызове соответствующих действий либо ручной передачи на шаг при валидности всех Evidence Gates."
+  },
+  {
+    "source_id": "help-blocked-02",
+    "title": "Причины блокировки заказов и разрешение конфликтов",
+    "screen_ids": ["kanban_board", "order_details"],
+    "roles": ["admin", "manager"],
+    "tags": ["blocked", "evidence_gates", "troubleshooting"],
+    "updated_at": "2026-07-28T00:00:00Z",
+    "owner": "PartsOps Risk Control",
+    "content": "Заказ переходит в статус BLOCKED, если один из обязательных параметров не прошел проверку Evidence Gates: 1) VIN не найден в базе WMI или невалиден, 2) Расчетная маржа ниже минимального порога 5%, 3) У выбранного поставщика статус STALE (цены старше 24ч). Для снятия блокировки откройте заказ и подтвердите гейт вручную."
+  },
+  {
+    "source_id": "help-suppliers-03",
+    "title": "Матрица поставщиков и показатели SLA",
+    "screen_ids": ["suppliers_page", "order_details"],
+    "roles": ["admin", "manager"],
+    "tags": ["suppliers", "sla", "rating"],
+    "updated_at": "2026-07-28T00:00:00Z",
+    "owner": "PartsOps Procurement",
+    "content": "Экран Поставщики отображает рейтинг поставщиков на основе исторического процента выполнения SLA, средней скорости ответа и количества отмен. Поставщики со статусом ONLINE подходят для автоматического подбора аналогов."
+  },
+  {
+    "source_id": "help-invoices-04",
+    "title": "Реестр счетов и экспорт в ERP",
+    "screen_ids": ["invoices_registry", "contract_control"],
+    "roles": ["admin", "manager", "finance"],
+    "tags": ["invoices", "erp", "finance"],
+    "updated_at": "2026-07-28T00:00:00Z",
+    "owner": "PartsOps Finance",
+    "content": "После достижения заказа статуса INVOICED генерируется спецификация и черновик счета. Автоматический экспорт в ERP защищен хэшем SHA-256 и выполняется каждые 15 минут либо по нажатию кнопки экспорта."
+  },
+  {
+    "source_id": "help-agentos-05",
+    "title": "Диагностическая панель Agent OS и трассировка Hermes",
+    "screen_ids": ["agent_os_panel"],
+    "roles": ["admin"],
+    "tags": ["agent_os", "observability", "traces", "hermes"],
+    "updated_at": "2026-07-28T00:00:00Z",
+    "owner": "PartsOps Architecture",
+    "content": "Панель Agent OS отражает реальный статус готовности Hermes Sidecar, доступные навыки (skills), метрики вызовов моделей (LLM Traces), задержку ответа (latency) и потребление токенов/бюджета."
+  }
+]

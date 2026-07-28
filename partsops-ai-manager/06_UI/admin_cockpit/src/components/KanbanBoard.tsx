@@ -144,7 +144,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
 
   return (
-    <div className="grid h-[calc(100vh-210px)] grid-cols-1 gap-4 overflow-hidden md:grid-cols-4">
+    <div className="grid h-[calc(100vh-250px)] grid-cols-1 gap-4 overflow-hidden md:grid-cols-4">
       {columns.map((col) => {
         const columnRequests = requests.filter((r) => col.statuses.includes(r.status));
 

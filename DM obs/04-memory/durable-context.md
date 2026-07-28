@@ -134,3 +134,11 @@ Implemented 6 Reference Design Sections in Admin Cockpit UI (Deep Graphite Theme
 ## 🧠 Durable Fact | 2026-07-26T16:36:49+03:00
 
 Implemented Batch OEM Search, Job Report Screen, and XLSX export via openpyxl
+
+## 🧠 Durable Fact | 2026-07-27T02:06:55+03:00
+
+ADR: Alembic Migration Downgrade Safety & Warning Remediation Rules
+
+## 🧠 Durable Fact | 2026-07-28T02:22:59+03:00
+
+Интеграция Hermes Copilot в PartsOps Admin Cockpit (Read-Only sidecar, API Server contract, PII masking, Help corpus, SSE)

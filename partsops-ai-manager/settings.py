@@ -78,5 +78,34 @@ class Settings:
     def PHASE_LABEL(self) -> str:
         return os.environ.get("PARTSOPS_PHASE_LABEL") or "Phase 0 — Stabilization"
 
+    @property
+    def HERMES_API_URL(self) -> str:
+        return os.environ.get("HERMES_API_URL") or "http://127.0.0.1:8642"
+
+    @property
+    def HERMES_API_KEY(self) -> str:
+        return os.environ.get("HERMES_API_KEY") or "partsops-hermes-secret-key"
+
+    @property
+    def COPILOT_DAILY_BUDGET_USD(self) -> float:
+        try:
+            return float(os.environ.get("COPILOT_DAILY_BUDGET_USD", "10.0"))
+        except ValueError:
+            return 10.0
+
+    @property
+    def COPILOT_RPM_LIMIT(self) -> int:
+        try:
+            return int(os.environ.get("COPILOT_RPM_LIMIT", "10"))
+        except ValueError:
+            return 10
+
+    @property
+    def COPILOT_MAX_CONCURRENT_RUNS(self) -> int:
+        try:
+            return int(os.environ.get("COPILOT_MAX_CONCURRENT_RUNS", "2"))
+        except ValueError:
+            return 2
+
 # Global singleton
 settings = Settings()

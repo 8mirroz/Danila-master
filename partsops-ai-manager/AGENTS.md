@@ -103,6 +103,14 @@ Verify live code first; do not assume the policy is already implemented.
 - Файл `main.py` содержит ~74KB и 38 эндпоинтов. **Не добавлять новые эндпоинты в main.py**.
 - Новая логика → `routers/` и `services/`. Использовать существующую структуру как точку входа.
 
+### 🗄️ Миграции Alembic & Базы Данных
+- **Идемпотентность отката индексов**: При написании и редактировании Alembic миграций в функции `downgrade()` для любых вызовов `op.drop_index` **ОБЯЗАТЕЛЬНО** указывать параметр `if_exists=True` (`op.drop_index('ix_name', table_name='tbl', if_exists=True)`). Это предотвращает сбои `OperationalError: no such index` при откате, если индекс был удален на предыдущих шагах миграционной цепочки.
+- **Migration Gate Check**: Для подтверждения надежности миграций всегда проверять полный цикл: `empty DB -> alembic upgrade head -> alembic downgrade base -> alembic upgrade head`.
+
+### ⚠️ DeprecationWarning & Timezone Handling
+- **Замена datetime.utcnow()**: Для устранения `DeprecationWarning: datetime.datetime.utcnow() is deprecated` заменять вызовы на `datetime.now(timezone.utc).replace(tzinfo=None)` (если целевые поля БД/модели работают с наивным временем UTC), чтобы сохранить полную совместимость без предупреждений.
+- **Legacy Query API**: В тестах и коде заменять `session.query(Model)` на актуальный `session.exec(select(Model))` (для удаления использовать `session.exec(delete(Model))`).
+
 ## Code Map
 
 - `main.py`: HTTP runtime only, no new business logic.
