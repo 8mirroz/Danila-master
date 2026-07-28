@@ -20,6 +20,7 @@ type Request = {
 interface KanbanCardProps {
   request: Request;
   onSelectRequest: (req: Request) => void;
+  onRunPipeline?: (req: Request) => void;
   isHighlighted?: boolean;
 }
 
@@ -44,6 +45,7 @@ const formatRelativeTime = (dateStr?: string) => {
 export const KanbanCard: React.FC<KanbanCardProps> = ({
   request,
   onSelectRequest,
+  onRunPipeline,
   isHighlighted = false,
 }) => {
   const getPriorityStripe = (priority?: string) => {
@@ -55,7 +57,8 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
 
   return (
     <div
-      role="button"
+      role="group"
+      aria-label={`Запрос ${request.request_id}`}
       tabIndex={0}
       draggable={true}
       onDragStart={(e) => {
@@ -123,8 +126,19 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
           <span>{formatRelativeTime(request.created_at)}</span>
         </div>
         <div className="flex items-center gap-2 text-slate-300">
-          <i className="fas fa-paperclip hover:text-slate-400 transition-colors" />
-          <i className="far fa-comment hover:text-slate-400 transition-colors" />
+          {onRunPipeline && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRunPipeline(request);
+              }}
+              className="rounded-md px-1.5 py-1 text-[9px] font-bold text-blue-700 transition-colors hover:bg-blue-50 focus:outline-none"
+              aria-label={`Запустить pipeline для ${request.request_id}`}
+            >
+              Запуск
+            </button>
+          )}
         </div>
       </div>
 

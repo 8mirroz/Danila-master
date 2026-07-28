@@ -43,3 +43,17 @@ npm install
 npm run lint
 npm run build
 ```
+
+## Durable pipeline runs
+
+Kanban запускает pipeline через DB-backed очередь. Для выполнения queued runs
+поднимите worker рядом с API:
+
+```bash
+cd partsops-ai-manager
+./venv/bin/python -m app.automation.pipeline_worker
+```
+
+Для локальной проверки одной записи используйте `--once`. API не выполняет
+pipeline внутри HTTP-запроса: так run можно безопасно восстановить после
+перезапуска и наблюдать по SSE.

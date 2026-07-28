@@ -1957,9 +1957,6 @@ def archive_contract(session: Session, request_id: str, tenant_id: str, receipt_
                evidence_refs=[archive.archive_ref], tenant_id=tenant_id, commit=False)
     _advance_workflow_path(session, req, "26_ARCHIVED", actor, "Contract execution package archived")
     session.commit()
-    return {"request_id": request_id, "archive_id": archive.archive_id, "status": archive.status}
-
-
 def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: str, supplier_ids: list[str]) -> tuple[BytesIO, str]:
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -1976,29 +1973,22 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
     def _clean_oem(oem: str) -> str:
         return re.sub(r"[^a-zA-Z0-9а-яА-Я]", "", str(oem or "")).upper()
 
-    # 1. Template resolution: env var or package-relative only (no absolute home/Downloads paths)
-    package_root = Path(__file__).resolve().parents[1]
-    candidates: list[Path] = []
-    env_template = os.getenv("PARTSOPS_CONTRACT_EXPORT_TEMPLATE", "").strip()
-    if env_template:
-        candidates.append(Path(env_template))
-    candidates.extend(
-        [
-            package_root / "08_DATA" / "templates" / "Форма ответа_договор.xlsx",
-            package_root / "08_DATA" / "templates" / "test_custom_report.xlsx",
-            package_root / "Форма ответа_договор.xlsx",
-            Path.cwd() / "08_DATA" / "templates" / "Форма ответа_договор.xlsx",
-            Path.cwd() / "Форма ответа_договор.xlsx",
-        ]
-    )
-    template_path = next((p for p in candidates if p.is_file()), None)
-    if template_path is None:
-        raise ValueError(
-            "Шаблон выгрузки не найден. Укажите PARTSOPS_CONTRACT_EXPORT_TEMPLATE "
-            "или положите XLSX в partsops-ai-manager/08_DATA/templates/"
-        )
-    wb = openpyxl.load_workbook(template_path, data_only=False)
-    ws = wb.active
+    FONT_FAMILY = "DIN Alternate"
+
+    # 1. Загрузка шаблона пользователя
+    template_path = Path("/Users/user/Downloads/test_custom_report.xlsx")
+    if not template_path.exists():
+        template_path = Path("/Users/user/Downloads/Форма ответа_договор.xlsx")
+    if not template_path.exists():
+        template_path = Path.cwd() / "Форма ответа_договор.xlsx"
+        
+    if template_path.exists():
+        wb = openpyxl.load_workbook(template_path, data_only=False)
+        ws = wb.active
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Перечень"
 
     # 2. Получаем поставщиков
     all_suppliers = session.exec(select(Supplier).where(Supplier.tenant_id == tenant_id)).all()
@@ -2019,7 +2009,7 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
         dummy_id = f"DUMMY-{len(selected_suppliers)+1}"
         selected_suppliers.append(Supplier(supplier_id=dummy_id, name=f"Поставщик {len(selected_suppliers)+1}", tenant_id=tenant_id))
 
-    # Заменяем имена маркетплейсов в шапке (строка 3) с сохранением стиля
+    # Заменяем имена маркетплейсов в шапке (строка 3)
     ws.cell(row=3, column=4).value = selected_suppliers[0].name
     ws.cell(row=3, column=5).value = selected_suppliers[1].name
     ws.cell(row=3, column=6).value = selected_suppliers[2].name
@@ -2039,12 +2029,10 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
     ).order_by(ContractPosition.line_no)).all()
 
     def copy_4row_block_style_and_merge(ws, src_start, dest_start, is_even=False):
-        # Копируем 4 строки (3 содержательные + 1 разделитель)
         for r_offset in range(4):
             src_row = src_start + r_offset
             dest_row = dest_start + r_offset
             
-            # Копируем высоту строки
             if src_row in ws.row_dimensions and ws.row_dimensions[src_row].height:
                 ws.row_dimensions[dest_row].height = ws.row_dimensions[src_row].height
                 
@@ -2058,7 +2046,6 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
                 dest_cell.number_format = copy(src_cell.number_format)
                 dest_cell.alignment = copy(src_cell.alignment)
 
-        # Для четных позиций применим мягкую зебра-заливку для оригинала (колонки 1-7)
         if is_even:
             zebra_fill = PatternFill(start_color="F6F9D4", end_color="F6F9D4", fill_type="solid")
             for r_offset in range(3):
@@ -2066,11 +2053,16 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
                 for col in range(1, 8):
                     ws.cell(row=dest_row, column=col).fill = zebra_fill
         
-        # Объединяем ячейки оригинала для dest_start по dest_start+2
         for col in range(1, 9):
             ws.merge_cells(start_row=dest_start, start_column=col, end_row=dest_start+2, end_column=col)
 
-    # 4. Заполняем строки позиций (новое смещение: 4 строки на позицию, начало с Row 5)
+    # Директория архива скриншотов скрапинга согласно архитектуре
+    evidence_dir = Path(f"/Users/user/projects/Danila master/partsops-ai-manager/storage/evidence/{tenant_id}/{request_id}")
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+
+    oem_total_cells = []
+    
+    # 4. Заполняем строки позиций (4 строки на позицию, начало с Row 5)
     for idx, pos in enumerate(positions, 1):
         start_row = 5 + 4 * (idx - 1)
         is_even_pos = (idx % 2 == 0)
@@ -2079,6 +2071,7 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
             copy_4row_block_style_and_merge(ws, 5, start_row, is_even=is_even_pos)
             
         qty = pos.quantity or 1
+        oem_total_cells.append(f"G{start_row}")
         
         # Столбцы 1-3
         ws.cell(row=start_row, column=1).value = idx
@@ -2117,23 +2110,21 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
                 if evidence and evidence.screenshot_ref:
                     screenshot_ref = evidence.screenshot_ref
                 else:
-                    screenshot_dir = Path("/Users/user/projects/Danila master/partsops-ai-manager/artifacts/screenshots")
-                    screenshot_dir.mkdir(parents=True, exist_ok=True)
-                    screenshot_path = screenshot_dir / f"{supplier.supplier_id}_{pos.part_number}.png"
+                    screenshot_path = evidence_dir / f"{supplier.supplier_id}_{clean_oem}_orig.png"
                     if not screenshot_path.exists():
                         screenshot_path.touch()
                     screenshot_ref = str(screenshot_path)
                 
                 if screenshot_ref:
                     cell.hyperlink = f"file://{screenshot_ref}"
-                    cell.font = Font(name="DIN Alternate", size=10, color="0000FF", underline="single")
+                    cell.font = Font(name=FONT_FAMILY, size=10, color="0000FF", underline="single")
             else:
-                cell.value = ""
+                cell.value = "-"
 
         # Столбец 7 (Стоимость оригинала)
         ws.cell(row=start_row, column=7).value = f"=MIN(D{start_row},E{start_row},F{start_row})*{qty}"
 
-        # 5. Аналоги
+        # 5. Аналоги (ровно 3 строки)
         analogs = session.exec(select(AnalogCandidate).where(
             AnalogCandidate.position_id == pos.position_id,
             AnalogCandidate.tenant_id == tenant_id
@@ -2170,72 +2161,90 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
                 )
                 for j, c in enumerate(analogs_list[:3])
             ]
-            
-        if len(analogs) < 3:
-            demo_data = [
-                ("ATE", f"ATE-{pos.part_number}"),
-                ("Brembo", f"BR-{pos.part_number}"),
-                ("Bosch", f"BS-{pos.part_number}")
-            ]
-            for brand, art in demo_data:
-                if len(analogs) >= 3:
-                    break
-                if not any(a.brand.lower() == brand.lower() for a in analogs):
-                    analogs.append(
-                        AnalogCandidate(
-                            candidate_id=f"ANL-DEMO-{idx}-{len(analogs)}",
-                            position_id=pos.position_id,
-                            tenant_id=tenant_id,
-                            article=art,
-                            brand=brand,
-                            manual_review_status="approved"
-                        )
-                    )
-                    
-        for a_idx, analog in enumerate(analogs[:3]):
-            row_num = start_row + a_idx
-            
-            # Столбец 9 (Описание аналога)
-            ws.cell(row=row_num, column=9).value = f"{analog.brand} {analog.article}"
-            
-            # Столбцы 10-12 (Цены аналога)
-            for s_idx, supplier in enumerate(selected_suppliers):
-                col_idx = 10 + s_idx
-                cell = ws.cell(row=row_num, column=col_idx)
-                
-                clean_art = _clean_oem(analog.article)
-                row_price = session.exec(select(SupplierTableRow).where(
-                    SupplierTableRow.supplier_id == supplier.supplier_id,
-                    SupplierTableRow.tenant_id == tenant_id
-                )).all()
-                
-                price_val = None
-                for rp in row_price:
-                    if _clean_oem(rp.oem_number) == clean_art:
-                        price_val = rp.price
-                        break
-                        
-                if price_val is None:
-                    base_price = oem_prices[0] if oem_prices else 3000.0
-                    price_val = round(base_price * (0.85 - 0.02 * a_idx), 2)
-                    
-                cell.value = price_val
-                
-                screenshot_dir = Path("/Users/user/projects/Danila master/partsops-ai-manager/artifacts/screenshots")
-                screenshot_dir.mkdir(parents=True, exist_ok=True)
-                screenshot_path = screenshot_dir / f"{supplier.supplier_id}_{analog.article}.png"
-                if not screenshot_path.exists():
-                    screenshot_path.touch()
-                
-                cell.hyperlink = f"file://{str(screenshot_path)}"
-                cell.font = Font(name="DIN Alternate", size=10, color="0000FF", underline="single")
-                
-            # Столбец 13 (Стоимость аналога)
-            ws.cell(row=row_num, column=13).value = f"=MIN(J{row_num},K{row_num},L{row_num})*{qty}"
 
-    # 6. Сохранение
+        # Если аналогов меньше 3, заполняем оставшиеся строки прочерками '-'
+        for a_idx in range(3):
+            row_num = start_row + a_idx
+            cell_i = ws.cell(row=row_num, column=9)
+            
+            if a_idx < len(analogs):
+                analog = analogs[a_idx]
+                cell_i.value = f"{analog.brand} {analog.article}"
+                clean_art = _clean_oem(analog.article)
+                
+                for s_idx, supplier in enumerate(selected_suppliers):
+                    col_idx = 10 + s_idx
+                    cell = ws.cell(row=row_num, column=col_idx)
+                    
+                    row_price = session.exec(select(SupplierTableRow).where(
+                        SupplierTableRow.supplier_id == supplier.supplier_id,
+                        SupplierTableRow.tenant_id == tenant_id
+                    )).all()
+                    
+                    price_val = None
+                    for rp in row_price:
+                        if _clean_oem(rp.oem_number) == clean_art:
+                            price_val = rp.price
+                            break
+                            
+                    if price_val is not None:
+                        cell.value = price_val
+                        screenshot_path = evidence_dir / f"{supplier.supplier_id}_{clean_art}_analog.png"
+                        if not screenshot_path.exists():
+                            screenshot_path.touch()
+                        cell.hyperlink = f"file://{str(screenshot_path)}"
+                        cell.font = Font(name=FONT_FAMILY, size=10, color="0000FF", underline="single")
+                    else:
+                        cell.value = "-"
+                        
+                ws.cell(row=row_num, column=13).value = f"=MIN(J{row_num},K{row_num},L{row_num})*{qty}"
+            else:
+                cell_i.value = "-"
+                ws.cell(row=row_num, column=10).value = "-"
+                ws.cell(row=row_num, column=11).value = "-"
+                ws.cell(row=row_num, column=12).value = "-"
+                ws.cell(row=row_num, column=13).value = "-"
+
+    # 6. Добавление ИТОГОВОЙ строки (TOTAL ROW) только для колонок G и M
+    last_data_row = 4 + 4 * len(positions)
+    total_row = last_data_row + 1
+    
+    ws.row_dimensions[total_row].height = 24.0
+    bold_font = Font(name="DIN Condensed", size=12, bold=True, color="000000")
+    total_fill = PatternFill(start_color="EEEEEE", end_color="EEEEEE", fill_type="solid")
+    
+    ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=6)
+    tot_label = ws.cell(row=total_row, column=1)
+    tot_label.value = "ИТОГО ПО ДОГОВОРУ:"
+    tot_label.font = bold_font
+    tot_label.alignment = Alignment(horizontal="right", vertical="center")
+    
+    oem_sum_formula = "=SUM(" + ",".join(oem_total_cells) + ")" if oem_total_cells else "=0"
+    cell_g_tot = ws.cell(row=total_row, column=7)
+    cell_g_tot.value = oem_sum_formula
+    cell_g_tot.font = Font(name="DIN Alternate", size=13, bold=True, color="000000")
+    cell_g_tot.alignment = Alignment(horizontal="center", vertical="center")
+    cell_g_tot.fill = total_fill
+
+    ws.cell(row=total_row, column=8).value = ""
+    
+    tot_anl_label = ws.cell(row=total_row, column=9)
+    tot_anl_label.value = "ИТОГО АНАЛОГИ:"
+    tot_anl_label.font = bold_font
+    tot_anl_label.alignment = Alignment(horizontal="right", vertical="center")
+    
+    first_anl_row = 5
+    last_anl_row = last_data_row - 1
+    cell_m_tot = ws.cell(row=total_row, column=13)
+    cell_m_tot.value = f"=SUM(M{first_anl_row}:M{last_anl_row})"
+    cell_m_tot.font = Font(name="DIN Alternate", size=13, bold=True, color="000000")
+    cell_m_tot.alignment = Alignment(horizontal="center", vertical="center")
+    cell_m_tot.fill = total_fill
+
+    # 7. Сохранение
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
     filename = f"partsops_custom_report_{request_id}.xlsx"
     return buffer, filename
+

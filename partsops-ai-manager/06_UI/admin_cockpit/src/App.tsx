@@ -150,17 +150,6 @@ function App() {
     void fetchSuppliersForPalette();
   }, [fetchTrigger]);
 
-  const resolveDropTarget = (req: Request, columnStatuses: string[]) => {
-    const currentStatus = req.status;
-    const validStates = columnStatuses;
-    if (validStates.includes(currentStatus)) return null;
-    if (validStates.includes('PART_EXTRACTION') && ['NEW', 'NORMALIZING', 'PARSING', 'VIN_CHECK'].includes(currentStatus)) return 'PART_EXTRACTION';
-    if (validStates.includes('MATCHING') && currentStatus !== 'MATCHING') return 'MATCHING';
-    if (validStates.includes('READY_FOR_APPROVAL')) return 'READY_FOR_APPROVAL';
-    if (validStates.includes('APPROVED') && currentStatus !== 'APPROVED') return 'APPROVED';
-    return validStates[0] || null;
-  };
-
   const fetchRequests = async () => {
     try {
       const res = await apiFetch('/api/requests');
@@ -766,8 +755,9 @@ function App() {
                   <KanbanBoard
                     requests={requests}
                     onSelectRequest={handleSelectRequest}
-                    onTransitionRequest={handleStateTransition}
-                    resolveDropTarget={resolveDropTarget}
+                    onRunsChanged={() => {
+                      setFetchTrigger((previous) => previous + 1);
+                    }}
                   />
                 </div>
               )}

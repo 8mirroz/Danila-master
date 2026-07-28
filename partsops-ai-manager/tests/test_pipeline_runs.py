@@ -10,6 +10,7 @@ from sqlmodel import SQLModel, Session
 from database import engine
 from main import app
 from models import PartRequest, RequestState
+from services.pipeline_runs import claim_next_run, list_run_events
 
 
 client = TestClient(app)
@@ -73,3 +74,21 @@ def test_pipeline_run_refuses_requests_without_parts():
     )
     assert response.status_code == 422
     assert "позици" in str(response.json()["detail"]).lower()
+
+
+def test_worker_claim_writes_replayable_started_event():
+    response = client.post(
+        "/api/requests/REQ-PIPELINE-RUN/pipeline-runs",
+        json={"requested_lane": "matching"},
+        headers=AUTH_HEADERS,
+    )
+    run_id = response.json()["run_id"]
+
+    with Session(engine) as session:
+        claimed = claim_next_run(session, worker_id="test-worker", lease_seconds=30)
+        assert claimed is not None
+        assert claimed.run_id == run_id
+        assert claimed.status == "running"
+        events = list_run_events(session, run_id=run_id, tenant_id="default")
+
+    assert [event.event_type for event in events] == ["queued", "started"]

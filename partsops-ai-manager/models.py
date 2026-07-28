@@ -406,7 +406,7 @@ class JobRun(SQLModel, table=True):
 class PipelineRun(SQLModel, table=True):
     """Durable, tenant-scoped execution request for the operator pipeline."""
     id: Optional[int] = Field(default=None, primary_key=True)
-    run_id: str = Field(index=True, unique=True)
+    run_id: str = Field(unique=True)
     tenant_id: str = Field(default="default", index=True)
     request_id: str = Field(index=True)
     requested_by: str = Field(default="operator")

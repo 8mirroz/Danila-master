@@ -166,6 +166,16 @@ test.describe('PartsOps AI Manager E2E', () => {
     await expect(page.locator('text=Интерактивный рабочий процесс')).toBeVisible({ timeout: 10000 });
   });
 
+  test('Kanban action opens the real pipeline-run confirmation dialog', async ({ page }) => {
+    await openCommandPalette(page);
+    await clickPaletteButton(page, 'Канбан-доска');
+
+    await page.getByRole('button', { name: 'Запустить pipeline для REQ-4821', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Подтверждение запуска pipeline' })).toBeVisible();
+    await expect(page.getByText('Финальный этап определяет pipeline, а не drag-and-drop.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Запустить pipeline' })).toBeVisible();
+  });
+
   test('Right panel shows request queue', async ({ page }) => {
     await expect(page.locator('text=REQ-').first()).toBeVisible({ timeout: 15000 });
   });

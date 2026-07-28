@@ -218,3 +218,7 @@ Connected real ping-all endpoint and localized UI states to Russian
 ## 🧠 Durable Fact | 2026-07-28T22:25:11+03:00
 
 Интегрирован обновленный дизайн отчета пользователя: черная шапка DIN Condensed, 4-строчная геометрия блоков, DIN Alternate и зебра-подсветка
+
+## 🧠 Durable Fact | 2026-07-28T22:31:23+03:00
+
+Реализована итоговая строка Total (G и M), прочерки '-', безопасный фоллбэк Calibri и архитектура хранилища скриншотов storage/evidence
