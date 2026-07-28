@@ -5,9 +5,25 @@ echo "======================================================="
 echo "   Starting PartsOps AI Manager Control Plane v3       "
 echo "======================================================="
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}"
+
 # Run one-time hermes setup
 if [ -f "scripts/setup_hermes.sh" ]; then
   bash scripts/setup_hermes.sh || true
+fi
+
+# Load Hermes API Key secret
+if [ -f ".hermes_api_key" ]; then
+  export HERMES_API_KEY=$(cat .hermes_api_key)
+  export API_SERVER_KEY="${HERMES_API_KEY}"
+fi
+
+# Load .env
+if [ -f ".env" ]; then
+  set -a
+  source .env
+  set +a
 fi
 
 # Trap SIGINT/SIGTERM to kill only spawned child processes
@@ -32,11 +48,11 @@ trap cleanup SIGINT SIGTERM EXIT
 
 # 1. Start Hermes API Sidecar Gateway (Port 8642)
 echo "Starting Hermes API Gateway (127.0.0.1:8642)..."
-if command -v hermes &> /dev/null && false; then
-  hermes api-server --profile partsops --host 127.0.0.1 --port 8642 &
+if command -v hermes &> /dev/null; then
+  hermes serve --profile partsops --host 127.0.0.1 --port 8642 --isolated &
   HERMES_PID=$!
 else
-  echo "[!] Skipping live gateway daemon. Copilot will run in offline/fallback mode."
+  echo "[!] Hermes CLI binary not found. Skipping live gateway daemon. Copilot will run in fallback mode."
   HERMES_PID=""
 fi
 
@@ -44,7 +60,7 @@ fi
 if [ -n "${HERMES_PID}" ]; then
   echo "Waiting for Hermes API Server readiness (max 20s)..."
   WAIT_COUNTER=0
-  until curl -s http://127.0.0.1:8642/v1/capabilities > /dev/null || [ ${WAIT_COUNTER} -ge 20 ]; do
+  until curl -s http://127.0.0.1:8642/ > /dev/null || [ ${WAIT_COUNTER} -ge 20 ]; do
     sleep 1
     WAIT_COUNTER=$((WAIT_COUNTER + 1))
   done
@@ -52,7 +68,7 @@ if [ -n "${HERMES_PID}" ]; then
   if [ ${WAIT_COUNTER} -lt 20 ]; then
     echo "[✓] Hermes API Gateway is ready on http://127.0.0.1:8642"
   else
-    echo "[!] Hermes API Gateway did not start within 20s. Proceeding with application startup in offline mode."
+    echo "[!] Hermes API Gateway did not start within 20s. Proceeding with application startup in fallback mode."
   fi
 fi
 

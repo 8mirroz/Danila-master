@@ -1,0 +1,7 @@
+{
+  "venvPath": "partsops-ai-manager",
+  "venv": "venv",
+  "extraPaths": [
+    "partsops-ai-manager"
+  ]
+}

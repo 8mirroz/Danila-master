@@ -148,98 +148,102 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
       });
 
       if (!runRes.ok) {
-        throw new Error('Не удалось запустить обработку запроса');
+        const errorData = await runRes.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Не удалось запустить обработку запроса');
       }
 
       const runData = await runRes.json();
       const runId = runData.run_id;
       setCurrentRunId(runId);
 
-      // 2. Stream SSE events
-      const eventSource = new EventSource(`/api/copilot/runs/${runId}/events`);
+      // 2. Stream SSE events via apiFetch (supports Authorization & X-Tenant-ID headers)
+      const streamRes = await apiFetch(`/api/copilot/runs/${runId}/events`);
+      if (!streamRes.ok || !streamRes.body) {
+        throw new Error('Не удалось установить соединение с сервером ответов');
+      }
 
-      eventSource.onmessage = (event) => {
-        try {
-          const evtData = JSON.parse(event.data);
+      const reader = streamRes.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
-          if (evtData.type === 'assistant.delta') {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMsgId
-                  ? { ...msg, content: msg.content + evtData.text }
-                  : msg
-              )
-            );
-          } else if (evtData.type === 'source') {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMsgId
-                  ? {
-                      ...msg,
-                      sources: [
-                        ...(msg.sources || []),
-                        { source_id: evtData.source_id, title: evtData.title },
-                      ],
-                    }
-                  : msg
-              )
-            );
-          } else if (evtData.type === 'navigation.action') {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMsgId
-                  ? {
-                      ...msg,
-                      actions: [...(msg.actions || []), evtData.action],
-                    }
-                  : msg
-              )
-            );
-          } else if (evtData.type === 'run.completed' || evtData.type === 'run.failed') {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMsgId ? { ...msg, isStreaming: false } : msg
-              )
-            );
-            eventSource.close();
-            setIsProcessing(false);
-            setCurrentRunId(null);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            const jsonStr = trimmed.slice(6).trim();
+            if (!jsonStr) continue;
+
+            try {
+              const evtData = JSON.parse(jsonStr);
+
+              if (evtData.type === 'assistant.delta') {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? { ...msg, content: msg.content + evtData.text }
+                      : msg
+                  )
+                );
+              } else if (evtData.type === 'source') {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          sources: [
+                            ...(msg.sources || []),
+                            { source_id: evtData.source_id, title: evtData.title },
+                          ],
+                        }
+                      : msg
+                  )
+                );
+              } else if (evtData.type === 'navigation.action') {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? {
+                          ...msg,
+                          actions: [...(msg.actions || []), evtData.action],
+                        }
+                      : msg
+                  )
+                );
+              } else if (evtData.type === 'run.completed' || evtData.type === 'run.failed') {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId ? { ...msg, isStreaming: false } : msg
+                  )
+                );
+              }
+            } catch (e) {
+              console.error('Error parsing stream event line:', e);
+            }
           }
-        } catch (e) {
-          console.error('Error parsing SSE event:', e);
         }
-      };
-
-      eventSource.onerror = () => {
-        eventSource.close();
-        setIsProcessing(false);
-        setCurrentRunId(null);
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMsgId
-              ? {
-                  ...msg,
-                  content: msg.content || 'Произошла ошибка при получении ответа от Hermes.',
-                  isStreaming: false,
-                }
-              : msg
-          )
-        );
-      };
+      }
     } catch (err: any) {
-      setIsProcessing(false);
-      setCurrentRunId(null);
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMsgId
             ? {
                 ...msg,
-                content: err?.message || 'Сервис Hermes недоступен.',
+                content: msg.content || err?.message || 'Сервис Hermes временно недоступен.',
                 isStreaming: false,
               }
             : msg
         )
       );
+    } finally {
+      setIsProcessing(false);
+      setCurrentRunId(null);
     }
   };
 
@@ -287,7 +291,7 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
           aria-label="Открыть Hermes Помощник"
         >
           <div className="relative">
-            <i className="fas fa-[#fae8ff] fa-robot text-lg text-emerald-400" />
+            <i className="fas fa-robot text-lg text-emerald-400" />
             <span
               className={`absolute -top-1 -right-1 h-3 w-3 rounded-full border-2 border-slate-900 ${
                 hermesStatus === 'online'

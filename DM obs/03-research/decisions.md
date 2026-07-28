@@ -155,3 +155,7 @@ ADR: Alembic Migration Downgrade Safety & Warning Remediation Rules
 ## ⚖️ Decision | 2026-07-28T02:22:59+03:00
 
 Интеграция Hermes Copilot в PartsOps Admin Cockpit (Read-Only sidecar, API Server contract, PII masking, Help corpus, SSE)
+
+## ⚖️ Decision | 2026-07-28T09:40:55+03:00
+
+Исправление интеграции Hermes Copilot: вызов Hermes CLI -z, исправленный hermes serve, авторизованный SSE, строгое цитирование источников, линейная миграция Alembic

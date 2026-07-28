@@ -9,12 +9,19 @@ HERMES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE_NAME="partsops"
 DIST_DIR="${HERMES_DIR}/partsops-hermes"
 
+# Load environment variables if .env exists
+if [ -f "${HERMES_DIR}/.env" ]; then
+    set -a
+    source "${HERMES_DIR}/.env"
+    set +a
+fi
+
 # 1. Verify Hermes CLI
 if command -v hermes &> /dev/null; then
     HERMES_VERSION=$(hermes --version 2>&1 || echo "0.19.0")
     echo "[✓] Found Hermes CLI: ${HERMES_VERSION}"
 else
-    echo "[!] Hermes CLI binary not found in PATH. Creating mock profile setup for application runtime."
+    echo "[!] Hermes CLI binary not found in PATH."
 fi
 
 # 2. Ensure distribution files exist
@@ -25,7 +32,13 @@ fi
 
 echo "[✓] Verified profile distribution files in ${DIST_DIR}"
 
-# 3. Provision API Server Secret Key (0600 permissions)
+# 3. Install profile non-interactively
+if command -v hermes &> /dev/null; then
+    echo "[*] Installing 'partsops' profile distribution..."
+    echo "y" | hermes profile install "${DIST_DIR}" --force || true
+fi
+
+# 4. Provision API Server Secret Key (0600 permissions)
 SECRET_FILE="${HERMES_DIR}/.hermes_api_key"
 if [ ! -f "${SECRET_FILE}" ]; then
     API_KEY="partsops-hermes-key-$(openssl rand -hex 16 2>/dev/null || echo "secret-$(date +%s)")"
@@ -36,14 +49,9 @@ else
     echo "[✓] Using existing API_SERVER_KEY from ${SECRET_FILE}"
 fi
 
-# 4. Check hermes config and doctor if hermes is available
-if command -v hermes &> /dev/null; then
-    echo "[*] Running hermes config check..."
-    hermes config check --profile "${PROFILE_NAME}" || true
-    
-    echo "[*] Running hermes doctor..."
-    hermes doctor || true
-fi
+API_SERVER_KEY=$(cat "${SECRET_FILE}")
+export API_SERVER_KEY
+export HERMES_API_KEY="${API_SERVER_KEY}"
 
 echo "======================================================"
 echo "  PartsOps Hermes Profile Setup Completed Successfully "

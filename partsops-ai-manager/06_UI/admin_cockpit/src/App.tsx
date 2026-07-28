@@ -657,7 +657,12 @@ function App() {
                 )}
 
                 {activeNav === 'pipeline' && (
-                <PipelineMonitor requests={requests} fetchTrigger={fetchTrigger} />
+                  <PipelineMonitor
+                    requests={requests}
+                    fetchTrigger={fetchTrigger}
+                    selectedRequestId={selectedReq?.request_id || null}
+                    onSelectRequest={handleSelectRequest}
+                  />
                 )}
 
 

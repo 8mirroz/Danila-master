@@ -176,5 +176,11 @@
 
   "codeWebChat.commitMessageInstructions": "Write a concise imperative commit message. One sentence. No bullet points.",
   "codeWebChat.includePromptsInCommitMessages": false,
-  "css.lint.unknownAtRules": "ignore"
+  "css.lint.unknownAtRules": "ignore",
+  "python.defaultInterpreterPath": "${workspaceFolder}/partsops-ai-manager/venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/partsops-ai-manager"
+  ],
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.indexing": true
 }

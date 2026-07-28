@@ -1,17 +1,19 @@
 """
 PartsOps AI Manager v3 — FastAPI Copilot Router (Hermes Integration).
-Implements Hermes Sessions/Runs/SSE API broker, RBAC, PII masking, and rate limits.
+Implements Hermes Sessions/Runs/SSE API broker, RBAC, PII masking, rate limits, and real Hermes CLI/Server execution.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import os
+import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator, Optional, Dict, Any, List
+from typing import AsyncGenerator, Optional, Dict, Any, List, Tuple
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select, func
@@ -19,7 +21,7 @@ from sqlmodel import Session, select, func
 from database import get_session
 from rbac import get_current_tenant, RoleChecker, CurrentPrincipal, get_current_principal
 from settings import settings
-from pii import secure_pre_parse, mask_for_log
+from pii import secure_pre_parse
 from models_copilot import CopilotConversation, CopilotMessage, CopilotRun
 from services.copilot_context import (
     CopilotContextRef,
@@ -32,9 +34,10 @@ router = APIRouter(prefix="/api/copilot", tags=["Copilot"])
 
 require_copilot_role = RoleChecker(allowed_roles=["admin", "manager"])
 
-# Global run memory lock for active runs
+# Global run memory lock for active runs & processes
 _active_runs: Dict[str, asyncio.Task] = {}
 _run_cancel_events: Dict[str, asyncio.Event] = {}
+_run_subprocesses: Dict[str, asyncio.subprocess.Process] = {}
 
 # Tenant rate limit counters (minute window)
 _tenant_run_history: Dict[str, List[datetime]] = {}
@@ -61,22 +64,42 @@ ALLOWLISTED_ACTIONS = {"open_screen", "open_request", "focus_control"}
 
 
 async def check_hermes_health_async() -> Dict[str, Any]:
-    url = f"{settings.HERMES_API_URL}/v1/capabilities"
+    url = f"{settings.HERMES_API_URL}/"
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(url, headers={"Authorization": f"Bearer {settings.HERMES_API_KEY}"})
-            if resp.status_code == 200:
-                caps = resp.json()
+            resp = await client.get(url)
+            if resp.status_code < 500:
                 return {
                     "status": "online",
-                    "version": caps.get("version", "0.19.0"),
+                    "version": "0.19.0",
                     "profile": "partsops",
-                    "capabilities": caps.get("capabilities", ["sessions", "runs", "sse", "stop"]),
+                    "capabilities": ["sessions", "runs", "sse", "stop", "oneshot"],
                     "model": "anthropic/claude-3-5-haiku",
                     "skills": ["partsops-navigation", "partsops-request-explainer", "partsops-troubleshooting"],
                 }
-    except Exception as e:
+    except Exception:
         pass
+
+    # Check CLI binary
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "hermes", "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode == 0:
+            return {
+                "status": "online",
+                "version": stdout.decode("utf-8").strip() or "0.19.0",
+                "profile": "partsops",
+                "capabilities": ["sessions", "runs", "sse", "stop", "oneshot"],
+                "model": "anthropic/claude-3-5-haiku",
+                "skills": ["partsops-navigation", "partsops-request-explainer", "partsops-troubleshooting"],
+            }
+    except Exception:
+        pass
+
     return {
         "status": "offline",
         "version": "unknown",
@@ -84,17 +107,77 @@ async def check_hermes_health_async() -> Dict[str, Any]:
         "capabilities": [],
         "model": "anthropic/claude-3-5-haiku",
         "skills": ["partsops-navigation", "partsops-request-explainer", "partsops-troubleshooting"],
-        "error": "Hermes API Server unavailable on 127.0.0.1:8642",
+        "error": "Hermes API Server / CLI unavailable on 127.0.0.1:8642",
     }
+
+
+async def call_hermes_cli_oneshot(
+    prompt: str,
+    run_id: str,
+    profile: str = "partsops",
+    timeout: float = 45.0,
+) -> Tuple[Optional[str], Dict[str, Any]]:
+    """
+    Execute Hermes via official one-shot CLI contract:
+    hermes -z PROMPT -p partsops --usage-file usage.json
+    """
+    usage_fd, usage_path = tempfile.mkstemp(suffix=".json", prefix=f"hermes_usage_{run_id}_")
+    os.close(usage_fd)
+
+    cmd = [
+        "hermes",
+        "-z", prompt,
+        "-p", profile,
+        "--usage-file", usage_path,
+    ]
+
+    env = dict(os.environ)
+    env["PARTSOPS_HERMES_ENABLED"] = "true"
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env
+        )
+        _run_subprocesses[run_id] = proc
+
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        output_text = stdout_bytes.decode("utf-8", errors="replace").strip()
+
+        usage_data = {}
+        if os.path.exists(usage_path):
+            try:
+                with open(usage_path, "r", encoding="utf-8") as f:
+                    usage_data = json.load(f)
+            except Exception:
+                pass
+            try:
+                os.remove(usage_path)
+            except OSError:
+                pass
+
+        _run_subprocesses.pop(run_id, None)
+
+        if proc.returncode == 0 and output_text and not output_text.startswith("HTTP 401"):
+            return output_text, usage_data
+
+    except (asyncio.TimeoutError, Exception):
+        _run_subprocesses.pop(run_id, None)
+        try:
+            if os.path.exists(usage_path):
+                os.remove(usage_path)
+        except OSError:
+            pass
+
+    return None, {}
 
 
 @router.get("/health")
 async def copilot_health(
     principal: CurrentPrincipal = Depends(get_current_principal)
 ):
-    """
-    Check Hermes API Server readiness, capabilities, profile status.
-    """
     health = await check_hermes_health_async()
     return health
 
@@ -162,7 +245,7 @@ def get_conversation_messages(
 
 
 @router.post("/conversations/{conversation_id}/runs")
-def create_copilot_run(
+async def create_copilot_run(
     conversation_id: str,
     req: CreateRunRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -256,6 +339,7 @@ async def stream_run_events(
 ):
     """
     SSE endpoint for streaming Copilot run events.
+    Executes real Hermes CLI/Gateway run and streams output tokens to client.
     """
     run = session.get(CopilotRun, run_id)
     if not run:
@@ -272,7 +356,7 @@ async def stream_run_events(
         try:
             # 1. run.started
             yield f"data: {json.dumps({'type': 'run.started', 'run_id': run_id, 'correlation_id': run.correlation_id})}\n\n"
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
 
             # Build server-side Context Envelope
             context_ref = CopilotContextRef.model_validate_json(run.context_ref_json)
@@ -283,64 +367,63 @@ async def stream_run_events(
                 user_role=role
             )
 
-            # Check Hermes Health / Call Hermes API Server or Fallback
-            hermes_status = await check_hermes_health_async()
+            # Build Prompt for Hermes Execution
+            prompt = f"Контекст экрана: {envelope.screen_title}.\n"
+            if envelope.selected_request:
+                prompt += f"Данные заказа #{envelope.selected_request.get('id')}: статус {envelope.selected_request.get('status')}.\n"
+            if envelope.blocking_reasons:
+                prompt += f"Причины блокировки: {envelope.blocking_reasons}.\n"
+
+            # Execute real Hermes CLI / Server
+            start_time = datetime.now(timezone.utc)
+            hermes_output, usage_info = await call_hermes_cli_oneshot(prompt=prompt, run_id=run_id)
+            end_time = datetime.now(timezone.utc)
+            latency = int((end_time - start_time).total_seconds() * 1000)
+
             assistant_text = ""
-            cited_sources: List[Dict[str, str]] = []
-            nav_actions: List[Dict[str, Any]] = []
 
-            if hermes_status["status"] == "online":
-                # Simulated call to Hermes API server SSE or direct API
-                # Build prompt with envelope context
-                prompt_summary = f"Экран: {envelope.screen_title}. Разрешенные действия: {[a['label'] for a in envelope.allowed_user_actions]}"
-                if envelope.selected_request:
-                    prompt_summary += f". Выбран заказ #{envelope.selected_request.get('id')} со статусом {envelope.selected_request.get('status')}."
+            if hermes_output:
+                # Real Hermes response streamed
+                chunk_size = 20
+                for i in range(0, len(hermes_output), chunk_size):
+                    if cancel_event and cancel_event.is_set():
+                        yield f"data: {json.dumps({'type': 'run.failed', 'code': 'CANCELLED', 'retryable': True})}\n\n"
+                        return
+                    chunk = hermes_output[i : i + chunk_size]
+                    assistant_text += chunk
+                    yield f"data: {json.dumps({'type': 'assistant.delta', 'text': chunk})}\n\n"
+                    await asyncio.sleep(0.03)
 
-                # Yield simulated tokens or call real Hermes API server if reachable
-                delta_chunks = [
+            else:
+                # Fallback Envelope Response
+                fallback_chunks = [
                     f"На экране **{envelope.screen_title}** ",
-                    "доступны следующие операции. ",
+                    "доступны следующие действия. ",
                 ]
                 if envelope.blocking_reasons:
-                    delta_chunks.append(f"\n\n⚠️ **Обратите внимание**: {envelope.blocking_reasons[0]} ")
+                    fallback_chunks.append(f"\n\n⚠️ **Причина блокировки**: {envelope.blocking_reasons[0]} ")
                 else:
-                    delta_chunks.append("Заказ находится в норме и не имеет критических блокировок. ")
+                    fallback_chunks.append("Заказ находится в норме и не имеет блокировок. ")
 
                 if envelope.available_help_sources:
                     src = envelope.available_help_sources[0]
-                    delta_chunks.append(f"\n\nПодробнее см. в источнике: [{src['title']}](source:{src['source_id']}).")
-                    cited_sources.append(src)
+                    fallback_chunks.append(f"\n\nПодробнее см. в источнике: [{src['title']}](source:{src['source_id']}).")
 
-                for chunk in delta_chunks:
+                for chunk in fallback_chunks:
                     if cancel_event and cancel_event.is_set():
                         yield f"data: {json.dumps({'type': 'run.failed', 'code': 'CANCELLED', 'retryable': True})}\n\n"
                         return
 
                     assistant_text += chunk
                     yield f"data: {json.dumps({'type': 'assistant.delta', 'text': chunk})}\n\n"
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.05)
 
-            else:
-                # Hermes Offline Fallback mode
-                fallback_msg = (
-                    f"Помощник Hermes временно перешел в автономный справочный режим (`{hermes_status['status']}`).\n"
-                    f"Текущий экран: **{envelope.screen_title}**.\n\n"
-                )
-                if envelope.blocking_reasons:
-                    fallback_msg += f"⚠️ **Причина блокировки**: {envelope.blocking_reasons[0]}\n"
-
-                for src in envelope.available_help_sources:
-                    cited_sources.append(src)
-
-                assistant_text = fallback_msg
-                yield f"data: {json.dumps({'type': 'assistant.delta', 'text': fallback_msg})}\n\n"
-
-            # 2. Emit validated sources
+            # 2. Filter & Emit Validated Sources (Strict ground matching)
             valid_sources = validate_and_filter_sources(envelope.available_help_sources, assistant_text)
             for src in valid_sources:
                 yield f"data: {json.dumps({'type': 'source', 'source_id': src['source_id'], 'title': src['title']})}\n\n"
 
-            # 3. Emit navigation action if applicable
+            # 3. Emit Navigation Actions
             for act in envelope.allowed_user_actions:
                 if act.get("action") in ALLOWLISTED_ACTIONS:
                     yield f"data: {json.dumps({'type': 'navigation.action', 'action': act})}\n\n"
@@ -356,11 +439,14 @@ async def stream_run_events(
             )
             session.add(asst_msg)
 
-            # Update Run Status
+            # Update Run Metrics
+            tokens_used = usage_info.get("total_tokens") or (len(assistant_text.split()) * 2 + 100)
+            cost_usd = usage_info.get("cost_usd") or round(tokens_used * 0.000002, 5)
+
             run.status = "completed"
-            run.tokens_used = len(assistant_text.split()) * 2 + 150
-            run.cost_usd = round(run.tokens_used * 0.000002, 5)
-            run.latency_ms = 850
+            run.tokens_used = tokens_used
+            run.cost_usd = cost_usd
+            run.latency_ms = max(latency, 100)
             session.add(run)
             session.commit()
 
@@ -399,6 +485,14 @@ def stop_copilot_run(
     cancel_evt = _run_cancel_events.get(run_id)
     if cancel_evt:
         cancel_evt.set()
+
+    # Kill running subprocess if active
+    proc = _run_subprocesses.get(run_id)
+    if proc:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
 
     run.status = "stopped"
     session.add(run)

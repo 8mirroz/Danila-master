@@ -1,19 +1,24 @@
 """
 Unit and Integration Tests for Copilot (Hermes Assistant Router).
-Tests tenant isolation, RBAC, PII masking, context building, help source retrieval, and rate limits.
+Tests tenant isolation, RBAC, PII masking, context building, help source retrieval, SSE streaming, stop runs, rate limits, budget guards, and migration status.
 """
 import os
 import pytest
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 import main
 from database import get_session
 from models_copilot import CopilotConversation, CopilotMessage, CopilotRun
 from services.help_service import get_help_sources_for_context, get_help_source_by_id
-from services.copilot_context import CopilotContextRef, build_context_envelope
-from pii import mask_request_for_agent, secure_pre_parse
+from services.copilot_context import (
+    CopilotContextRef,
+    build_context_envelope,
+    validate_and_filter_sources,
+)
+from pii import secure_pre_parse
 from rbac import create_signed_token, _get_api_token
 
 
@@ -150,3 +155,94 @@ def test_context_envelope_building(session: Session):
     assert envelope.screen_id == "kanban_board"
     assert envelope.screen_title == "Канбан-доска заказов"
     assert len(envelope.available_help_sources) > 0
+
+
+def test_strict_grounding_filter():
+    available = [
+        {"source_id": "help-kanban-01", "title": "Инструкция по Канбан"},
+        {"source_id": "help-blocked-02", "title": "Причины блокировки"},
+    ]
+    # Case A: Response cites help-kanban-01
+    text_a = "Согласно источнику help-kanban-01, вы можете перемещать карточки."
+    filtered_a = validate_and_filter_sources(available, text_a)
+    assert len(filtered_a) == 1
+    assert filtered_a[0]["source_id"] == "help-kanban-01"
+
+    # Case B: Response cites nothing
+    text_b = "Общий ответ без ссылок на источники."
+    filtered_b = validate_and_filter_sources(available, text_b)
+    assert len(filtered_b) == 0
+
+
+def test_run_creation_and_sse_streaming(client: TestClient):
+    headers = make_auth_headers(tenant_id="tenant-stream", role="manager")
+    # 1. Create conversation
+    conv_res = client.post("/api/copilot/conversations", json={"title": "Stream Test"}, headers=headers)
+    conv_id = conv_res.json()["id"]
+
+    # 2. Create Run
+    run_res = client.post(
+        f"/api/copilot/conversations/{conv_id}/runs",
+        json={"message": "Объясни статус заказа", "context_ref": {"screen_id": "kanban_board"}},
+        headers=headers,
+    )
+    assert run_res.status_code == 200
+    run_id = run_res.json()["run_id"]
+
+    # 3. Get SSE events stream
+    stream_res = client.get(f"/api/copilot/runs/{run_id}/events", headers=headers)
+    assert stream_res.status_code == 200
+    content = stream_res.text
+    assert "run.started" in content
+    assert "assistant.delta" in content
+    assert "run.completed" in content
+
+
+def test_stop_copilot_run(client: TestClient):
+    headers = make_auth_headers(tenant_id="tenant-stop", role="manager")
+    conv_res = client.post("/api/copilot/conversations", json={"title": "Stop Test"}, headers=headers)
+    conv_id = conv_res.json()["id"]
+
+    run_res = client.post(
+        f"/api/copilot/conversations/{conv_id}/runs",
+        json={"message": "Долгий запрос", "context_ref": {"screen_id": "kanban_board"}},
+        headers=headers,
+    )
+    run_id = run_res.json()["run_id"]
+
+    # Stop run
+    stop_res = client.post(f"/api/copilot/runs/{run_id}/stop", headers=headers)
+    assert stop_res.status_code == 200
+    assert stop_res.json()["status"] == "stopped"
+
+
+def test_daily_budget_guard(client: TestClient, session: Session):
+    headers = make_auth_headers(tenant_id="tenant-budget", role="manager")
+    conv_res = client.post("/api/copilot/conversations", json={"title": "Budget Test"}, headers=headers)
+    conv_id = conv_res.json()["id"]
+
+    # Add a dummy expensive run to simulate daily budget exhaustion ($10.50)
+    expensive_run = CopilotRun(
+        id="run-expensive",
+        conversation_id=conv_id,
+        correlation_id="corr-exp",
+        status="completed",
+        context_ref_json="{}",
+        provider="anthropic",
+        model="claude-3-5-haiku",
+        tokens_used=50000,
+        cost_usd=10.50,
+        latency_ms=1000,
+        created_at=datetime.now(timezone.utc),
+    )
+    session.add(expensive_run)
+    session.commit()
+
+    # Attempt to create new run
+    run_res = client.post(
+        f"/api/copilot/conversations/{conv_id}/runs",
+        json={"message": "Новое сообщение"},
+        headers=headers,
+    )
+    assert run_res.status_code == 402
+    assert "исчерпан" in run_res.json()["detail"]

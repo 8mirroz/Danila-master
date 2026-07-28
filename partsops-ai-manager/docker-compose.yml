@@ -2,9 +2,9 @@ version: '3.8'
 
 services:
   hermes:
-    image: nousresearch/hermes-agent:v2026.7.20@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    image: nousresearch/hermes-agent:v2026.7.20
     restart: unless-stopped
-    command: ["hermes", "api-server", "--profile", "partsops", "--host", "0.0.0.0", "--port", "8642"]
+    command: ["hermes", "serve", "--profile", "partsops", "--host", "0.0.0.0", "--port", "8642", "--isolated"]
     environment:
       - API_SERVER_KEY=${HERMES_API_KEY:-partsops-hermes-secret-key}
       - HERMES_PROFILE=partsops
@@ -17,7 +17,7 @@ services:
           cpus: '1.5'
           memory: 1536M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8642/v1/capabilities"]
+      test: ["CMD", "curl", "-f", "http://localhost:8642/"]
       interval: 15s
       timeout: 5s
       retries: 3

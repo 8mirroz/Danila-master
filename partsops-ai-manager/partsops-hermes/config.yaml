@@ -1,15 +1,13 @@
-# PartsOps Balanced Model Policy & Limits
-policy: partsops-balanced
+# PartsOps Hermes Profile Configuration
+model:
+  provider: openrouter
+  name: meta-llama/llama-3.3-70b-instruct:free
 
-models:
-  primary:
-    provider: anthropic
-    model_id: anthropic/claude-3-5-haiku-20241022
-  fallback:
-    provider: openrouter
-    model_id: openai/gpt-oss-20b
+fallback_model:
+  provider: nvidia
+  model: meta/llama-3.3-70b-instruct
 
-settings:
+partsops_policy:
   reasoning: low
   max_agent_iterations: 8
   single_provider_attempt: true
@@ -17,8 +15,6 @@ settings:
   max_history_turns: 12
   max_output_tokens: 1000
   timeout_seconds: 45
-  first_token_target_seconds: 8
-  full_answer_target_seconds: 30
 
 tenant_limits:
   rate_limit_rpm: 10

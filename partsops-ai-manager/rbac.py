@@ -6,20 +6,16 @@ Security rule:
 - Master API token remains supported for backward-compatible/admin tools.
 """
 from __future__ import annotations
-
 import hmac
 import hashlib
 import os
 from dataclasses import dataclass
 from typing import Optional, List
-
-from fastapi import Header, HTTPException, Depends
-
+from fastapi import Header, HTTPException, Depends, Query
 
 ALLOWED_ROLES = {"admin", "manager", "finance"}
 DEFAULT_TENANT = "default"
 DEFAULT_ROLE = "manager"
-
 
 @dataclass(frozen=True)
 class CurrentPrincipal:
@@ -68,21 +64,27 @@ def verify_signed_token(token: str, secret: str) -> Optional[tuple[str, str]]:
         expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
         if hmac.compare_digest(signature, expected_sig):
             return tenant_id, role
+        return None
     except Exception:
-        pass
-    return None
+        return None
 
 
 def get_current_principal(
-    x_tenant_id: Optional[str] = Header(default=DEFAULT_TENANT),
-    x_user_role: Optional[str] = Header(default=DEFAULT_ROLE),
+    x_tenant_id: Optional[str] = Header(default=None),
+    x_user_role: Optional[str] = Header(default=None),
     authorization: Optional[str] = Header(default=None),
+    tenant_id: Optional[str] = Query(default=None),
+    user_role: Optional[str] = Query(default=None),
+    api_token: Optional[str] = Query(default=None, alias="token"),
 ) -> CurrentPrincipal:
     """
     Resolve request principal with zero-trust boundary check.
     """
+    provided_tenant = x_tenant_id or tenant_id or DEFAULT_TENANT
+    provided_role = x_user_role or user_role or DEFAULT_ROLE
+    provided_token = _parse_bearer_token(authorization) or api_token
+
     token_configured = _get_api_token() is not None
-    provided_token = _parse_bearer_token(authorization)
 
     if token_configured:
         if not provided_token:
@@ -99,10 +101,10 @@ def get_current_principal(
         # 1. First priority: verify as a secure signed token
         claims = verify_signed_token(provided_token, secret)
         if claims:
-            tenant_id, role = claims
+            tenant_id_claim, role_claim = claims
             return CurrentPrincipal(
-                tenant_id=tenant_id,
-                role=_normalize_role(role),
+                tenant_id=tenant_id_claim,
+                role=_normalize_role(role_claim),
                 authenticated=True,
                 auth_mode="token",
             )
@@ -110,8 +112,8 @@ def get_current_principal(
         # 2. Second priority: master token fallback (backward compatibility)
         if hmac.compare_digest(provided_token, secret):
             return CurrentPrincipal(
-                tenant_id=(x_tenant_id or DEFAULT_TENANT),
-                role=_normalize_role(x_user_role),
+                tenant_id=provided_tenant,
+                role=_normalize_role(provided_role),
                 authenticated=True,
                 auth_mode="token",
             )
@@ -120,8 +122,8 @@ def get_current_principal(
 
     # Local dev mode (no token configured on server)
     return CurrentPrincipal(
-        tenant_id=(x_tenant_id or DEFAULT_TENANT),
-        role=_normalize_role(x_user_role),
+        tenant_id=provided_tenant,
+        role=_normalize_role(provided_role),
         authenticated=False,
         auth_mode="dev",
     )
