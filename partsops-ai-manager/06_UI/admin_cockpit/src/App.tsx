@@ -4,9 +4,7 @@ import {
   TopCommandBar,
   LeftNavRail,
   WorkspaceHeader,
-  StepGate,
   SectionCard,
-  MetricTile,
   Button,
   ReviewPanel,
   EmptyState,
@@ -287,18 +285,6 @@ function App() {
     { id: 'agent_os', label: 'Консоль ИИ-агента', icon: 'robot', group: 'admin' as const },
     { id: 'audit', label: 'Аудит и логи', icon: 'circle-info', group: 'admin' as const },
   ];
-
-  const steps = ['Каталог поставщиков', 'Кастом', 'Анализ нормализации', 'Сравнение предложений', 'Согласование', 'Черновик цены'];
-
-  const handleStepClick = (stepIdx: number) => {
-    setActiveStep(stepIdx);
-    if (stepIdx === 0) setActiveNav('suppliers');
-    else if (stepIdx === 1) setActiveNav('orders');
-    else if (stepIdx === 2) setActiveNav('matching');
-    else if (stepIdx === 3) setActiveNav('matching');
-    else if (stepIdx === 4) setActiveNav('matching');
-    else if (stepIdx === 5) setActiveNav('pricing');
-  };
 
   const handleNavChange = (navId: string) => {
     setActiveNav(navId);

@@ -152,10 +152,13 @@ Stub-агенты: `supervisor`, `offer_ranker`, `invoice_draft`, `debug`, `cata
 ## 5. Задачи (backlog)
 
 ### P0 — убрать ложь в UI/runtime
-1. U1 CompletedOrdersHistory — remove fake list  
-2. U2 MultiAgentOrchestraView — remove silent mockRun  
-3. B12 VIN mock assignment → unknown  
-4. B8 MOCK_INVENTORY only TESTING=1  
+1. ~~U1 CompletedOrdersHistory — remove fake list~~ **DONE 2026-07-28**  
+2. ~~U2 MultiAgentOrchestraView — remove silent mockRun~~ **DONE 2026-07-28**  
+3. ~~B12 VIN mock assignment → unknown~~ **DONE 2026-07-28**  
+4. ~~B8 MOCK_INVENTORY only TESTING=1~~ **DONE 2026-07-28**  
+
+> SDD W1: Spec Approved → parallel implementers → Code Reviewer **LGTM**. Residual: U3 `UI_MOCK` naming (W2).  
+
 
 ### P1 — critical production stubs
 5. B4 notify_owner → real channel  
