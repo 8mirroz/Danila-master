@@ -92,6 +92,13 @@ def get_public_request_view(token: str, session: Session, tenant_id: str) -> Opt
     # Ensure tenant-scoped (prevent token collision across tenants)
     if req.tenant_id != tenant_id:
         return None
+
+    # Expired public tokens must not expose request data
+    if (
+        req.tracking_token_expires_at is not None
+        and req.tracking_token_expires_at < datetime.utcnow()
+    ):
+        return None
     
     # Mask sensitive data for public view
     try:
@@ -131,6 +138,12 @@ def accept_offer(token: str, session: Session, tenant_id: str) -> Dict[str, Any]
     req = session.exec(stmt).first()
     if not req or req.tenant_id != tenant_id:
         return {"ok": False, "error": "Request not found"}
+
+    if (
+        req.tracking_token_expires_at is not None
+        and req.tracking_token_expires_at < datetime.utcnow()
+    ):
+        return {"ok": False, "error": "Tracking token expired"}
     
     if req.status != RequestState.SENT_TO_CLIENT:
         return {"ok": False, "error": f"Cannot accept: current status is {req.status}"}
@@ -166,6 +179,12 @@ def reject_offer(token: str, reason: str, session: Session, tenant_id: str) -> D
     req = session.exec(stmt).first()
     if not req or req.tenant_id != tenant_id:
         return {"ok": False, "error": "Request not found"}
+
+    if (
+        req.tracking_token_expires_at is not None
+        and req.tracking_token_expires_at < datetime.utcnow()
+    ):
+        return {"ok": False, "error": "Tracking token expired"}
     
     if req.status != RequestState.SENT_TO_CLIENT:
         return {"ok": False, "error": f"Cannot reject: current status is {req.status}"}

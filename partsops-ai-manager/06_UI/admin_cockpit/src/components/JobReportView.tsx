@@ -33,27 +33,40 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
     );
   }
 
-  // Parse parts list
+  // Parse parts list — never inject demo catalog when empty
   let partsList: any[] = [];
   try {
     partsList = request.parts_json ? JSON.parse(request.parts_json) : [];
   } catch {
     partsList = [];
   }
-
-  if (partsList.length === 0) {
-    partsList = [
-      { name: 'Комплект тормозных колодок (Передняя ось)', oem: '34116858047', quantity: 1, supplier_name: 'Autodoc Direct (OEM)', price: 4500, delivery_days: 1, score: '98%' },
-      { name: 'Фильтр масляный ДВС', oem: '11427953129', quantity: 2, supplier_name: 'Febi Bilstein OEM', price: 1200, delivery_days: 1, score: '95%' },
-      { name: 'Рычаг подвески нижний левый', oem: '31126855743', quantity: 1, supplier_name: 'Euro Car Parts', price: 8900, delivery_days: 2, score: '92%' },
-      { name: 'Фильтр салона угольный', oem: '64119237555', quantity: 1, supplier_name: 'Autodoc Direct (OEM)', price: 2100, delivery_days: 1, score: '99%' },
-    ];
+  if (!Array.isArray(partsList)) {
+    partsList = [];
   }
 
   const totalItems = partsList.length;
-  const totalPriceBuy = partsList.reduce((acc: number, item: any) => acc + (Number(item.price || 3500) * Number(item.quantity || 1)), 0);
-  const marginPct = 15.0;
-  const totalPriceClient = totalPriceBuy * (1 + marginPct / 100);
+  // Use real line prices when present; do not invent default 3500 / 15% margin
+  const totalPriceBuy = partsList.reduce((acc: number, item: any) => {
+    const unit = Number(item.price ?? item.sale_price ?? item.purchase_price);
+    if (!Number.isFinite(unit)) return acc;
+    return acc + unit * Number(item.quantity || 1);
+  }, 0);
+  const pricedCount = partsList.filter(
+    (item: any) => Number.isFinite(Number(item.price ?? item.sale_price ?? item.purchase_price)),
+  ).length;
+  const hasPricedLines = pricedCount > 0;
+  const marginPctRaw = partsList
+    .map((item: any) => Number(item.margin ?? item.margin_pct))
+    .filter((n: number) => Number.isFinite(n));
+  const marginPct =
+    marginPctRaw.length > 0
+      ? marginPctRaw.reduce((a: number, b: number) => a + b, 0) / marginPctRaw.length
+      : null;
+  const marginFactor = marginPct == null ? 0 : marginPct > 1 ? marginPct / 100 : marginPct;
+  const totalPriceClient =
+    hasPricedLines
+      ? totalPriceBuy * (1 + marginFactor)
+      : null;
 
   const handleDownloadExcel = () => {
     const downloadUrl = `/api/requests/${request.request_id}/export-excel`;
@@ -104,14 +117,17 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
           <ActionButton
             variant="secondary"
             icon="fa-rotate"
-            onClick={() => notify.erpSync()}
+            onClick={() => {
+              void notify.erpSync();
+            }}
+            title="Проверить статус ERP (full push 1С/SAP не one-click)"
           >
-            Выгрузить в 1С / SAP
+            Статус ERP
           </ActionButton>
         </div>
       </div>
 
-      {/* Summary KPI Strip */}
+      {/* Summary KPI Strip — live fields only, no decorative fake % / delivery */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="glass-panel-dark rounded-xl p-4 border border-slate-800">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
@@ -120,8 +136,10 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
           <span className="text-2xl font-black text-white font-mono block mt-1">
             {totalItems} шт.
           </span>
-          <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 mt-1">
-            <i className="fas fa-check-circle" /> 100% сопоставлено
+          <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1 mt-1">
+            {totalItems === 0
+              ? 'позиций нет в request.parts_json'
+              : `${pricedCount}/${totalItems} с ценой`}
           </span>
         </div>
 
@@ -130,10 +148,10 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
             Сумма закупки (OEM)
           </span>
           <span className="text-2xl font-black text-slate-200 font-mono block mt-1">
-            {totalPriceBuy.toLocaleString()} ₽
+            {hasPricedLines ? `${totalPriceBuy.toLocaleString()} ₽` : 'н/д'}
           </span>
           <span className="text-[10px] text-slate-400 font-semibold mt-1 block">
-            оптовая себестоимость
+            {hasPricedLines ? 'по строкам с price/sale_price' : 'цены в parts_json отсутствуют'}
           </span>
         </div>
 
@@ -142,10 +160,12 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
             Итого к оплате клиенту
           </span>
           <span className="text-2xl font-black text-emerald-400 font-mono block mt-1">
-            {Math.round(totalPriceClient).toLocaleString()} ₽
+            {totalPriceClient != null ? `${Math.round(totalPriceClient).toLocaleString()} ₽` : 'н/д'}
           </span>
-          <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 mt-1">
-            <i className="fas fa-shield-check" /> Наценка +{marginPct}%
+          <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1 mt-1">
+            {marginPct != null
+              ? `Наценка из данных: ${marginPct > 1 ? marginPct.toFixed(1) : (marginPct * 100).toFixed(1)}%`
+              : 'маржа не задана в parts_json'}
           </span>
         </div>
 
@@ -154,13 +174,26 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
             Средний срок поставки
           </span>
           <span className="text-2xl font-black text-white font-mono block mt-1">
-            1.2 дня
+            {(() => {
+              const days = partsList
+                .map((item: any) => Number(item.delivery_days))
+                .filter((n: number) => Number.isFinite(n));
+              if (days.length === 0) return 'н/д';
+              const avg = days.reduce((a: number, b: number) => a + b, 0) / days.length;
+              return `${avg.toFixed(1)} дн.`;
+            })()}
           </span>
           <span className="text-[10px] text-slate-400 font-semibold mt-1 block">
-            экспресс-доставка склада
+            из delivery_days в позициях
           </span>
         </div>
       </div>
+
+      {totalItems === 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+          Спецификация пуста — demo-позиции не подставляются. Выберите запрос с parts_json или завершите matching.
+        </div>
+      )}
 
       {/* Specification Table */}
       <div className="glass-panel-dark rounded-2xl p-5 border border-slate-800 space-y-4">
@@ -198,7 +231,7 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
                 const supplier = item.supplier_name || 'Autodoc Direct (OEM)';
                 const days = item.delivery_days || 1;
                 const buyPrice = Number(item.price || 3500);
-                const clientPrice = buyPrice * (1 + marginPct / 100);
+                const clientPrice = buyPrice * (1 + marginFactor);
                 const rowTotal = clientPrice * qty;
                 const score = item.score || '98%';
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ActionButton } from './Primitives';
 import { apiFetch } from '../lib/api';
 
@@ -20,13 +20,7 @@ type ProviderStatus = {
   error?: string | null;
 };
 
-const initialLogs: LogEntry[] = [
-  { id: '1', time: '05:18:22', category: 'system', level: 'info', message: 'Ядро PartsOps AI запущено и готово к приему задач.' },
-  { id: '2', time: '05:18:23', category: 'parser', level: 'success', message: 'Модель google/gemma-4-31b-it инициализирована.' },
-  { id: '3', time: '05:19:01', category: 'matcher', level: 'info', message: 'Справочники поставщиков загружены в оперативный контур.' },
-  { id: '4', time: '06:36:34', category: 'erp', level: 'success', message: 'Счёт успешно выгружен в ERP. ИД документа: INV-9921.' },
-  { id: '5', time: '06:36:38', category: 'pricing', level: 'warn', message: 'Margin Guard: Маржа 9.8% ниже лимита политики (12.0%) для REQ-4815', requestId: 'REQ-4815', hasActions: true },
-];
+const initialLogs: LogEntry[] = [];
 
 const categoryLabel: Record<LogEntry['category'], { label: string; cls: string }> = {
   system: { label: 'Ядро', cls: 'text-slate-600 bg-slate-50 border-slate-100' },
@@ -43,6 +37,7 @@ export const AgentMonitor = () => {
   const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([]);
   const [budgetStats, setBudgetStats] = useState<{ hourly_tokens_used?: number; daily_cost_usd?: number } | null>(null);
   const [monitorState, setMonitorState] = useState<'online' | 'degraded' | 'stale'>('stale');
+  const lastLiveSnapshotRef = useRef<string>('');
 
   const refreshOpsState = async () => {
     setIsLoading(true);
@@ -75,6 +70,50 @@ export const AgentMonitor = () => {
     } else {
       setMonitorState('stale');
     }
+
+    // Prepend 1–2 live system lines from API when snapshot changes (not fake history)
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    const liveLines: LogEntry[] = [];
+    let llmMsg = '';
+    let budgetMsg = '';
+    if (providersResult.status === 'fulfilled') {
+      const total = nextProviders.length;
+      const onlineCount = nextProviders.filter((p: ProviderStatus) => {
+        const s = (p.status || '').toLowerCase();
+        return s === 'online' || s === 'ok' || s === 'healthy' || s === 'ready';
+      }).length;
+      llmMsg = `LLM providers: ${onlineCount} online / ${total} total (live)`;
+      liveLines.push({
+        id: `llm-${Date.now()}`,
+        time: timeStr,
+        category: 'system',
+        level: total > 0 ? 'success' : 'warn',
+        message: llmMsg,
+      });
+    }
+    if (budgetResult.status === 'fulfilled' && nextBudget) {
+      const daily = nextBudget.daily_cost_usd;
+      const tokens = nextBudget.hourly_tokens_used;
+      const budgetParts: string[] = [];
+      if (daily != null) budgetParts.push(`daily $${Number(daily).toFixed(4)}`);
+      if (tokens != null) budgetParts.push(`hourly tokens ${tokens}`);
+      budgetMsg = budgetParts.length
+        ? `Budget: ${budgetParts.join(', ')} (live)`
+        : 'Budget: stats received (live)';
+      liveLines.push({
+        id: `budget-${Date.now() + 1}`,
+        time: timeStr,
+        category: 'system',
+        level: 'info',
+        message: budgetMsg,
+      });
+    }
+    const snapshotKey = `${llmMsg}|${budgetMsg}`;
+    if (liveLines.length > 0 && snapshotKey !== lastLiveSnapshotRef.current) {
+      lastLiveSnapshotRef.current = snapshotKey;
+      setLogs((prev) => [...liveLines, ...prev].slice(0, 50));
+    }
+
     setIsLoading(false);
   };
 
@@ -88,6 +127,7 @@ export const AgentMonitor = () => {
 
   const handleRestart = () => {
     const timeStr = new Date().toTimeString().split(' ')[0];
+    lastLiveSnapshotRef.current = '';
     setLogs([
       { id: Date.now().toString(), time: timeStr, category: 'system', level: 'info', message: 'Перезапуск операционного монитора по запросу оператора.' },
       { id: (Date.now() + 1).toString(), time: timeStr, category: 'system', level: 'success', message: 'Контекст обновлен из backend-эндпоинтов LLM и бюджета.' },
@@ -217,7 +257,7 @@ export const AgentMonitor = () => {
             <ActionButton
               variant="secondary"
               icon="fa-pause"
-              onClick={() => setLogs(initialLogs)}
+              onClick={() => { lastLiveSnapshotRef.current = ''; setLogs(initialLogs); }}
               className="flex-1 rounded-full text-xs"
             >
               Сбросить лог
@@ -282,7 +322,7 @@ export const AgentMonitor = () => {
             })}
             {filteredLogs.length === 0 && (
               <div className="py-12 text-center italic text-[var(--text-muted)] select-none">
-                Лог-записи не найдены
+                Нет событий монитора — только live LLM/budget status выше
               </div>
             )}
           </div>

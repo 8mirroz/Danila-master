@@ -142,14 +142,15 @@ def _check_request_like(request: Any, session: Optional[Any] = None) -> dict:
             except Exception:
                 pass
 
-            if violations or True:
-                return {
-                    "implemented": True,
-                    "status": "partial" if violations else "ok",
-                    "reason": "gates_without_session" if not session else None,
-                    "violations": violations,
-                    "ok": len(violations) == 0,
-                }
+            return {
+                "implemented": True,
+                "status": "partial" if violations else "ok",
+                "reason": "gates_without_session" if not session else (
+                    None if not violations else "policy_violations"
+                ),
+                "violations": violations,
+                "ok": len(violations) == 0,
+            }
     except Exception as exc:
         logger.exception("check_policy request-like failed")
         return {

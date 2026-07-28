@@ -168,20 +168,33 @@ Stub-агенты: `supervisor`, `offer_ranker`, `invoice_draft`, `debug`, `cata
 9. ~~B6 fix/remove verify_tracking_token~~ **DONE 2026-07-28** (DB-backed, tests)  
 
 ### P2 — automation engines
-10. Implement used engines vs delete and inline (remaining 11 engines still noop/placeholder)  
+10. ~~Implement used engines vs delete and inline~~ **DONE 2026-07-28** — engines honesty layer: `implemented`/`status`/`reason`, thin adapters (notify outbox, offline VIN, quote rank, supplier DB, local PO draft); erp_hub/vendor explicit `not_wired`. Jobs still inline (not rewired). Reviewer fixes: ERP dry-run `synced=False`, PII-mask notify logs.  
 11. ~~B5 dead_letter cleanup~~ **DONE 2026-07-28** (failed exhausted + retention)  
-12. Policy/quote/supplier discovery if jobs depend  
+12. Policy/quote/supplier discovery if jobs depend — optional rewire jobs → engines (out of scope)  
 
 ### P3 — UX honesty
 13. ~~U3 rename UI_MOCK~~ **DONE 2026-07-28** (`UI_MANUAL`)  
-14. U6 CMD+K / shortcuts  
-15. U7 live overview metrics  
-16. Seed behind SEED_ON_START=1  
+14. ~~U6 CMD+K / shortcuts~~ **DONE 2026-07-28** (⌘K + G-seq + ⌘N/R; inputs ignored)  
+15. ~~U7 live overview metrics~~ **DONE 2026-07-28** (ERP KPI: OK/Сбой/н/д, no fake 100%)  
+16. ~~Seed behind SEED_ON_START~~ **DONE 2026-07-28** (explicit flag / prod off / sqlite default)  
+17. ~~U8 ERP fake push UX~~ **DONE 2026-07-28** (CommandPalette + dashboard + notify.erpSync = health check only)  
+18. ~~AgentMonitor fake logs~~ **DONE 2026-07-28**  
+19. ~~JobReportView demo parts / 100% / 1.2d~~ **DONE 2026-07-28**
+
+### P4 / ops / Devpack
+- ~~B10/B11 PROD env checklist~~ **DONE 2026-07-28** → `prod-env-checklist-2026-07-28.md` + `.env.example`  
+- ~~C1 Devpack agents stub honesty~~ **DONE 2026-07-28** → `ok=False`, `not_implemented`, no fake success  
+- ~~C2 Devpack frontend mock label~~ **DONE 2026-07-28** → SPEC banner + mock metric captions  
+- ~~C3 Rollout Phase 1 docs~~ **DONE 2026-07-28**  
 
 ### SDD execution log
 - W1 P0 (U1,U2,B8,B12): Spec → Imp×2 → Review LGTM  
 - W2 (U3,B6): Imp → Review LGTM  
-- W3 (B4,B5,B1): Imp → Review LGTM · tests 36 related passed
+- W3 (B4,B5,B1): Imp → Review LGTM · tests 36 related passed  
+- P2 engines honesty: Imp → Review (2 fixes applied) · full suite **259 passed, 1 skipped**  
+- P3 UX honesty: shortcuts, ERP labels, seed, AgentMonitor, JobReportView  
+- P4: PROD checklist + Devpack scaffold honesty  
+- P5 residual: AnalogComparisonMatrix live API; Excel no demo rows; escalate/VIN jobs use engines; quote_evaluate uses decide()
 
 ### P4 — Devpack
 17. Wire to ai-manager agents or mark spec-only  

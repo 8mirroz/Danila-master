@@ -1,5 +1,12 @@
 # PartsOps Agent OS Control Console — Dev Pack v0.1
 
+> **STATUS: SPEC / SCAFFOLD ONLY (2026-07-28)**  
+> Это **не** production runtime.  
+> - Backend agents в `04_BACKEND_CONTRACTS/agents/*` возвращают `ok=False`, `status=not_implemented`.  
+> - Frontend `05_FRONTEND` использует **static mock data** (Phase 1 console).  
+> - Реальный runtime: **`partsops-ai-manager/`** (`app/agents/*`, FastAPI, admin_cockpit).  
+> Не подключайте Devpack agents к живым заказам/ERP/клиентам.
+
 Цель пакета: дать разработчику/IDE-агенту готовый стартовый каркас для модуля управления AI-агентом в PartsOps Command Deck.
 
 ## Что внутри

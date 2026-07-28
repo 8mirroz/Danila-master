@@ -299,20 +299,42 @@ function MetricCard({ title, value, caption, tone = 'ok' }: { title: string; val
 function TopControlBar() {
   return (
     <header className="topbar">
+      <div
+        className="spec-only-banner"
+        style={{
+          width: '100%',
+          marginBottom: 12,
+          padding: '10px 14px',
+          borderRadius: 10,
+          border: '1px solid #b45309',
+          background: 'rgba(180, 83, 9, 0.12)',
+          color: '#fbbf24',
+          fontSize: 12,
+          fontWeight: 600,
+          lineHeight: 1.4,
+        }}
+      >
+        SPEC / SCAFFOLD ONLY — static mock data. Не production runtime.
+        Реальный cockpit: <code>partsops-ai-manager/06_UI/admin_cockpit</code>.
+        Agents: <code>ok=false / not_implemented</code> in devpack contracts.
+      </div>
       <div className="topbar-copy">
         <div className="badges">
           <span className="badge">АГЕНТ ОС</span>
-          <span className="badge green">Поток активен</span>
-          <span className="badge">ПРОД</span>
+          <span className="badge">MOCK DATA</span>
+          <span className="badge">SPEC ONLY</span>
         </div>
         <h1>Операторская консоль AI-движка</h1>
-        <p>Контроль модели, бюджета, очередей, согласований, вызовов инструментов и отладки в одном рабочем контуре.</p>
+        <p>
+          Phase 1 static console (rollout). Метрики ниже — декоративный mock,
+          не live API. Для live KPI используйте PartsOps Admin Cockpit.
+        </p>
       </div>
       <div className="metrics">
-        <MetricCard title="РАСХОД СЕССИИ" value="$2.02" caption="из бюджета $10.00" />
-        <MetricCard title="ЛИМИТ RPM" value="20" caption="запросов в минуту" />
-        <MetricCard title="ЗДОРОВЬЕ ОЧЕРЕДИ" value="31" caption="событие в окне" />
-        <MetricCard title="ДОЛЯ ОШИБОК" value="1.2%" caption="последний час" tone="warn" />
+        <MetricCard title="РАСХОД СЕССИИ (mock)" value="$2.02" caption="не live budget" tone="warn" />
+        <MetricCard title="ЛИМИТ RPM (mock)" value="20" caption="не live limiter" tone="warn" />
+        <MetricCard title="ЗДОРОВЬЕ ОЧЕРЕДИ (mock)" value="31" caption="не live queue" tone="warn" />
+        <MetricCard title="ДОЛЯ ОШИБОК (mock)" value="1.2%" caption="не live rate" tone="warn" />
       </div>
     </header>
   );

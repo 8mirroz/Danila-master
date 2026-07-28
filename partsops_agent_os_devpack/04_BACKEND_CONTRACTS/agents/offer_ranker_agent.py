@@ -1,8 +1,21 @@
 from .base_agent import BaseAgent, AgentResult
 
+
 class OfferRankerAgent(BaseAgent):
-    name = "offerrankeragent"
+    name = "offer_ranker_agent"
+    # Scaffold only — not wired to partsops-ai-manager runtime.
+    implemented = False
 
     def run(self, payload):
-        # TODO: implement real logic, schema validation, trace and error handling.
-        return AgentResult(ok=True, output={"agent": self.name, "status": "stub"}, confidence=0.5)
+        return AgentResult(
+            ok=False,
+            output={
+                "agent": self.name,
+                "status": "not_implemented",
+                "implemented": False,
+                "runtime": "devpack_scaffold",
+                "hint": "Use partsops-ai-manager app/agents/* for production logic",
+            },
+            confidence=0.0,
+            errors=["Agent is scaffold-only (devpack); not production runtime"],
+        )

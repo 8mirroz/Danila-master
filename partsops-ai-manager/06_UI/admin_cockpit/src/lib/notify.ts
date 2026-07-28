@@ -20,8 +20,38 @@ export const notify = {
 
   info: (msg: string) => show('info', msg),
 
-  erpSync: () =>
-    show('info', 'ERP синхронизация запущена'),
+  /**
+   * Honest ERP status check — does NOT start a full ERP push (no such one-click API).
+   * Reads /api/admin/data-health and reports failing flag + last sync time.
+   */
+  erpSync: async () => {
+    try {
+      const { apiFetch } = await import('./api');
+      const res = await apiFetch('/api/admin/data-health');
+      if (!res.ok) {
+        show('error', `ERP status: API ${res.status}`, 6000);
+        return;
+      }
+      const data = await res.json();
+      const failing = Boolean(data?.health_indicators?.erp_health?.currently_failing);
+      const lastSync =
+        data?.freshness?.last_erp_sync ??
+        data?.freshness?.last_erp_sync_at ??
+        null;
+      show(
+        'info',
+        `Статус ERP: ${failing ? 'Сбой' : 'OK'}, last sync: ${lastSync ?? 'н/д'}. ` +
+          'Полный ERP push — не one-click job (только invoice endpoint).',
+        7000,
+      );
+    } catch (err) {
+      show(
+        'error',
+        `ERP status unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        6000,
+      );
+    }
+  },
 
   invoiceDrafted: (num: string) =>
     show('info', `Черновик счёта создан: ${num}`),

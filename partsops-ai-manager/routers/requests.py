@@ -1078,25 +1078,20 @@ def export_request_excel(
         ).all()
 
     if not analogs_list:
-        # Fallback demo rows if no analogs in DB yet
-        sample_rows = [
-            (1, "34116858047", "OEM Дефицит", "24.0100-0100.1", "ATE", "OES (Tier 1)", "5%", "Прямой поставщик конвейера", "Рекомендован"),
-            (2, "11427953129", "OEM Отсутствует", "HU 816 x", "MANN-FILTER", "OES (Tier 1)", "5%", "Совместимость 100%", "Одобрен"),
-            (3, "31126757561", "Снято с произв.", "27110 01", "LEMFÖRDER", "OES (Tier 1)", "5%", "Официальный кросс TecDoc", "Рекомендован"),
-            (4, "12120037607", "Цена аномальна", "BKR6EIX", "NGK", "Premium (Tier 2)", "15%", "Иридиевая свеча высокой надежности", "В резерве"),
-        ]
-        for r in sample_rows:
-            ws2.append(list(r))
-            row_idx = ws2.max_row
-            tier_cell = ws2.cell(row=row_idx, column=6)
-            if "Tier 1" in str(r[5]):
-                tier_cell.fill = fill_oes
-                tier_cell.font = font_oes
-            else:
-                tier_cell.fill = fill_prem
-                tier_cell.font = font_prem
-            for c in range(1, len(r) + 1):
-                ws2.cell(row=row_idx, column=c).border = thin_border
+        # Honesty: no demo/sample rows when DB has no analogs
+        ws2.append([
+            "—",
+            "—",
+            "Нет аналогов в БД",
+            "—",
+            "—",
+            "—",
+            "—",
+            "Запустите resolve-analogs / crawler; demo-строки отключены",
+            "пусто",
+        ])
+        for c in range(1, 10):
+            ws2.cell(row=ws2.max_row, column=c).border = thin_border
     else:
         for idx, analog in enumerate(analogs_list, start=1):
             tier_label = f"{analog.quality_tier} (Tier)"

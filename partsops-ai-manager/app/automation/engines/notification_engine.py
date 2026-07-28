@@ -87,11 +87,22 @@ def notify(
             "recipient": recipient_str,
         }
 
+    try:
+        from pii import mask_email, mask_for_log
+
+        safe_recipient = (
+            mask_email(recipient_str) if "@" in recipient_str else f"{recipient_str[:3]}***"
+        )
+        safe_body = mask_for_log(body[:200])
+    except Exception:  # pragma: no cover
+        safe_recipient = f"{recipient_str[:3]}***" if recipient_str else ""
+        safe_body = "[redacted]"
+
     logger.info(
         "notify log-only (no session): channel=%s recipient=%s message=%s",
         channel,
-        recipient_str,
-        body[:200],
+        safe_recipient,
+        safe_body,
     )
     return {
         "implemented": True,

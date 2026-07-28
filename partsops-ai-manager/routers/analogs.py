@@ -24,7 +24,7 @@ class SelectAnalogRequest(BaseModel):
 @router.get("/{request_id}/analogs-report")
 def get_contract_analogs_report(
     request_id: str,
-    tenant_id: str = Query("tenant-a"),
+    tenant_id: str = Query("default"),
     session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     """
@@ -101,7 +101,7 @@ def get_contract_analogs_report(
 def resolve_position_analogs(
     request_id: str,
     position_id: str,
-    tenant_id: str = Query("tenant-a"),
+    tenant_id: str = Query("default"),
     session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     """
@@ -138,7 +138,7 @@ def select_position_analog(
     request_id: str,
     position_id: str,
     payload: SelectAnalogRequest,
-    tenant_id: str = Query("tenant-a"),
+    tenant_id: str = Query("default"),
     session: Session = Depends(get_session)
 ) -> dict[str, Any]:
     """

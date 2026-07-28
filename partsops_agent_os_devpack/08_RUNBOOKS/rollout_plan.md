@@ -1,9 +1,13 @@
 # Rollout Plan
 
+> **Current package phase: Phase 1 (static / scaffold).**  
+> Agents intentionally return `not_implemented`. Frontend metrics are mock-labeled.  
+> Do not treat this pack as production until Phase 4+ is wired to `partsops-ai-manager`.
+
 ## Phase 1 — Static Console
 
 - UI layout.
-- Mock metrics.
+- Mock metrics (**explicitly labeled mock**).
 - Mock events.
 - Mock approvals.
 

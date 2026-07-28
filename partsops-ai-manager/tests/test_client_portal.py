@@ -112,6 +112,25 @@ def test_invalid_token_returns_404():
         assert result is None
 
 
+def test_public_view_rejects_expired_token():
+    """Expired tracking tokens must not expose request data."""
+    with Session(engine) as session:
+        req = PartRequest(
+            request_id="REQ-EXPIRED-VIEW",
+            tenant_id="default",
+            source="manual",
+            status=RequestState.SENT_TO_CLIENT,
+            tracking_token="token-expired-view",
+            tracking_token_expires_at=datetime.utcnow() - timedelta(hours=1),
+            customer_name="Expired Client",
+        )
+        session.add(req)
+        session.commit()
+
+        view = get_public_request_view("token-expired-view", session, "default")
+        assert view is None
+
+
 def test_accept_already_accepted_request_fails():
     """Cannot accept already PAID request."""
     with Session(engine) as session:

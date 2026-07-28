@@ -68,20 +68,18 @@ def sync_erp(record: Any) -> dict:
     result_status = (result or {}).get("status") or ""
     # erp_adapter uses SUCCESS / DRY_RUN / ERROR style statuses
     upper = str(result_status).upper()
+    is_dry = upper == "DRY_RUN" or bool((result or {}).get("dry_run"))
     if upper in ("SUCCESS", "OK", "DRY_RUN", "PENDING"):
-        synced = upper != "PENDING" or bool((result or {}).get("synced"))
-        # dry-run still "attempted" honestly
+        # Honesty: dry-run never reports synced=True (nothing left the process).
         return {
             "implemented": True,
-            "status": "ok" if upper in ("SUCCESS", "OK", "DRY_RUN") else "partial",
-            "reason": (result or {}).get("reason"),
-            "synced": upper in ("SUCCESS", "OK") or (
-                upper == "DRY_RUN" and bool((result or {}).get("dry_run", True))
-            ),
+            "status": "ok" if upper in ("SUCCESS", "OK") else "partial",
+            "reason": (result or {}).get("reason") or ("erp_dry_run" if is_dry else None),
+            "synced": upper in ("SUCCESS", "OK"),
             "ok": True,
             "request_id": request_id,
             "erp_result": result,
-            "dry_run": (result or {}).get("dry_run", dry_run),
+            "dry_run": is_dry if is_dry else (result or {}).get("dry_run", dry_run),
         }
 
     return {

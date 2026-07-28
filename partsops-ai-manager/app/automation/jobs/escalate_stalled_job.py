@@ -1,4 +1,4 @@
-"""Esscalates stalled requests when SLA or timeout thresholds are exceeded."""
+"""Escalates stalled requests when SLA or timeout thresholds are exceeded."""
 from __future__ import annotations
 
 import logging
@@ -7,9 +7,7 @@ from typing import Any, Dict
 from sqlmodel import Session
 
 from app.automation.context import AutomationContext
-from app.automation.events import append_request_event
-
-from models import PartRequest, EventType
+from app.automation.engines.escalation_engine import escalate
 
 logger = logging.getLogger("automation.jobs.escalate_stalled")
 
@@ -21,18 +19,29 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
 
     escalated = 0
     skipped = 0
+    reason = context.payload.get("reason", "timeout")
+
     for request_id in request_ids:
         if not request_id:
             skipped += 1
             continue
-        append_request_event(
-            session=session,
-            request_id=request_id,
-            tenant_id=context.tenant_id,
-            event_type=EventType.STATE_CHANGED,
-            actor_type="automation",
-            actor_id=context.actor_id,
-            payload={"escalated": True, "reason": context.payload.get("reason", "timeout")},
+        result = escalate(
+            {
+                "request_id": request_id,
+                "tenant_id": context.tenant_id,
+                "reason": reason,
+                "session": session,
+                "actor_id": context.actor_id,
+            }
         )
-        escalated += 1
+        if result.get("escalated"):
+            escalated += 1
+        else:
+            skipped += 1
+            logger.info(
+                "escalate skipped for %s: %s",
+                request_id,
+                result.get("reason") or result.get("status"),
+            )
+
     return {"ok": True, "escalated": escalated, "skipped": skipped}

@@ -1,4 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
+import { notify } from '../lib/notify';
 
 type Command = {
   id: string;
@@ -119,11 +121,34 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
       {
         id: 'action-sync-erp',
-        label: 'Синхронизация с ERP',
-        description: 'Запустить обмен данными с ERP системой',
+        label: 'Статус ERP',
+        description: 'Проверить health ERP (полный push — не one-click job)',
         icon: 'fa-rotate',
         shortcut: '⌘ E',
-        action: () => alert('Синхронизация с ERP успешно запущена!'),
+        action: async () => {
+          try {
+            const res = await apiFetch('/api/admin/data-health');
+            if (!res.ok) {
+              notify.error(`ERP status: API ${res.status}`);
+              return;
+            }
+            const data = await res.json();
+            const failing = Boolean(data?.health_indicators?.erp_health?.currently_failing);
+            const lastSync =
+              data?.freshness?.last_erp_sync ??
+              data?.freshness?.last_erp_sync_at ??
+              null;
+            const statusLabel = failing ? 'Сбой' : 'OK';
+            const syncLabel = lastSync ? String(lastSync) : 'н/д';
+            notify.info(
+              `Статус ERP: ${statusLabel}, last sync: ${syncLabel}. ` +
+                'Полный ERP push — не глобальная one-click job (доступен только invoice endpoint).',
+            );
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            notify.error(`ERP status unavailable: ${msg}`);
+          }
+        },
         category: 'Действия',
       },
 
@@ -167,7 +192,7 @@ G P — Калькулятор цен
 G A — Аудит
 ⌘ N — Новый запрос
 ⌘ R — Обновить
-⌘ E — Синхронизация ERP
+⌘ E — Статус ERP (health, без fake push)
 Esc — Закрыть палитру
 `),
         category: 'Помощь',

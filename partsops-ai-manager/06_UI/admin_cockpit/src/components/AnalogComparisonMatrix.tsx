@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { notify } from '../lib/notify';
 import { Icon } from './Primitives';
 
 export interface AnalogItem {
   id: string;
+  position_id?: string;
   oem_part: string;
-  oem_status: 'OUT_OF_STOCK' | 'DEGRADED' | 'DISCONTINUED' | 'PRICE_ANOMALY';
+  oem_status: 'OUT_OF_STOCK' | 'DEGRADED' | 'DISCONTINUED' | 'PRICE_ANOMALY' | 'UNKNOWN' | string;
   analog_article: string;
   brand: string;
-  quality_tier: 'OES' | 'PREMIUM_AFTERMARKET' | 'BUDGET' | 'SPEC_MATCH';
+  quality_tier: 'OES' | 'PREMIUM_AFTERMARKET' | 'BUDGET' | 'SPEC_MATCH' | string;
   risk_score: number;
   risk_factors: string[];
   price_oem?: number;
   price_analog: number;
   delivery_days: number;
-  status: 'recommended' | 'approved' | 'rejected' | 'pending';
+  status: 'recommended' | 'approved' | 'rejected' | 'pending' | string;
 }
 
 interface AnalogComparisonMatrixProps {
@@ -22,72 +24,156 @@ interface AnalogComparisonMatrixProps {
   onSelectAnalog?: (item: AnalogItem) => void;
 }
 
-export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({ requestId = 'CON-LIVE', onSelectAnalog }) => {
-  const [analogs, setAnalogs] = useState<AnalogItem[]>([
-    {
-      id: 'AN-001',
-      oem_part: '34116858047',
-      oem_status: 'OUT_OF_STOCK',
-      analog_article: '24.0100-0100.1',
-      brand: 'ATE',
-      quality_tier: 'OES',
-      risk_score: 5,
-      risk_factors: ['Прямой конвейерный поставщик BMW AG', 'Гарантия 100% совместимости'],
-      price_oem: 8500,
-      price_analog: 5200,
-      delivery_days: 1,
-      status: 'recommended',
-    },
-    {
-      id: 'AN-002',
-      oem_part: '11427953129',
-      oem_status: 'DISCONTINUED',
-      analog_article: 'HU 816 x',
-      brand: 'MANN-FILTER',
-      quality_tier: 'OES',
-      risk_score: 5,
-      risk_factors: ['Официальный дистрибьютор TecDoc', 'Фильтрация OE уровня'],
-      price_oem: 1800,
-      price_analog: 1250,
-      delivery_days: 1,
-      status: 'approved',
-    },
-    {
-      id: 'AN-003',
-      oem_part: '31126855743',
-      oem_status: 'PRICE_ANOMALY',
-      analog_article: '27110 01',
-      brand: 'LEMFÖRDER',
-      quality_tier: 'OES',
-      risk_score: 5,
-      risk_factors: ['Усиленный сайлентблок (Heavy Duty)', 'Заводской конвейер VAG/BMW'],
-      price_oem: 14500,
-      price_analog: 8900,
-      delivery_days: 2,
-      status: 'recommended',
-    },
-    {
-      id: 'AN-004',
-      oem_part: '12120037607',
-      oem_status: 'OUT_OF_STOCK',
-      analog_article: 'BKR6EIX',
-      brand: 'NGK',
-      quality_tier: 'PREMIUM_AFTERMARKET',
-      risk_score: 15,
-      risk_factors: ['Иридиевый центральный электрод', 'Высокий ресурс 100k km'],
-      price_oem: 2200,
-      price_analog: 1400,
-      delivery_days: 1,
-      status: 'pending',
-    },
-  ]);
+function mapOemStatus(raw: unknown): string {
+  if (!raw) return 'UNKNOWN';
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'object' && raw !== null) {
+    const o = raw as Record<string, unknown>;
+    return String(o.status || o.code || o.reason || 'UNKNOWN');
+  }
+  return 'UNKNOWN';
+}
 
-  const handleSelect = (item: AnalogItem) => {
-    setAnalogs((prev) =>
-      prev.map((a) => (a.id === item.id ? { ...a, status: 'approved' } : a))
-    );
-    notify.success(`Деталь ${item.analog_article} (${item.brand}) установлена как эквивалент замены.`);
-    if (onSelectAnalog) onSelectAnalog(item);
+function mapTier(raw: unknown): AnalogItem['quality_tier'] {
+  const s = String(raw || 'SPEC_MATCH').toUpperCase();
+  if (s.includes('OES') || s.includes('OEM')) return 'OES';
+  if (s.includes('PREMIUM')) return 'PREMIUM_AFTERMARKET';
+  if (s.includes('BUDGET')) return 'BUDGET';
+  return 'SPEC_MATCH';
+}
+
+function mapStatus(raw: unknown): AnalogItem['status'] {
+  const s = String(raw || 'pending').toLowerCase();
+  if (s === 'approved' || s === 'recommended' || s === 'rejected' || s === 'pending') return s;
+  if (s.includes('approv')) return 'approved';
+  if (s.includes('recommend')) return 'recommended';
+  if (s.includes('reject')) return 'rejected';
+  return 'pending';
+}
+
+function flattenReport(data: any): AnalogItem[] {
+  const positions = Array.isArray(data?.positions) ? data.positions : [];
+  const items: AnalogItem[] = [];
+  for (const pos of positions) {
+    const oemPart = String(pos.part_number || pos.oem || '—');
+    const oemStatus = mapOemStatus(pos.oem_unavailability);
+    const ranked = Array.isArray(pos.ranked_analogs) ? pos.ranked_analogs : [];
+    for (const a of ranked) {
+      const factorsRaw = a.risk_factors ?? a.risk_factors_json ?? [];
+      let factors: string[] = [];
+      if (Array.isArray(factorsRaw)) {
+        factors = factorsRaw.map(String);
+      } else if (typeof factorsRaw === 'string') {
+        try {
+          const parsed = JSON.parse(factorsRaw);
+          factors = Array.isArray(parsed) ? parsed.map(String) : [factorsRaw];
+        } catch {
+          factors = factorsRaw ? [factorsRaw] : [];
+        }
+      }
+      items.push({
+        id: String(a.candidate_id || a.id || a.article || `${pos.position_id}-${a.article}`),
+        position_id: pos.position_id ? String(pos.position_id) : undefined,
+        oem_part: oemPart,
+        oem_status: oemStatus,
+        analog_article: String(a.article || a.analog_article || '—'),
+        brand: String(a.brand || '—'),
+        quality_tier: mapTier(a.quality_tier || a.tier),
+        risk_score: Number(a.risk_score ?? 0) || 0,
+        risk_factors: factors.length ? factors : ['Нет risk_factors в API'],
+        price_oem: a.price_oem != null ? Number(a.price_oem) : undefined,
+        price_analog: Number(a.price ?? a.price_analog ?? 0) || 0,
+        delivery_days: Number(a.delivery_days ?? 0) || 0,
+        status: mapStatus(a.manual_review_status || a.status),
+      });
+    }
+  }
+  return items;
+}
+
+export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
+  requestId,
+  onSelectAnalog,
+}) => {
+  const [analogs, setAnalogs] = useState<AnalogItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<'live' | 'empty' | 'error'>('empty');
+
+  const load = useCallback(async () => {
+    if (!requestId) {
+      setAnalogs([]);
+      setSource('empty');
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID || 'default';
+      const res = await apiFetch(
+        `/api/contracts/${encodeURIComponent(requestId)}/analogs-report?tenant_id=${encodeURIComponent(tenantId)}`,
+      );
+      if (res.status === 404) {
+        setAnalogs([]);
+        setSource('empty');
+        setError(null);
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`API ${res.status}`);
+      }
+      const data = await res.json();
+      const items = flattenReport(data);
+      setAnalogs(items);
+      setSource(items.length ? 'live' : 'empty');
+    } catch (e) {
+      setAnalogs([]);
+      setSource('error');
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [requestId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleSelect = async (item: AnalogItem) => {
+    if (!requestId || !item.position_id) {
+      notify.info('Нельзя утвердить аналог: нет position_id / requestId (только live API).');
+      return;
+    }
+    try {
+      const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID || 'default';
+      const res = await apiFetch(
+        `/api/contracts/${encodeURIComponent(requestId)}/positions/${encodeURIComponent(item.position_id)}/select-analog?tenant_id=${encodeURIComponent(tenantId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ candidate_id: item.id, actor: 'operator' }),
+        },
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        notify.error(`Select analog failed: ${res.status} ${text.slice(0, 120)}`);
+        return;
+      }
+      setAnalogs((prev) =>
+        prev.map((a) =>
+          a.id === item.id
+            ? { ...a, status: 'approved' }
+            : a.position_id === item.position_id
+              ? { ...a, status: 'pending' }
+              : a,
+        ),
+      );
+      notify.success(`Деталь ${item.analog_article} (${item.brand}) утверждена как замена.`);
+      onSelectAnalog?.(item);
+    } catch (e) {
+      notify.error(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const getTierBadge = (tier: AnalogItem['quality_tier']) => {
@@ -153,102 +239,123 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({ 
             <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
               <Icon name="code-fork" size={16} />
             </span>
-            Матрица подбора аналогов (Smart Fallback Engine)
+            Матрица подбора аналогов (live API)
           </h3>
           <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-            Автоматический подбор проверенных заменителей с оценкой рисков и ценовой выгоды
+            Данные из `/api/contracts/…/analogs-report` — без demo-строк
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] bg-slate-50 text-slate-600 border border-slate-200 px-3 py-1 rounded-full font-mono font-medium">
-            Заявка: {requestId}
+            Заявка: {requestId || 'не выбрана'}
           </span>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="text-[11px] font-bold text-sky-700 border border-sky-200 bg-sky-50 px-2 py-1 rounded-lg"
+          >
+            {loading ? '…' : 'Обновить'}
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {analogs.map((item) => {
-          const discountPct = item.price_oem
-            ? Math.round(((item.price_oem - item.price_analog) / item.price_oem) * 100)
-            : 0;
+      {loading && (
+        <div className="text-xs text-slate-500 py-6 text-center">Загрузка аналогов…</div>
+      )}
 
-          const isApproved = item.status === 'approved';
+      {!loading && source === 'error' && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+          Не удалось загрузить аналоги: {error}. Demo-данные не подставляются.
+        </div>
+      )}
 
-          return (
-            <div
-              key={item.id}
-              className={`p-4 rounded-xl border transition-all duration-200 flex flex-col justify-between space-y-3 ${
-                isApproved
-                  ? 'bg-emerald-50/40 border-emerald-300/80 shadow-[0_4px_16px_rgba(14,159,110,0.08)]'
-                  : 'bg-slate-50/50 border-slate-200/80 hover:bg-white hover:border-blue-200 hover:shadow-md'
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-2">
+      {!loading && source === 'empty' && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-600">
+          {requestId
+            ? 'Нет позиций/аналогов в БД для этой заявки. Запустите resolve-analogs или contract crawler.'
+            : 'Выберите заявку, чтобы увидеть live-матрицу аналогов.'}
+        </div>
+      )}
+
+      {!loading && analogs.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {analogs.map((item) => {
+            const discountPct = item.price_oem
+              ? Math.round(((item.price_oem - item.price_analog) / item.price_oem) * 100)
+              : 0;
+            const isApproved = item.status === 'approved';
+
+            return (
+              <div
+                key={item.id}
+                className={`p-4 rounded-xl border transition-all duration-200 flex flex-col justify-between space-y-3 ${
+                  isApproved
+                    ? 'bg-emerald-50/40 border-emerald-300/80 shadow-[0_4px_16px_rgba(14,159,110,0.08)]'
+                    : 'bg-slate-50/50 border-slate-200/80 hover:bg-white hover:border-blue-200 hover:shadow-md'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[11px] font-mono text-slate-500 font-medium">
+                          OEM: {item.oem_part}
+                        </span>
+                        <span className="text-[9px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.2 rounded font-mono font-bold uppercase">
+                          {item.oem_status}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                        {item.analog_article}
+                        <span className="text-slate-500 text-xs font-semibold">({item.brand})</span>
+                      </h4>
+                    </div>
+                    {getTierBadge(item.quality_tier)}
+                  </div>
+
+                  <div className="space-y-1 bg-white p-2.5 rounded-lg border border-slate-200/70 text-[11px] text-slate-600">
+                    {item.risk_factors.map((factor, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5">
+                        <Icon name="check" size={12} className="text-emerald-500 shrink-0" />
+                        <span>{factor}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[11px] font-mono text-slate-500 font-medium">OEM: {item.oem_part}</span>
-                      <span className="text-[9px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.2 rounded font-mono font-bold uppercase">
-                        {item.oem_status}
-                      </span>
+                    <div className="flex items-center gap-2">
+                      {getRiskBadge(item.risk_score)}
+                      {discountPct > 0 && (
+                        <span className="text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                          -{discountPct}%
+                        </span>
+                      )}
                     </div>
-                    <h4 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-1.5">
-                      {item.analog_article}
-                      <span className="text-slate-500 text-xs font-semibold">({item.brand})</span>
-                    </h4>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {item.price_analog > 0 ? `${item.price_analog.toLocaleString()} ₽` : 'цена н/д'}
+                      {item.delivery_days > 0 ? ` · ${item.delivery_days} дн.` : ''}
+                    </div>
                   </div>
-                  {getTierBadge(item.quality_tier)}
-                </div>
-
-                <div className="space-y-1 bg-white p-2.5 rounded-lg border border-slate-200/70 text-[11px] text-slate-600">
-                  {item.risk_factors.map((factor, idx) => (
-                    <div key={idx} className="flex items-center gap-1.5">
-                      <Icon name="check" size={12} className="text-emerald-500 shrink-0" />
-                      <span>{factor}</span>
-                    </div>
-                  ))}
+                  <button
+                    type="button"
+                    disabled={isApproved}
+                    onClick={() => void handleSelect(item)}
+                    className={`text-[11px] font-bold px-3 py-1.5 rounded-lg border ${
+                      isApproved
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200 cursor-default'
+                        : 'bg-blue-600 text-white border-blue-700 hover:bg-blue-500'
+                    }`}
+                  >
+                    {isApproved ? 'Утверждён' : 'Выбрать'}
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
-                <div>
-                  <div className="flex items-center gap-2">
-                    {getRiskBadge(item.risk_score)}
-                    {discountPct > 0 && (
-                      <span className="text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[10px] font-bold">
-                        -{discountPct}%
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-sm font-mono font-bold text-[var(--text-primary)] mt-0.5">
-                    {item.price_analog.toLocaleString()} ₽{' '}
-                    <span className="text-[10px] text-slate-500 font-sans font-normal">
-                      (SLA: {item.delivery_days} дн.)
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  {isApproved ? (
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-lg flex items-center gap-1 border border-emerald-200">
-                      <Icon name="check-circle" size={14} className="text-emerald-600" /> Выбрано
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => handleSelect(item)}
-                      className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-primary-strong)] text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
-                    >
-                      <Icon name="check" size={13} />
-                      Заменить
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
-

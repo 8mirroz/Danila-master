@@ -1,4 +1,4 @@
-"""Validates VIN presence and format before downstream matching."""
+"""Validates VIN presence and format; enriches with offline WMI decode when possible."""
 from __future__ import annotations
 
 import logging
@@ -9,11 +9,12 @@ from sqlmodel import Session, select
 
 from app.automation.context import AutomationContext
 from app.automation.events import append_request_event
+from app.automation.engines.vin_query_engine import decode_vin
 
 from models import PartRequest, EventType
 
 logger = logging.getLogger("automation.jobs.intake_validate_vin")
-VIN_RE = re.compile(r"^[A-Z0-9]{17}$")
+VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$", re.I)
 
 
 def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
@@ -25,14 +26,29 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
     skipped = 0
     for req_id in request_ids:
         row = session.exec(
-            select(PartRequest).where(PartRequest.tenant_id == context.tenant_id)
+            select(PartRequest)
+            .where(PartRequest.tenant_id == context.tenant_id)
             .where(PartRequest.request_id == req_id)
         ).first()
         if not row:
             skipped += 1
             continue
-        vin = (context.payload.get("request_metadata") or {}).get(req_id, {}).get("vin", "")
-        valid = bool(VIN_RE.match(vin))
+
+        meta = (context.payload.get("request_metadata") or {}).get(req_id, {}) or {}
+        vin = str(meta.get("vin") or getattr(row, "vehicle_vin", None) or "").strip().upper()
+        format_ok = bool(VIN_RE.match(vin)) if vin else False
+
+        decode_payload: Dict[str, Any] = {}
+        if vin:
+            decode_payload = decode_vin(vin)
+        else:
+            decode_payload = {
+                "decoded": False,
+                "reason": "empty_vin",
+                "partial": True,
+                "vin_validity": "invalid",
+            }
+
         append_request_event(
             session=session,
             request_id=req_id,
@@ -40,7 +56,21 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
             event_type=EventType.VIN_VALIDATED,
             actor_type="automation",
             actor_id=context.actor_id,
-            payload={"valid": valid, "vin": vin},
+            payload={
+                "valid": format_ok and decode_payload.get("vin_validity") == "valid",
+                "format_ok": format_ok,
+                "vin": vin or None,
+                "decode": {
+                    "make": decode_payload.get("make"),
+                    "model": decode_payload.get("model"),
+                    "year": decode_payload.get("year"),
+                    "vin_validity": decode_payload.get("vin_validity"),
+                    "partial": decode_payload.get("partial"),
+                    "source": decode_payload.get("source"),
+                    "reason": decode_payload.get("reason"),
+                    "implemented": decode_payload.get("implemented"),
+                },
+            },
         )
         validated += 1
     return {"ok": True, "validated": validated, "skipped": skipped}

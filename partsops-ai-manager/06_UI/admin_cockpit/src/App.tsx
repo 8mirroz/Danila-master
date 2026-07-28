@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   AppFrame,
   TopCommandBar,
@@ -38,6 +38,7 @@ import { HermesChatDrawer } from './components/HermesChatDrawer';
 import { getPermissions } from './lib/rbac';
 import type { Role } from './lib/rbac';
 import { BatchSearchModal } from './components/BatchSearchModal';
+import { getWorkflowStepIndex } from './lib/workflow';
 
 type Request = {
   id: number;
@@ -93,6 +94,15 @@ function App() {
     } catch (error) {
       console.error('Error fetching data health', error);
     }
+  };
+
+  const getRequestWorkspaceStep = (status: string) => {
+    const normalizedStatus = status.toUpperCase();
+    if (['APPROVED', 'ERP_SYNCING', 'ERP_SYNC_FAILED', 'INVOICE_DRAFTED', 'SENT_TO_CLIENT', 'PAID', 'PURCHASE_ORDERED', 'FULFILLED', 'CLOSED'].includes(normalizedStatus)) {
+      return 5;
+    }
+    const workflowIndex = getWorkflowStepIndex(normalizedStatus);
+    return workflowIndex >= 2 ? 4 : workflowIndex === 1 ? 3 : 2;
   };
 
   useEffect(() => {
@@ -165,18 +175,91 @@ function App() {
     void fetchRequests();
   }, [fetchTrigger]);
 
+  const pendingGRef = useRef(false);
+  const pendingGTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
+    const isTypingTarget = (el: EventTarget | null) => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (el.isContentEditable) return true;
+      return false;
+    };
+
+    const gNavMap: Record<string, string> = {
+      d: 'dashboard',
+      k: 'kanban',
+      s: 'suppliers',
+      o: 'orders',
+      m: 'matching',
+      p: 'pricing',
+      a: 'audit',
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen(true);
+        return;
       }
       if (e.key === 'Escape') {
         setIsCommandPaletteOpen(false);
+        return;
+      }
+
+      // Do not steal keys while typing in fields
+      if (isTypingTarget(e.target)) return;
+
+      // ⌘/Ctrl+N → new request (orders)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setActiveNav('orders');
+        return;
+      }
+
+      // ⌘/Ctrl+R → soft refresh (no full page reload)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        setFetchTrigger((prev) => prev + 1);
+        return;
+      }
+
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const key = e.key.toLowerCase();
+
+      // G then letter navigation (short-lived pending G, ~800ms)
+      if (key === 'g' && !e.repeat) {
+        pendingGRef.current = true;
+        if (pendingGTimerRef.current != null) {
+          window.clearTimeout(pendingGTimerRef.current);
+        }
+        pendingGTimerRef.current = window.setTimeout(() => {
+          pendingGRef.current = false;
+          pendingGTimerRef.current = null;
+        }, 800);
+        return;
+      }
+
+      if (pendingGRef.current && gNavMap[key]) {
+        e.preventDefault();
+        pendingGRef.current = false;
+        if (pendingGTimerRef.current != null) {
+          window.clearTimeout(pendingGTimerRef.current);
+          pendingGTimerRef.current = null;
+        }
+        setActiveNav(gNavMap[key]);
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (pendingGTimerRef.current != null) {
+        window.clearTimeout(pendingGTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -212,13 +295,14 @@ function App() {
         setNormalizedParts([]);
       }
       setSelectedOffers({});
-      setActiveStep(2);
+      setActiveStep(getRequestWorkspaceStep(selectedReq.status));
     }
   }, [selectedReq]);
 
   const handleSelectRequest = (req: Request) => {
     setSelectedReq(req);
     setActiveNav('matching');
+    setActiveStep(getRequestWorkspaceStep(req.status));
   };
 
   const handleStateTransition = async (targetState: string, reason: string, reqId?: string) => {
@@ -239,17 +323,17 @@ function App() {
           if (targetState === 'APPROVED') setActiveStep(5);
         }
       } else {
-        const err = await res.json();
-        notify.error(`Ошибка смены статуса: ${err.detail}`);
+        const err = await res.json().catch(() => null);
+        const detail = typeof err?.detail === 'string' ? err.detail : err?.detail?.reason || `HTTP ${res.status}`;
+        const transitionError = new Error(`Ошибка смены статуса: ${detail}`);
+        notify.error(transitionError.message);
+        throw transitionError;
       }
     } catch (error) {
       console.error(error);
-      notify.info('Эмуляция локального перехода статуса');
-      setRequests((prev) => prev.map((r) => (r.request_id === idToTransition ? { ...r, status: targetState } : r)));
-      if (selectedReq && selectedReq.request_id === idToTransition) {
-        setSelectedReq((prev) => (prev ? { ...prev, status: targetState } : null));
-        if (targetState === 'APPROVED') setActiveStep(5);
-      }
+      const transitionError = error instanceof Error ? error : new Error('Backend недоступен: переход не выполнен');
+      notify.error(transitionError.message);
+      throw transitionError;
     }
   };
 
@@ -273,18 +357,36 @@ function App() {
     setActiveStep(3);
   };
 
+  const requestPartsCount = normalizedParts.length;
+  const selectedOffersCount = Object.keys(selectedOffers).filter((key) => selectedOffers[key] != null).length;
+  const allOffersSelected = requestPartsCount > 0 && selectedOffersCount === requestPartsCount;
+  const canOpenWorkspaceStep = (index: number) => {
+    if (index <= 2) return true;
+    if (index === 3) return requestPartsCount > 0;
+    if (index === 4) return allOffersSelected;
+    if (index >= 5) return selectedReq?.status === 'APPROVED' || activeStep >= 5;
+    return false;
+  };
+
+  const openWorkspaceStep = (index: number) => {
+    if (!canOpenWorkspaceStep(index)) return;
+    if (index === 2 || index === 3 || index === 4 || index >= 5) {
+      setActiveStep(index === 2 ? 2 : index === 3 ? 3 : index === 4 ? 4 : 5);
+    }
+  };
+
   const navItems = [
     { id: 'dashboard', label: 'Панель управления', icon: 'search', group: 'main' as const },
     { id: 'kanban', label: 'Канбан-доска', icon: 'list', group: 'main' as const },
     { id: 'suppliers', label: 'Каталог поставщиков', icon: 'car', group: 'main' as const },
-    { id: 'orders', label: 'Кастом', icon: 'cloud-arrow-up', group: 'main' as const },
+    { id: 'orders', label: 'Загрузка заказа', icon: 'cloud-arrow-up', group: 'main' as const },
     { id: 'matching', label: 'Матрица подбора', icon: 'rotate', group: 'main' as const },
     { id: 'pricing', label: 'Калькулятор цен', icon: 'pencil', group: 'main' as const },
-    { id: 'contract_control', label: 'Договорный контроль', icon: 'file-shield', group: 'bottom' as const },
     { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'robot', group: 'admin' as const },
     { id: 'orchestra', label: 'Мультиагентный оркестр', icon: 'wave-square', group: 'admin' as const },
     { id: 'agent_os', label: 'Консоль ИИ-агента', icon: 'robot', group: 'admin' as const },
     { id: 'audit', label: 'Аудит и логи', icon: 'circle-info', group: 'admin' as const },
+    { id: 'hermes', label: 'AI агент', icon: 'robot', group: 'bottom' as const },
   ];
 
   const handleNavChange = (navId: string) => {
@@ -318,7 +420,8 @@ function App() {
     requests.filter((r) => !['CLOSED', 'CANCELLED', 'FAILED', 'EXPIRED', 'CLIENT_REJECTED'].includes(r.status)).length;
   const pendingApprovalsCount = dashboardVm.health?.health_indicators?.approval_pressure?.pending_approvals ?? 0;
   const staleSuppliersCount = dashboardVm.health?.health_indicators?.supplier_feed_freshness?.feed_stale_suppliers ?? 0;
-  const isErpFailing = dashboardVm.health?.health_indicators?.erp_health?.currently_failing ?? false;
+  const hasErpHealth = dashboardVm.health?.health_indicators?.erp_health != null;
+  const isErpFailing = Boolean(dashboardVm.health?.health_indicators?.erp_health?.currently_failing);
 
   return (
     <AppFrame>
@@ -362,7 +465,19 @@ function App() {
                   setActiveNav('dashboard');
                 }}
               />
-              <ChevronStepper status={selectedReq.status} />
+              <ChevronStepper
+                status={selectedReq.status}
+                activeIndex={activeStep === 2 ? 2 : activeStep === 3 ? 3 : activeStep === 4 ? 5 : 6}
+                canOpenStep={canOpenWorkspaceStep}
+                onStepClick={openWorkspaceStep}
+              />
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50/55 px-4 py-3 text-xs">
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-900">{activeStep === 2 ? 'Проверьте распознанные позиции' : activeStep === 3 ? 'Выберите лучший оффер для каждой позиции' : activeStep === 4 ? 'Проверьте доказательства и согласуйте цену' : 'Подготовьте и отправьте счёт'}</p>
+                  <p className="mt-0.5 text-slate-600">Шаг нельзя пропустить, пока не выполнено обязательное условие текущего этапа.</p>
+                </div>
+                <span className="hidden shrink-0 rounded-full border border-blue-200 bg-white px-2.5 py-1 font-mono text-[10px] font-bold text-blue-700 sm:inline-flex">{activeStep === 2 ? `${requestPartsCount} поз.` : activeStep === 3 ? `${selectedOffersCount}/${requestPartsCount} выбрано` : selectedReq.status}</span>
+              </div>
               <div className="space-y-4">
                 {activeStep === 2 && (
                   <SectionCard
@@ -385,17 +500,25 @@ function App() {
                   </SectionCard>
                 )}
                 {activeStep === 3 && (
-                  <SupplierMatrix
-                    parts={normalizedParts}
-                    selectedOffers={selectedOffers}
-                    requestId={selectedReq.request_id}
-                    onSelectOffer={(partName, offer) =>
-                      setSelectedOffers((prev) => ({
-                        ...prev,
-                        [partName]: offer,
-                      }))
-                    }
-                  />
+                  <>
+                    <SupplierMatrix
+                      parts={normalizedParts}
+                      selectedOffers={selectedOffers}
+                      requestId={selectedReq.request_id}
+                      onSelectOffer={(partName, offer) =>
+                        setSelectedOffers((prev) => ({
+                          ...prev,
+                          [partName]: offer,
+                        }))
+                      }
+                    />
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                      <Button variant="secondary" icon="arrow-left" onClick={() => setActiveStep(2)}>Назад к проверке</Button>
+                      <Button variant="primary" icon="arrow-right" disabled={!allOffersSelected} onClick={() => setActiveStep(4)} title={!allOffersSelected ? 'Выберите оффер для каждой позиции' : undefined}>
+                        К согласованию <span className="ml-1 font-mono text-[10px] opacity-80">{selectedOffersCount}/{requestPartsCount}</span>
+                      </Button>
+                    </div>
+                  </>
                 )}
                 {activeStep === 4 && (
                   <SectionCard title="Шаг 4: Контроль операционного согласования" icon="circle-info">
@@ -412,6 +535,7 @@ function App() {
                       />
                     )}
                     <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[var(--border-subtle)] justify-end">
+                      <Button variant="secondary" icon="arrow-left" onClick={() => setActiveStep(3)}>Назад к подбору</Button>
                       <TransitionActions
                         status={selectedReq.status}
                         requestId={selectedReq.request_id}
@@ -423,6 +547,9 @@ function App() {
                 )}
                 {activeStep === 5 && (
                   <div className="space-y-4">
+                    <div className="flex items-center justify-start">
+                      <Button variant="secondary" icon="arrow-left" onClick={() => setActiveStep(4)}>Назад к согласованию</Button>
+                    </div>
                     <PricingCalculator
                       parts={formattedPartsWithBestMatch}
                       requestId={selectedReq.request_id}
@@ -435,6 +562,25 @@ function App() {
                     <InvoicePreview requestId={selectedReq.request_id} onSent={() => setFetchTrigger((prev) => prev + 1)} />
                   </div>
                 )}
+              </div>
+            </div>
+          ) : activeNav === 'hermes' ? (
+            <div className="hermes-workspace-shell p-4 lg:p-6">
+              <div className="mx-auto h-full max-w-7xl">
+                <HermesChatDrawer
+                  activeScreen={activeNav}
+                  selectedRequestId={selectedReq?.request_id}
+                  open
+                  embedded
+                  onOpenChange={(open) => { if (!open) setActiveNav('dashboard'); }}
+                  onNavigate={(screenId, reqId) => {
+                    setActiveNav(screenId);
+                    if (reqId) {
+                      const match = requests.find((r) => r.request_id === reqId);
+                      if (match) setSelectedReq(match);
+                    }
+                  }}
+                />
               </div>
             </div>
           ) : (
@@ -475,12 +621,13 @@ function App() {
                         <button
                           onClick={() => {
                             setFetchTrigger((prev) => prev + 1);
-                            notify.erpSync();
+                            void notify.erpSync();
                           }}
                           className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/20 shadow-xs flex items-center gap-2"
+                          title="Обновить статус ERP (не запускает full push)"
                         >
                           <Icon name="rotate" size={14} />
-                          Синхронизация
+                          Статус ERP
                         </button>
                         <button
                           onClick={() => setActiveNav('orders')}
@@ -535,10 +682,16 @@ function App() {
                           Статус ERP
                         </div>
                         <div className="text-2xl font-black text-white">
-                          {dashboardVm.loading ? '...' : isErpFailing ? 'Сбой' : '100% ОК'}
+                          {dashboardVm.loading ? '...' : !hasErpHealth ? 'н/д' : isErpFailing ? 'Сбой' : 'OK'}
                         </div>
                         <div className="text-[10px] text-emerald-200 mt-1 font-semibold">
-                          {isErpFailing ? 'требует внимания' : 'синхронизировано'}
+                          {dashboardVm.loading
+                            ? 'загрузка'
+                            : !hasErpHealth
+                              ? 'нет данных'
+                              : isErpFailing
+                                ? 'требует внимания'
+                                : 'в норме'}
                         </div>
                       </div>
                     </div>
@@ -724,17 +877,6 @@ function App() {
         }}
       />
 
-      <HermesChatDrawer
-        activeScreen={activeNav}
-        selectedRequestId={selectedReq?.request_id}
-        onNavigate={(screenId, reqId) => {
-          setActiveNav(screenId);
-          if (reqId) {
-            const match = requests.find((r) => r.request_id === reqId);
-            if (match) setSelectedReq(match);
-          }
-        }}
-      />
     </AppFrame>
   );
 }

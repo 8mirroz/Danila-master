@@ -36,11 +36,31 @@ import models_copilot
 load_dotenv()
 
 
+def _should_seed_on_start() -> bool:
+    """Demo seed is opt-in for production-like DBs; local sqlite/dev still seeds by default."""
+    raw = os.getenv("SEED_ON_START")
+    if raw is not None:
+        return raw.strip().lower() in ("1", "true", "yes")
+    env = os.getenv("PARTSOPS_ENV", os.getenv("ENV", "")).lower()
+    if env in ("prod", "production"):
+        return False
+    if env in ("dev", "development", "test", "local", "ci"):
+        return True
+    # Env unset: seed only for sqlite / empty DATABASE_URL (local demo), never for postgres by default.
+    db_url = (os.getenv("DATABASE_URL") or "").strip().lower()
+    if not db_url or db_url.startswith("sqlite"):
+        return True
+    return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    with Session(engine) as session:
-        seed_database(session)
+    if _should_seed_on_start():
+        with Session(engine) as session:
+            seed_database(session)
+    else:
+        print("[startup] seed_database skipped (SEED_ON_START=0 or prod env)")
     yield
 
 
