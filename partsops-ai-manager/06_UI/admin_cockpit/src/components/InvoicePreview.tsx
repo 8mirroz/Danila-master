@@ -19,29 +19,31 @@ type DeliveryStatus = {
 };
 
 export const InvoicePreview = ({ requestId, onSent }: InvoicePreviewProps) => {
-  const [channel, setChannel] = useState<'email' | 'telegram' | 'both'>('email');
+  const [channel, setChannel] = useState<'email' | 'telegram'>('email');
   const [recipient, setRecipient] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deliveryLogs, setDeliveryLogs] = useState<DeliveryStatus[]>([]);
   const [invoiceExists, setInvoiceExists] = useState<boolean | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const checkInvoiceAndLogs = useCallback(async () => {
+    setStatusError(null);
     try {
       // 1. Check if invoice exists by fetching status
       const resStatus = await apiFetch(`/api/delivery/status/${requestId}`);
-      if (resStatus.ok) {
-        const logs = await resStatus.json();
-        setDeliveryLogs(logs);
-      }
+      if (!resStatus.ok) throw new Error(`Delivery status HTTP ${resStatus.status}`);
+      const logs = await resStatus.json();
+      setDeliveryLogs(logs);
       
       // 2. Fetch invoice PDF info
       const resPdf = await apiFetch(`/api/delivery/invoice/${requestId}/pdf`);
       setInvoiceExists(resPdf.ok);
     } catch (e) {
       console.error("Error checking invoice status:", e);
-      setInvoiceExists(false);
+      setStatusError(e instanceof Error ? e.message : 'Не удалось загрузить статус доставки');
+      setInvoiceExists(null);
     }
   }, [requestId]);
 
@@ -50,6 +52,15 @@ export const InvoicePreview = ({ requestId, onSent }: InvoicePreviewProps) => {
     const interval = setInterval(checkInvoiceAndLogs, 15000); // Poll status every 15s
     return () => clearInterval(interval);
   }, [checkInvoiceAndLogs]);
+
+  if (statusError) {
+    return (
+      <div className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-center">
+        <InlineAlert type="danger" message={`Статус счета недоступен: ${statusError}`} />
+        <ActionButton variant="secondary" onClick={() => void checkInvoiceAndLogs()}>Повторить</ActionButton>
+      </div>
+    );
+  }
 
   const handleSend = async () => {
     if (!recipient) {
@@ -66,17 +77,17 @@ export const InvoicePreview = ({ requestId, onSent }: InvoicePreviewProps) => {
         body: JSON.stringify({
           channel: channel,
           recipient: recipient,
-          dry_run: false, // send real notification in dev mode
+          dry_run: false,
         }),
       });
       
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data.success && ['sent', 'delivered'].includes(data.status)) {
         setSendResult(`Успешно отправлено через ${channel}!`);
         void checkInvoiceAndLogs();
         if (onSent) onSent();
       } else {
-        setError(data.detail || "Не удалось отправить счет");
+        setError(data.detail || data.error || `Доставка не подтверждена: ${data.status || `HTTP ${res.status}`}`);
       }
     } catch (e) {
       console.error("Error sending invoice:", e);
@@ -136,13 +147,12 @@ export const InvoicePreview = ({ requestId, onSent }: InvoicePreviewProps) => {
             <div>
               <label className="text-[10px] text-[var(--text-muted)] font-bold uppercase block mb-1">Канал доставки</label>
               <div className="flex gap-2">
-                {(['email', 'telegram', 'both'] as const).map(ch => (
+                {(['email', 'telegram'] as const).map(ch => (
                   <button
                     key={ch}
                     onClick={() => {
                       setChannel(ch);
-                      if (ch === 'email') setRecipient('client@example.com');
-                      else if (ch === 'telegram') setRecipient('123456789');
+                      setRecipient('');
                     }}
                     className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold border transition-all ${
                       channel === ch 
@@ -150,7 +160,7 @@ export const InvoicePreview = ({ requestId, onSent }: InvoicePreviewProps) => {
                         : 'bg-[var(--surface-2)] border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--state-hover)]'
                     }`}
                   >
-                    {ch === 'email' ? 'Email' : ch === 'telegram' ? 'Telegram' : 'Оба канала'}
+                    {ch === 'email' ? 'Email' : 'Telegram'}
                   </button>
                 ))}
               </div>

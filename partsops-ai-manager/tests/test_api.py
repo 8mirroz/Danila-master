@@ -411,6 +411,17 @@ def test_invoice_generation():
         )
         assert step_response.status_code == 200
 
+    preview = client.post(
+        f"/api/erp/pricing/preview/{request_id}",
+        json={
+            "logistics_cost": 500,
+            "target_margin_override": 0.15,
+            "urgency_level": "normal",
+        },
+    )
+    assert preview.status_code == 200
+    assert preview.json()["pricing"]["client_price"] > 0
+
     # 2. Generate invoice after approval
     resp2 = client.post(
         f"/api/erp/invoice/{request_id}",
@@ -426,6 +437,18 @@ def test_invoice_generation():
     assert "invoice" in invoice
     assert invoice["invoice"]["total"] > 0
     assert len(invoice["invoice"]["items"]) > 0
+
+    duplicate = client.post(
+        f"/api/erp/invoice/{request_id}",
+        json={
+            "logistics_cost": 500,
+            "target_margin_override": 0.15,
+            "urgency_level": "normal",
+        },
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json()["idempotent"] is True
+    assert duplicate.json()["invoice"]["invoice_number"] == invoice["invoice"]["invoice_number"]
 
 
 def test_invoice_requires_approval():

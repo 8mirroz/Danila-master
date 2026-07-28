@@ -174,8 +174,10 @@ class EmailAdapter:
         recipient_email: str,
         session: Session,
         tenant_id: str = "default",
-        dry_run: bool = True
+        dry_run: bool = False
     ) -> OutboundMessage:
+        if os.getenv("PARTSOPS_ENV", "dev").strip().lower() in {"prod", "production"}:
+            dry_run = False
         # Sanitize recipient and metadata
         safe_recipient = sanitize_for_delivery(recipient_email)
         safe_customer = sanitize_for_delivery(invoice.customer_name)
@@ -313,8 +315,10 @@ class TelegramAdapter:
         chat_id: str,
         session: Session,
         tenant_id: str = "default",
-        dry_run: bool = True
+        dry_run: bool = False
     ) -> OutboundMessage:
+        if os.getenv("PARTSOPS_ENV", "dev").strip().lower() in {"prod", "production"}:
+            dry_run = False
         safe_chat_id = sanitize_for_delivery(chat_id)
         safe_customer = sanitize_for_delivery(invoice.customer_name)
         

@@ -22,7 +22,7 @@ type Request = {
 interface KanbanBoardProps {
   requests: Request[];
   onSelectRequest: (req: Request) => void;
-  onTransitionRequest?: (requestId: string, targetState: string, reason: string) => Promise<void>;
+  onTransitionRequest: (targetState: string, reason: string, requestId?: string) => Promise<void>;
   resolveDropTarget?: (request: Request, columnStatuses: string[]) => string | null;
 }
 
@@ -102,22 +102,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     let transitionSuccess = false;
     let serverResponse = '';
     
-    if (onTransitionRequest) {
-      try {
-        await onTransitionRequest(
-          pendingTransition.targetState,
-          `Перенос карточки в колонку "${pendingTransition.columnTitle}"`,
-          pendingTransition.requestId
-        );
-        transitionSuccess = true;
-        serverResponse = 'HTTP 200 OK. Статус обновлен в базе данных.';
-      } catch (err) {
-        console.error(err);
-        serverResponse = `Ошибка: ${err instanceof Error ? err.message : String(err)}`;
-      }
-    } else {
-      serverResponse = 'Локальная эмуляция перехода: успешно.';
+    try {
+      await onTransitionRequest(
+        pendingTransition.targetState,
+        `Перенос карточки в колонку "${pendingTransition.columnTitle}"`,
+        pendingTransition.requestId
+      );
       transitionSuccess = true;
+      serverResponse = 'Backend подтвердил переход и записал его в аудит.';
+    } catch (err) {
+      console.error(err);
+      serverResponse = `Ошибка: ${err instanceof Error ? err.message : String(err)}`;
     }
 
     await new Promise((resolve) => setTimeout(resolve, 400));

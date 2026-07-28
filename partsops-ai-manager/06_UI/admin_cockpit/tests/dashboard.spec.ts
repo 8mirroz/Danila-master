@@ -260,7 +260,10 @@ test.describe('PartsOps Admin Cockpit - Refactored Soft UI & View Model', () => 
     await page.keyboard.press('Escape');
     await expect(queueDrawer).not.toBeVisible();
 
-    await page.getByTestId('hermes-launcher').click();
+    await page.getByRole('button', { name: 'Открыть меню навигации' }).click();
+    const navDrawer = page.locator('aside[role="dialog"][aria-label="Меню навигации"]');
+    await expect(navDrawer).toBeVisible();
+    await navDrawer.getByRole('button', { name: 'AI агент' }).click();
     const hermes = page.getByTestId('hermes-drawer');
     await expect(hermes).toBeVisible();
     await expect(hermes.getByText('READ-ONLY', { exact: true })).toBeVisible();

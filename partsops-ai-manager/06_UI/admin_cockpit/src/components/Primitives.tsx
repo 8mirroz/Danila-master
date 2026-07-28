@@ -450,7 +450,7 @@ export const LeftNavRail: React.FC<LeftNavRailProps> = ({
                   <Icon name={item.icon} size={17} weight={isActive ? 'fill' : 'regular'} className="relative z-10 shrink-0 text-emerald-300 transition-transform duration-300 group-hover:scale-110" />
                   {!collapsedView && (
                     <span className="relative z-10 min-w-0 animate-fadeIn">
-                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200/90">Control room</span>
+                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200/90">Hermes command layer</span>
                       <span className="mt-0.5 block truncate text-xs font-bold text-white">{item.label}</span>
                     </span>
                   )}

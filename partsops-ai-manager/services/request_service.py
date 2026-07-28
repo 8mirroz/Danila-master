@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -14,7 +15,7 @@ from event_store import emit_event, emit_state_change, get_events, verify_event_
 from learning import save_manual_correction
 from pii import mask_email, mask_name, mask_phone, mask_vin, secure_pre_parse
 from models import EventType, PartRequest, RequestState
-from suppliers import Invoice
+from suppliers import Invoice, SupplierCatalogItem
 from state_machine import validate_transition
 from policy_engine import EvidenceGates
 from pricing import PricingContext, check_margin_guard, compute_price
@@ -41,6 +42,9 @@ def _find_request_by_tenant(session: Session, request_id: str, tenant_id: str) -
 
 def _build_pricing_context(req: PartRequest, session: Session, body: Optional[dict[str, Any]] = None):
     parts = _json_load(req.parts_json, [])
+    selected_matches = _json_load(req.match_evidence_json, {})
+    if not isinstance(selected_matches, dict):
+        selected_matches = {}
     body = body or {}
 
     logistics_cost = float(body.get("logistics_cost", 0.0) or 0.0)
@@ -59,7 +63,19 @@ def _build_pricing_context(req: PartRequest, session: Session, body: Optional[di
         part_name = str(part.get("name", "")).strip()
         if not part_name or part_name == "Неизвестная деталь":
             continue
-        matches = match_part_from_db(part_name, session, threshold=50.0, limit=1, tenant_id=req.tenant_id)
+        selected = selected_matches.get(part_name)
+        if isinstance(selected, dict):
+            selected_catalog_id = str((selected.get("item") or {}).get("catalog_id") or "").strip()
+            if not selected_catalog_id:
+                raise HTTPException(status_code=422, detail=f"Выбранный оффер для '{part_name}' повреждён")
+            matches = [
+                match for match in match_part_from_db(part_name, session, threshold=0.0, limit=25, tenant_id=req.tenant_id)
+                if match.get("item", {}).get("catalog_id") == selected_catalog_id
+            ]
+            if not matches:
+                raise HTTPException(status_code=422, detail=f"Выбранный оффер для '{part_name}' больше недоступен")
+        else:
+            matches = match_part_from_db(part_name, session, threshold=50.0, limit=1, tenant_id=req.tenant_id)
         if not matches:
             continue
         best = matches[0]
@@ -130,6 +146,85 @@ def _build_pricing_context(req: PartRequest, session: Session, body: Optional[di
 
 
 class RequestService:
+    @staticmethod
+    def get_selected_matches(session: Session, request_id: str, tenant_id: str) -> dict[str, Any]:
+        req = _find_request_by_tenant(session, request_id, tenant_id)
+        if not req:
+            raise HTTPException(status_code=404, detail="Request not found")
+        selections = _json_load(req.match_evidence_json, {})
+        return {
+            "request_id": request_id,
+            "selections": selections if isinstance(selections, dict) else {},
+        }
+
+    @staticmethod
+    def select_match(
+        session: Session,
+        request_id: str,
+        tenant_id: str,
+        part_name: str,
+        offer: dict[str, Any],
+        actor_id: str,
+    ) -> dict[str, Any]:
+        req = _find_request_by_tenant(session, request_id, tenant_id)
+        if not req:
+            raise HTTPException(status_code=404, detail="Request not found")
+        normalized_part = part_name.strip()
+        catalog_id = str((offer.get("item") or {}).get("catalog_id") or "").strip()
+        if not normalized_part or not catalog_id:
+            raise HTTPException(status_code=422, detail="part_name and offer.item.catalog_id are required")
+        catalog_item = session.exec(
+            select(SupplierCatalogItem).where(
+                SupplierCatalogItem.catalog_id == catalog_id,
+                SupplierCatalogItem.tenant_id == tenant_id,
+            )
+        ).first()
+        if not catalog_item:
+            raise HTTPException(status_code=422, detail="Selected catalog offer is not available for this tenant")
+
+        selections = _json_load(req.match_evidence_json, {})
+        if not isinstance(selections, dict):
+            selections = {}
+        selections[normalized_part] = offer
+        req.match_evidence_json = json.dumps(selections, ensure_ascii=False, default=str)
+        req.updated_at = _utcnow()
+        session.add(req)
+        emit_event(
+            session=session,
+            request_id=request_id,
+            event_type=EventType.OFFER_RECEIVED,
+            actor_type="user",
+            actor_id=actor_id,
+            payload={"part_name": normalized_part, "catalog_id": catalog_id, "supplier_id": catalog_item.supplier_id},
+            tenant_id=tenant_id,
+            commit=False,
+        )
+        session.commit()
+        session.refresh(req)
+        return {"request_id": request_id, "part_name": normalized_part, "offer": offer, "selections": selections}
+
+    @staticmethod
+    def preview_pricing(
+        session: Session,
+        request_id: str,
+        tenant_id: str,
+        body: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        req = _find_request_by_tenant(session, request_id, tenant_id)
+        if not req:
+            raise HTTPException(status_code=404, detail="Request not found")
+
+        line_items, pricing_result, margin_violations = _build_pricing_context(req, session, body)
+        return {
+            "request_id": request_id,
+            "request_status": req.status,
+            "pricing": {
+                **asdict(pricing_result),
+                "line_items": line_items,
+                "margin_violations": margin_violations,
+            },
+        }
+
     @staticmethod
     def get_requests(session: Session, tenant_id: str) -> list[PartRequest]:
         return session.exec(
@@ -396,6 +491,27 @@ class RequestService:
         req = _find_request_by_tenant(session, request_id, tenant_id)
         if not req:
             raise HTTPException(status_code=404, detail="Request not found")
+
+        existing_invoice = session.exec(
+            select(Invoice).where(
+                Invoice.request_id == request_id,
+                Invoice.tenant_id == tenant_id,
+            ).order_by(Invoice.created_at.desc())
+        ).first()
+        if existing_invoice:
+            return {
+                "status": "DRAFT_CREATED",
+                "idempotent": True,
+                "invoice": {
+                    "invoice_number": existing_invoice.invoice_number,
+                    "request_id": request_id,
+                    "items": _json_load(existing_invoice.items_json, []),
+                    "subtotal": existing_invoice.subtotal,
+                    "tax": existing_invoice.tax,
+                    "total": existing_invoice.total,
+                    "currency": "RUB",
+                },
+            }
         if req.status != RequestState.APPROVED:
             raise HTTPException(status_code=422, detail="Invoice generation requires APPROVED request status")
 
@@ -460,4 +576,3 @@ class RequestService:
                 "warnings": pricing_result.warnings,
             },
         }
-

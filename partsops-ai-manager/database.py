@@ -30,7 +30,7 @@ def init_db():
                         ContractRequirement, RequirementCoverage, ContractGap, AdaptationDecisionRecord,
                         ContractExceptionRecord, ClientApproval, PurchaseAuthorization, OEMCandidate,
                         AnalogCandidate, CompatibilityEvidence, ContractWorkflowState,
-                        ContractWorkflowEvent)  # noqa
+                        ContractWorkflowEvent, PipelineRun, PipelineRunEvent)  # noqa
     from suppliers import Supplier, SupplierCatalogItem, Invoice  # noqa
     SQLModel.metadata.create_all(engine)
 

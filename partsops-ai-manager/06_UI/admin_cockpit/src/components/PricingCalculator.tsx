@@ -19,6 +19,7 @@ type PricingCalculatorProps = {
   onDraftInvoice: (invoiceData: any) => void;
   requestId: string;
   isApproved: boolean;
+  erpQuotationRef?: string | null;
   allowedNextStates?: string[];
   onTransition?: (targetState: string, reason: string) => Promise<void>;
 };
@@ -28,6 +29,7 @@ export const PricingCalculator = ({
   onDraftInvoice,
   requestId,
   isApproved,
+  erpQuotationRef,
   allowedNextStates: _allowedNextStates = [],
   onTransition: _onTransition,
 }: PricingCalculatorProps) => {
@@ -42,7 +44,29 @@ export const PricingCalculator = ({
   const [violations, setViolations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [_previewLoading, setPreviewLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [erpStatus, setErpStatus] = useState<{ sync_status: string; invoice_ref?: string | null; quotation_ref?: string | null; last_error?: string | null } | null>(null);
+  const [erpStatusError, setErpStatusError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setErpStatusError(null);
+    void apiFetch(`/api/erp/status/${requestId}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`ERP status HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (!cancelled) setErpStatus(data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setErpStatus(null);
+          setErpStatusError(error instanceof Error ? error.message : 'ERP status unavailable');
+        }
+      });
+    return () => { cancelled = true; };
+  }, [requestId]);
 
 
   useEffect(() => {
@@ -59,7 +83,7 @@ export const PricingCalculator = ({
       setPreviewLoading(true);
       setPreviewError(null);
       try {
-        const res = await apiFetch(`/api/pricing/preview/${requestId}`, {
+          const res = await apiFetch(`/api/erp/pricing/preview/${requestId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -77,7 +101,7 @@ export const PricingCalculator = ({
         const data = await res.json();
         if (cancelled) return;
 
-        const pricing = data.pricing || {};
+          const pricing = data.pricing || {};
         setSubtotal(Math.round(pricing.subtotal_before_tax || 0));
         setTax(Math.round(pricing.tax_amount || 0));
         setTotal(Math.round(pricing.client_price || 0));
@@ -154,7 +178,8 @@ export const PricingCalculator = ({
           <span>Калькулятор маржи & Консоль Синхронизации ERP</span>
         </h3>
         <span className="font-mono text-xs text-slate-400">
-          Quotation Ref: <strong className="text-emerald-400 font-mono">#2026.170160</strong>
+              Request Ref: <strong className="text-emerald-400 font-mono">{requestId}</strong>
+              {erpQuotationRef && <span className="ml-2">Quotation: <strong className="text-emerald-400 font-mono">{erpQuotationRef}</strong></span>}
         </span>
       </div>
 
@@ -245,24 +270,31 @@ export const PricingCalculator = ({
               <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
                 Консоль Синхронизации 1С/SAP ERP
               </span>
-              <span className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>ONLINE</span>
+              <span className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
+                <span className="h-2 w-2 rounded-full bg-slate-500" />
+                <span>LIVE STATUS</span>
               </span>
             </div>
 
             <div className="space-y-2.5 text-xs text-slate-300">
               <div className="flex justify-between items-center p-2.5 rounded-xl border border-slate-800 bg-slate-950/60">
                 <span className="text-[10px] text-slate-400 font-bold uppercase">Quotation Reference</span>
-                <span className="font-mono text-emerald-400 font-bold">#2026.170160</span>
+                <span className="font-mono text-emerald-400 font-bold">{requestId}</span>
               </div>
 
               <div className="flex justify-between items-center p-2.5 rounded-xl border border-slate-800 bg-slate-950/60">
                 <span className="text-[10px] text-slate-400 font-bold uppercase">ERP Sync Status</span>
                 <span className="font-mono text-white font-bold bg-slate-800 px-2 py-0.5 rounded">
-                  {isApproved ? 'INVOICE_DRAFTED' : 'PENDING_APPROVAL'}
+                  {erpStatus?.sync_status ?? erpStatusError ?? 'LOADING'}
                 </span>
               </div>
+              {(erpStatus?.invoice_ref || erpStatus?.quotation_ref || erpStatus?.last_error) && (
+                <div className="space-y-1 rounded-xl border border-slate-800 bg-slate-950/60 p-2.5 text-[10px]">
+                  {erpStatus.quotation_ref && <div>Quotation: <span className="font-mono text-emerald-300">{erpStatus.quotation_ref}</span></div>}
+                  {erpStatus.invoice_ref && <div>Invoice: <span className="font-mono text-emerald-300">{erpStatus.invoice_ref}</span></div>}
+                  {erpStatus.last_error && <div className="text-rose-300">{erpStatus.last_error}</div>}
+                </div>
+              )}
             </div>
           </div>
 
@@ -274,6 +306,7 @@ export const PricingCalculator = ({
           )}
 
           <div className="pt-3">
+            {previewLoading && <div className="text-[10px] text-emerald-300">Пересчитываем live pricing…</div>}
             <ActionButton 
               variant="primary" 
               icon="fa-file-invoice-dollar"

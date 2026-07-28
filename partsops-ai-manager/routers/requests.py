@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional, List, Dict
 from fastapi import APIRouter, Depends, Header, HTTPException, Body, File, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field as PydanticField
 from sqlmodel import Session, select, desc
 
@@ -16,6 +18,13 @@ from app.automation.rate_limiter import rate_limiter
 from models import UploadArtifact, EventType
 from event_store import emit_event
 from fastapi import Request
+from services.pipeline_runs import (
+    TERMINAL_STATUSES,
+    get_pipeline_run,
+    list_run_events,
+    serialize_run,
+    start_pipeline_run,
+)
 
 # Import the new agent orchestrator
 from app.agents import AgentOrchestrator, create_orchestrator
@@ -55,6 +64,16 @@ class ManualCorrectionPayload(BaseModel):
     corrected_parts_json: str
     correction_reason_tags: list[str] = []
     corrected_vehicle_json: Optional[str] = None
+
+
+class MatchSelectionPayload(BaseModel):
+    part_name: str = PydanticField(min_length=1)
+    offer: dict[str, Any]
+    actor_id: str = "operator"
+
+
+class PipelineRunPayload(BaseModel):
+    requested_lane: Optional[str] = PydanticField(default=None, max_length=64)
 
 
 class ImportFromArtifactPayload(BaseModel):
@@ -273,6 +292,105 @@ def create_manual_correction(
     tenant_id: str = Depends(get_privileged_tenant),
 ):
     return RequestService.create_manual_correction(session, request_id, tenant_id, payload.model_dump())
+
+
+@router.post("/requests/{request_id}/pipeline-runs", status_code=202)
+def start_request_pipeline_run(
+    request_id: str,
+    payload: PipelineRunPayload,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+    principal: CurrentPrincipal = Depends(get_current_principal),
+):
+    run, idempotent = start_pipeline_run(
+        session,
+        request_id=request_id,
+        tenant_id=tenant_id,
+        requested_by=f"operator:{principal.role}",
+        requested_lane=payload.requested_lane,
+    )
+    response = serialize_run(run, idempotent=idempotent)
+    if idempotent:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=200, content=response)
+    return response
+
+
+@router.get("/requests/{request_id}/pipeline-runs/{run_id}")
+def get_request_pipeline_run(
+    request_id: str,
+    run_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    return serialize_run(get_pipeline_run(session, request_id=request_id, run_id=run_id, tenant_id=tenant_id))
+
+
+@router.get("/requests/{request_id}/pipeline-runs/{run_id}/events")
+async def stream_request_pipeline_run_events(
+    request_id: str,
+    run_id: str,
+    after: int = 0,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    # Resolve once before opening the stream so access failures are ordinary HTTP errors.
+    get_pipeline_run(session, request_id=request_id, run_id=run_id, tenant_id=tenant_id)
+
+    async def event_stream():
+        last_sequence = after
+        while True:
+            events = list_run_events(session, run_id=run_id, tenant_id=tenant_id, after=last_sequence)
+            for event in events:
+                last_sequence = event.sequence
+                try:
+                    payload = json.loads(event.payload_json or "{}")
+                except json.JSONDecodeError:
+                    payload = {}
+                data = json.dumps(
+                    {
+                        "sequence": event.sequence,
+                        "type": event.event_type,
+                        "phase": event.phase,
+                        "message": event.message,
+                        "payload": payload,
+                    },
+                    ensure_ascii=False,
+                )
+                yield f"id: {event.sequence}\nevent: {event.event_type}\ndata: {data}\n\n"
+            run = get_pipeline_run(session, request_id=request_id, run_id=run_id, tenant_id=tenant_id)
+            if run.status in TERMINAL_STATUSES:
+                return
+            yield ": keepalive\n\n"
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/requests/{request_id}/matches")
+def get_selected_matches(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    return RequestService.get_selected_matches(session, request_id, tenant_id)
+
+
+@router.post("/requests/{request_id}/matches")
+def select_match(
+    request_id: str,
+    payload: MatchSelectionPayload,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    return RequestService.select_match(
+        session,
+        request_id,
+        tenant_id,
+        payload.part_name,
+        payload.offer,
+        payload.actor_id,
+    )
 
 
 @router.get("/requests/{request_id}/gates")
@@ -559,7 +677,7 @@ def send_invoice(
     
     channel = body.get("channel", "email")
     recipient = body.get("recipient", "")
-    dry_run = body.get("dry_run", True)
+    dry_run = body.get("dry_run", False)
     
     if not recipient:
         raise HTTPException(status_code=400, detail="Recipient is required")
@@ -1144,4 +1262,3 @@ def export_request_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
-

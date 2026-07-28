@@ -373,3 +373,26 @@ def archive(request_id: str, payload: ArchivePayload,
             tenant_id: str = Depends(get_privileged_tenant)):
     return archive_contract(session, request_id, tenant_id, payload.receipt_id, payload.actor_id,
                             payload.archive_ref, payload.comment)
+
+
+@router.get("/{request_id}/export-custom-excel")
+def export_custom_excel(
+    request_id: str,
+    suppliers: str | None = None,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant)
+):
+    from fastapi.responses import StreamingResponse
+    from services.contract_operations import export_custom_contract_xlsx
+    
+    supplier_ids = [s.strip() for s in suppliers.split(",") if s.strip()] if suppliers else []
+    try:
+        buffer, filename = export_custom_contract_xlsx(session, request_id, tenant_id, supplier_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )

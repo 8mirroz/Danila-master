@@ -2,9 +2,12 @@ import React from 'react';
 
 interface ChevronStepperProps {
   status: string;
+  activeIndex?: number;
+  onStepClick?: (index: number) => void;
+  canOpenStep?: (index: number) => boolean;
 }
 
-export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status }) => {
+export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status, activeIndex, onStepClick, canOpenStep }) => {
   const stages = [
     { id: 'INTAKE', label: 'Входящая', icon: 'fa-inbox' },
     { id: 'AI_PARSE', label: 'ИИ Разбор', icon: 'fa-robot' },
@@ -31,7 +34,7 @@ export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status }) => {
 
   const isCancelled = ['CANCELLED', 'FAILED', 'CLIENT_REJECTED', 'EXPIRED'].includes(status.toUpperCase());
   const isError = status.toUpperCase() === 'ERP_SYNC_FAILED';
-  const currentIndex = getChevronStepIndex(status);
+  const currentIndex = activeIndex ?? getChevronStepIndex(status);
 
   if (isCancelled) {
     return (
@@ -54,8 +57,13 @@ export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status }) => {
           const isStepError = isError && stage.id === 'INVOICE';
 
           return (
-            <div
+            <button
+              type="button"
               key={stage.id}
+              disabled={!!canOpenStep && !canOpenStep(idx)}
+              aria-current={isCurrent ? 'step' : undefined}
+              aria-label={`${stage.label}${isCompleted ? ', завершён' : isCurrent ? ', текущий шаг' : ''}`}
+              onClick={() => onStepClick?.(idx)}
               className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-2xl text-[10px] font-extrabold uppercase tracking-wider transition-all ${
                 isCurrent
                   ? 'bg-[#0F172A] text-white shadow-sm scale-[1.02]'
@@ -64,7 +72,7 @@ export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status }) => {
                   : isStepError
                   ? 'bg-rose-600 text-white'
                   : 'bg-slate-50 text-slate-500 border border-slate-200/60'
-              }`}
+              } ${onStepClick && (!canOpenStep || canOpenStep(idx)) ? 'cursor-pointer hover:-translate-y-px hover:border-blue-300' : 'cursor-default'} disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {isStepError ? (
                 <i className="fas fa-triangle-exclamation text-white animate-pulse" />
@@ -80,7 +88,7 @@ export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status }) => {
                 </span>
               )}
               <span className="truncate">{stage.label}</span>
-            </div>
+            </button>
           );
         })}
       </div>

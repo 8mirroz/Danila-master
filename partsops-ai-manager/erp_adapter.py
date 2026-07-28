@@ -43,6 +43,7 @@ from event_store import emit_event, emit_state_change
 ERPNEXT_URL = os.getenv("ERPNEXT_URL", "")
 ERPNEXT_API_KEY = os.getenv("ERPNEXT_API_KEY", "")
 ERPNEXT_API_SECRET = os.getenv("ERPNEXT_API_SECRET", "")
+PARTSOPS_ENV = os.getenv("PARTSOPS_ENV", "dev").strip().lower()
 def _load_webhook_secret() -> str:
     secret = os.getenv("ERP_WEBHOOK_SECRET")
     if secret:
@@ -57,7 +58,9 @@ def _load_webhook_secret() -> str:
     return generated
 
 ERP_WEBHOOK_SECRET = _load_webhook_secret()
-ERP_DRY_RUN = os.getenv("ERP_DRY_RUN", "1") == "1" or not ERPNEXT_URL
+# Dry-run is a test/development capability only.  A production process must
+# report an unavailable ERP as blocked/failed instead of manufacturing a sync.
+ERP_DRY_RUN = PARTSOPS_ENV not in {"prod", "production"} and os.getenv("ERP_DRY_RUN", "1") == "1"
 
 MAX_RETRY_ATTEMPTS = 3
 BACKOFF_BASE_SECONDS = 1.0
@@ -134,6 +137,8 @@ def sync_invoice_draft(
     """
     if dry_run is None:
         dry_run = ERP_DRY_RUN
+    if PARTSOPS_ENV in {"prod", "production"}:
+        dry_run = False
     
     # Find invoice
     invoice = session.exec(

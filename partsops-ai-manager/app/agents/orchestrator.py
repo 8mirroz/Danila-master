@@ -8,7 +8,7 @@ Intake → Processing → Delivery → Reporting
 from __future__ import annotations
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass, field
 
 from app.agents.base_agent import BaseAgent, AgentContext, AgentResult, AgentType
@@ -198,6 +198,7 @@ class AgentOrchestrator:
         self,
         request_id: str,
         start_from: AgentType = AgentType.PROCESSING,
+        on_phase: Optional[Callable[[str, str, Dict[str, Any]], None]] = None,
     ) -> PipelineResult:
         """Continue pipeline from a specific agent (for retries)"""
         
@@ -263,9 +264,23 @@ class AgentOrchestrator:
         try:
             for agent_type, agent in self.pipeline[start_idx:]:
                 logger.info(f"Continuing pipeline with {agent_type.value} agent")
+                if on_phase:
+                    on_phase("phase.started", agent_type.value, {
+                        "message": f"Запущена фаза: {agent_type.value}.",
+                    })
                 
                 agent_result = agent.run(context)
                 result.phases[agent_type.value] = agent_result
+
+                if on_phase:
+                    on_phase(
+                        "phase.completed" if agent_result.success else "phase.failed",
+                        agent_type.value,
+                        {
+                            "message": "Фаза завершена." if agent_result.success else "Фаза завершилась ошибкой.",
+                            "payload": {"errors": agent_result.errors, "warnings": agent_result.warnings},
+                        },
+                    )
                 
                 if not agent_result.success:
                     result.errors.extend(agent_result.errors)

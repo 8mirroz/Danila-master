@@ -54,6 +54,8 @@ type Request = {
   priority?: string;
   vehicle_make?: string;
   vehicle_model?: string;
+  erp_quotation_ref?: string | null;
+  erp_invoice_ref?: string | null;
 };
 
 function App() {
@@ -295,6 +297,17 @@ function App() {
         setNormalizedParts([]);
       }
       setSelectedOffers({});
+      void apiFetch(`/api/requests/${selectedReq.request_id}/matches`)
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && typeof data.selections === 'object' && data.selections !== null) {
+            setSelectedOffers(data.selections);
+          }
+        })
+        .catch((error) => {
+          console.warn('Selected live matches unavailable', error);
+        });
       setActiveStep(getRequestWorkspaceStep(selectedReq.status));
     }
   }, [selectedReq]);
@@ -505,12 +518,27 @@ function App() {
                       parts={normalizedParts}
                       selectedOffers={selectedOffers}
                       requestId={selectedReq.request_id}
-                      onSelectOffer={(partName, offer) =>
-                        setSelectedOffers((prev) => ({
-                          ...prev,
-                          [partName]: offer,
-                        }))
-                      }
+                      onSelectOffer={(partName, offer) => {
+                        void apiFetch(`/api/requests/${selectedReq.request_id}/matches`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ part_name: partName, offer, actor_id: 'admin' }),
+                        })
+                          .then(async (res) => {
+                            if (!res.ok) {
+                              const detail = await res.json().catch(() => null);
+                              throw new Error(typeof detail?.detail === 'string' ? detail.detail : `HTTP ${res.status}`);
+                            }
+                            return res.json();
+                          })
+                          .then((data) => {
+                            setSelectedOffers(data.selections ?? {});
+                            notify.success(`Оффер для «${partName}» сохранён`);
+                          })
+                          .catch((error) => {
+                            notify.error(error instanceof Error ? error.message : 'Не удалось сохранить оффер');
+                          });
+                      }}
                     />
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                       <Button variant="secondary" icon="arrow-left" onClick={() => setActiveStep(2)}>Назад к проверке</Button>
@@ -554,8 +582,13 @@ function App() {
                       parts={formattedPartsWithBestMatch}
                       requestId={selectedReq.request_id}
                       isApproved={selectedReq.status === 'APPROVED'}
+                      erpQuotationRef={selectedReq.erp_quotation_ref}
                       onDraftInvoice={(data) => {
-                        notify.invoiceDrafted(data.invoice_number);
+                        const invoice = data.invoice ?? data;
+                        notify.invoiceDrafted(invoice.invoice_number);
+                        setSelectedReq((prev) => prev
+                          ? { ...prev, status: 'INVOICE_DRAFTED', erp_invoice_ref: invoice.invoice_number }
+                          : prev);
                         setFetchTrigger((prev) => prev + 1);
                       }}
                     />

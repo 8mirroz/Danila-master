@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { DataTable, ActionButton, Icon } from './Primitives';
 import { apiFetch } from '../lib/api';
 import { AnalogComparisonMatrix, type AnalogItem } from './AnalogComparisonMatrix';
@@ -41,99 +41,6 @@ type SupplierMatrixProps = {
   onSelectOffer?: (partName: string, offer: MatchItem) => void;
   selectedOffers?: Record<string, MatchItem | null>;
   requestId?: string;
-};
-
-/** Demo / Fallback offers when catalog API returns empty array for demo query */
-const FALLBACK_MATCHES_MAP: Record<string, MatchItem[]> = {
-  DEFAULT: [
-    {
-      item: {
-        catalog_id: 'CAT-BMW-001',
-        name: 'Тормозной диск вентилируемый передний 348mm',
-        oem_number: '34116858047',
-        brand: 'BMW OE',
-        price: 8500,
-        stock_qty: 12,
-        delivery_days: 1,
-        category: 'Тормозная система',
-      },
-      supplier: {
-        supplier_id: 'SUP-01',
-        name: 'EuroParts Logistics',
-        reliability_score: 0.98,
-      },
-      score: 98,
-      breakdown: {
-        oem_exact: 1.0,
-        brand_article: 0.95,
-        normalized_name: 0.95,
-        vehicle_compatibility: 1.0,
-        side_position: 0.9,
-        quantity_pack: 1.0,
-        language_synonym: 0.9,
-        historical_acceptance: 0.96,
-        supplier_data_quality: 0.98,
-      },
-    },
-    {
-      item: {
-        catalog_id: 'CAT-ATE-002',
-        name: 'Диск тормозной передний High Carbon',
-        oem_number: '24.0100-0100.1',
-        brand: 'ATE',
-        price: 5200,
-        stock_qty: 45,
-        delivery_days: 1,
-        category: 'Тормозная система',
-      },
-      supplier: {
-        supplier_id: 'SUP-02',
-        name: 'AutoTrade Hub',
-        reliability_score: 0.94,
-      },
-      score: 93,
-      breakdown: {
-        oem_exact: 0.9,
-        brand_article: 0.95,
-        normalized_name: 0.9,
-        vehicle_compatibility: 0.95,
-        side_position: 0.9,
-        quantity_pack: 1.0,
-        language_synonym: 0.85,
-        historical_acceptance: 0.92,
-        supplier_data_quality: 0.94,
-      },
-    },
-    {
-      item: {
-        catalog_id: 'CAT-BREMBO-003',
-        name: 'Диск тормозной Xtra Перфорированный',
-        oem_number: '09.C394.13',
-        brand: 'BREMBO',
-        price: 6100,
-        stock_qty: 8,
-        delivery_days: 2,
-        category: 'Тормозная система',
-      },
-      supplier: {
-        supplier_id: 'SUP-03',
-        name: 'Global Auto Supply',
-        reliability_score: 0.91,
-      },
-      score: 87,
-      breakdown: {
-        oem_exact: 0.85,
-        brand_article: 0.9,
-        normalized_name: 0.85,
-        vehicle_compatibility: 0.9,
-        side_position: 0.85,
-        quantity_pack: 1.0,
-        language_synonym: 0.8,
-        historical_acceptance: 0.88,
-        supplier_data_quality: 0.9,
-      },
-    },
-  ],
 };
 
 /** Soft UI SVG Radar Chart for AI Match Factors */
@@ -208,30 +115,25 @@ const MatchRadarChart = ({ breakdown, score }: { breakdown?: MatchBreakdown | nu
 };
 
 export const SupplierMatrix = ({ parts, onSelectOffer, selectedOffers = {}, requestId }: SupplierMatrixProps) => {
-  const displayParts = useMemo(() => {
-    if (parts && parts.length > 0) return parts;
-    return [{ name: 'Тормозной диск передний BMW', quantity: 2 }];
-  }, [parts]);
+  const displayParts = useMemo(() => parts.filter((part) => part.name.trim().length > 0), [parts]);
 
   const [activePart, setActivePart] = useState<string>(displayParts[0]?.name || '');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'direct' | 'analogs'>('direct');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [matches, setMatches] = useState<MatchItem[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<MatchItem | null>(null);
   const [selectedBreakdown, setSelectedBreakdown] = useState<MatchBreakdown | null>(null);
 
-  const fetchMatches = async (partName: string) => {
+  const fetchMatches = useCallback(async (partName: string) => {
     setLoading(true);
+    setError(null);
     try {
-      const cleanName = partName && partName !== 'null' && partName !== 'Неизвестная деталь' ? partName : 'Тормозной диск';
-      const res = await apiFetch(`/api/catalog/search?q=${encodeURIComponent(cleanName)}`);
+      const res = await apiFetch(`/api/catalog/search?q=${encodeURIComponent(partName)}`);
       if (res.ok) {
         const data = await res.json();
-        let list: MatchItem[] = data.matches || [];
-        if (list.length === 0) {
-          list = FALLBACK_MATCHES_MAP.DEFAULT;
-        }
+        const list: MatchItem[] = Array.isArray(data.matches) ? data.matches : [];
         setMatches(list);
         if (list.length > 0) {
           setSelectedMatch(list[0]);
@@ -241,18 +143,18 @@ export const SupplierMatrix = ({ parts, onSelectOffer, selectedOffers = {}, requ
           setSelectedBreakdown(null);
         }
       } else {
-        setMatches(FALLBACK_MATCHES_MAP.DEFAULT);
-        setSelectedMatch(FALLBACK_MATCHES_MAP.DEFAULT[0]);
-        setSelectedBreakdown(FALLBACK_MATCHES_MAP.DEFAULT[0].breakdown);
+        const detail = await res.json().catch(() => null);
+        throw new Error(typeof detail?.detail === 'string' ? detail.detail : `Каталог недоступен (HTTP ${res.status})`);
       }
     } catch (e) {
-      console.error('Error searching catalog matches', e);
-      setMatches(FALLBACK_MATCHES_MAP.DEFAULT);
-      setSelectedMatch(FALLBACK_MATCHES_MAP.DEFAULT[0]);
-      setSelectedBreakdown(FALLBACK_MATCHES_MAP.DEFAULT[0].breakdown);
+      setMatches([]);
+      setSelectedMatch(null);
+      setSelectedBreakdown(null);
+      setError(e instanceof Error ? e.message : 'Не удалось загрузить офферы каталога');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, []);
 
   const handlePartClick = (partName: string) => {
     setActivePart(partName);
@@ -260,12 +162,18 @@ export const SupplierMatrix = ({ parts, onSelectOffer, selectedOffers = {}, requ
   };
 
   useEffect(() => {
-    const target = activePart || displayParts[0]?.name;
+    const target = displayParts.some((part) => part.name === activePart)
+      ? activePart
+      : displayParts[0]?.name;
     if (target) {
-      setActivePart(target);
-      fetchMatches(target);
+      if (target !== activePart) setActivePart(target);
+      void fetchMatches(target);
+    } else {
+      setMatches([]);
+      setSelectedMatch(null);
+      setSelectedBreakdown(null);
     }
-  }, [displayParts]);
+  }, [activePart, displayParts, fetchMatches]);
 
   const filteredMatches = useMemo(() => {
     if (!searchQuery.trim()) return matches;
@@ -294,6 +202,16 @@ export const SupplierMatrix = ({ parts, onSelectOffer, selectedOffers = {}, requ
       avgSla: Math.round(ddays.reduce((a, b) => a + b, 0) / ddays.length),
     };
   }, [matches]);
+
+  if (displayParts.length === 0) {
+    return (
+      <div className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50/60 p-8 text-center">
+        <Icon name="list-check" size={28} className="mb-3 text-amber-600" />
+        <h3 className="text-sm font-bold text-amber-950">Нет подтверждённых позиций для подбора</h3>
+        <p className="mt-1 max-w-md text-xs leading-relaxed text-amber-900">Вернитесь к нормализации, добавьте хотя бы одну позицию и повторите подбор.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white border border-[var(--border-default)] rounded-2xl p-6 shadow-[0_10px_30px_rgba(37,99,235,0.05)] space-y-5 text-[var(--text-primary)]">
@@ -491,6 +409,19 @@ export const SupplierMatrix = ({ parts, onSelectOffer, selectedOffers = {}, requ
                   <Icon name="spinner" size={24} className="animate-spin text-[var(--accent-primary)]" />
                   <span className="font-semibold text-slate-700">Анализ цен и алгоритмов ранжирования поставщиков...</span>
                 </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/60 p-8 text-center text-xs">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                    <Icon name="triangle-exclamation" size={22} />
+                  </div>
+                  <div>
+                    <strong className="block text-sm font-bold text-rose-900">Каталог офферов недоступен</strong>
+                    <span className="mt-1 block text-xs text-rose-800">{error}</span>
+                  </div>
+                  <button type="button" onClick={() => activePart && void fetchMatches(activePart)} className="rounded-xl bg-rose-700 px-4 py-2 text-xs font-bold text-white transition hover:bg-rose-800">
+                    Повторить загрузку
+                  </button>
+                </div>
               ) : filteredMatches.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-8 text-center text-xs">
                   <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
@@ -499,7 +430,7 @@ export const SupplierMatrix = ({ parts, onSelectOffer, selectedOffers = {}, requ
                   <div>
                     <strong className="font-bold text-slate-800 text-sm block">Прямые каталожные офферы не найдены</strong>
                     <span className="text-slate-600 text-xs mt-1 block">
-                      Уточните артикул OEM или воспользуйтесь подбором проверенных аналогов.
+                      По этой позиции нет подтверждённых live-офферов. Уточните артикул или откройте live-матрицу аналогов.
                     </span>
                   </div>
 
@@ -671,4 +602,3 @@ export const SupplierMatrix = ({ parts, onSelectOffer, selectedOffers = {}, requ
     </div>
   );
 };
-

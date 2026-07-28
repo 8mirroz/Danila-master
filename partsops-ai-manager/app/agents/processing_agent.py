@@ -26,6 +26,7 @@ from intelligence import get_90d_median_price, assess_return_risk
 from matcher import match_part_from_db
 from database import engine
 from sqlmodel import Session as SyncSession
+from services.workflow_transitions import advance_request_state
 
 logger = logging.getLogger("agents.processing")
 
@@ -430,6 +431,10 @@ class ProcessingAgent(BaseAgent):
         # Store document reference in request
         self._update_order(request.request_id, {
             "erp_quotation_ref": document_id,
+            # The durable Invoice row above is the draft that delivery sends after
+            # approval. Keep the request reference in sync before the state machine
+            # advances through INVOICE_DRAFTED/SENT_TO_CLIENT.
+            "erp_invoice_ref": document_id,
         })
         
         # Emit event
@@ -478,19 +483,13 @@ class ProcessingAgent(BaseAgent):
         return ticket
     
     def _update_status(self, request: PartRequest, status: RequestState):
-        """Update request status"""
-        request.status = status.value
-        request.updated_at = datetime.utcnow()
-        self.session.add(request)
-        self.session.commit()
-        
-        # Emit state change event
-        self.emit_event(
-            request_id=request.request_id,
-            event_type=EventType.STATE_CHANGED,
-            actor_type="agent",
+        """Advance through legal states and write an audit event for every step."""
+        advance_request_state(
+            self.session,
+            request,
+            status,
             actor_id="processing_agent",
-            payload={"new_state": status.value}
+            reason="Processing pipeline advanced request",
         )
     
     def _update_order(self, request_id: str, updates: Dict[str, Any]) -> Optional[PartRequest]:

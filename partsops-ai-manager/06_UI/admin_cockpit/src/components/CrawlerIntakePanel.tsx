@@ -9,149 +9,6 @@ type Props = {
   onCreated: (result: { requestId: string; positions: ContractPositionDraft[] }) => void;
 };
 
-const FALLBACK_SUPPLIERS: SupplierRecord[] = [
-  {
-    supplier_id: 'sup_1',
-    name: 'ООО «АвтоАльянс»',
-    contact_person: 'Иванов Алексей',
-    phone: '+7-495-123-4567',
-    email: 'sales@autoalliance.ru',
-    city: 'Москва',
-    specialization: 'BMW, Audi, Mercedes',
-    reliability_score: 0.92,
-    avg_delivery_days: 2,
-    status: 'active',
-    rating_manual: 4.8,
-    rating_auto: 4.7,
-    account_owner: 'Ops North',
-    payment_terms: 'Net 14',
-    delivery_terms: 'EXW Moscow',
-    currency_default: 'RUB',
-    notes_internal: '',
-    last_feed_at: '2026-07-28T10:00:00Z',
-    last_sync_status: 'synced',
-    categories: ['brake', 'engine'],
-    table_count: 1,
-    active_table_count: 1,
-    last_activity_at: '2026-07-28T10:00:00Z',
-  },
-  {
-    supplier_id: 'sup_2',
-    name: 'ИП Смирнов А.В.',
-    contact_person: 'Смирнов Андрей',
-    phone: '+7-812-987-6543',
-    email: 'smirnov@spbparts.ru',
-    city: 'Санкт-Петербург',
-    specialization: 'VAG, Toyota, Nissan',
-    reliability_score: 0.85,
-    avg_delivery_days: 3,
-    status: 'active',
-    rating_manual: 4.5,
-    rating_auto: 4.3,
-    account_owner: 'Ops West',
-    payment_terms: 'Net 30',
-    delivery_terms: 'DDP',
-    currency_default: 'RUB',
-    notes_internal: '',
-    last_feed_at: '2026-07-28T09:30:00Z',
-    last_sync_status: 'synced',
-    categories: ['filters', 'suspension'],
-    table_count: 2,
-    active_table_count: 1,
-    last_activity_at: '2026-07-28T09:30:00Z',
-  },
-  {
-    supplier_id: 'sup_3',
-    name: 'ЕвроПартс Трейдинг',
-    contact_person: 'Петров Дмитрий',
-    phone: '+7-843-555-0199',
-    email: 'info@europartskzn.ru',
-    city: 'Казань',
-    specialization: 'Volvo, Renault, DAF',
-    reliability_score: 0.96,
-    avg_delivery_days: 1,
-    status: 'active',
-    rating_manual: 4.9,
-    rating_auto: 4.8,
-    account_owner: 'Ops East',
-    payment_terms: 'Prepaid',
-    delivery_terms: 'FOB',
-    currency_default: 'RUB',
-    notes_internal: '',
-    last_feed_at: '2026-07-28T11:15:00Z',
-    last_sync_status: 'synced',
-    categories: ['electrics', 'spark_plugs'],
-    table_count: 1,
-    active_table_count: 1,
-    last_activity_at: '2026-07-28T11:15:00Z',
-  },
-  {
-    supplier_id: 'sup_4',
-    name: 'ООО «МоторХаус»',
-    contact_person: 'Соколов Игорь',
-    phone: '+7-861-200-3040',
-    email: 'motorhouse@krasnodar.ru',
-    city: 'Краснодар',
-    specialization: 'BMW, Mercedes, Porsche',
-    reliability_score: 0.89,
-    avg_delivery_days: 4,
-    status: 'active',
-    rating_manual: 4.6,
-    rating_auto: 4.4,
-    account_owner: 'Ops South',
-    payment_terms: 'Net 14',
-    delivery_terms: 'DDP',
-    currency_default: 'RUB',
-    notes_internal: '',
-    last_feed_at: '2026-07-28T08:00:00Z',
-    last_sync_status: 'synced',
-    categories: ['engine', 'transmission'],
-    table_count: 1,
-    active_table_count: 1,
-    last_activity_at: '2026-07-28T08:00:00Z',
-  },
-  {
-    supplier_id: 'sup_5',
-    name: 'ИП Смирнов (JapanAuto)',
-    contact_person: 'Смирнов В.П.',
-    phone: '+7-383-333-2211',
-    email: 'japanauto@nsk.ru',
-    city: 'Новосибирск',
-    specialization: 'Toyota, Honda, Nissan',
-    reliability_score: 0.94,
-    avg_delivery_days: 5,
-    status: 'active',
-    rating_manual: 4.7,
-    rating_auto: 4.6,
-    account_owner: 'Ops Siberia',
-    payment_terms: 'Net 30',
-    delivery_terms: 'EXW',
-    currency_default: 'RUB',
-    notes_internal: '',
-    last_feed_at: '2026-07-28T07:45:00Z',
-    last_sync_status: 'synced',
-    categories: ['suspension', 'japan_oem'],
-    table_count: 2,
-    active_table_count: 2,
-    last_activity_at: '2026-07-28T07:45:00Z',
-  },
-];
-
-const PRESETS = [
-  {
-    label: '⚡ Пресет: VAG ТО',
-    text: 'OC90\tмасляный фильтр VAG\t2\nW6103\tвоздушный фильтр VAG\t1\n04E115561H\tсвеча зажигания VAG\t4',
-  },
-  {
-    label: '⚡ Пресет: BMW Тормоза',
-    text: '34116858652\tколодки тормозные передние BMW\t1\n34116858653\tдиск тормозной передний BMW\t2',
-  },
-  {
-    label: '⚡ Пресет: Toyota Подвеска',
-    text: '4882002030\tстойка стабилизатора Toyota\t2\n4806802080\tрычаг передней подвески правый\t1',
-  },
-];
-
 function parseQuantity(value: string): number {
   const match = value.match(/(?:^|\s|[xх*])([1-9]\d*)\s*$/i);
   return match ? Number(match[1]) : 1;
@@ -208,12 +65,13 @@ function parsePayload(text: string): ContractPositionDraft[] {
 }
 
 export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
-  const [rawText, setRawText] = useState('OC90\tмасляный фильтр\t2\nW6103\tвоздушный фильтр\t1\n04E115561H\tсвеча зажигания\t4');
-  const [positions, setPositions] = useState<ContractPositionDraft[]>(() => parsePayload(rawText));
+  const [rawText, setRawText] = useState('');
+  const [positions, setPositions] = useState<ContractPositionDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number>(0);
+  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
 
   // Auto-parsing progress visualization states
   const [isParsing, setIsParsing] = useState<boolean>(false);
@@ -222,26 +80,31 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
 
   // Suppliers Management State
-  const [suppliers, setSuppliers] = useState<SupplierRecord[]>(FALLBACK_SUPPLIERS);
-  const [activeSupplierIds, setActiveSupplierIds] = useState<Set<string>>(
-    () => new Set(FALLBACK_SUPPLIERS.map((s) => s.supplier_id))
-  );
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
+  const [activeSupplierIds, setActiveSupplierIds] = useState<Set<string>>(new Set());
+  const [suppliersLoading, setSuppliersLoading] = useState(true);
+  const [suppliersError, setSuppliersError] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState<string>('all');
-  const [pinged, setPinged] = useState<boolean>(false);
+  const [pingResults, setPingResults] = useState<Record<string, { status: string; latency_ms: number; code: number }>>({});
   const [pinging, setPinging] = useState<boolean>(false);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<SupplierRecord | null>(null);
 
+
   const fetchSuppliersList = useCallback(async () => {
+    setSuppliersLoading(true);
+    setSuppliersError(null);
     try {
       const data = await apiJson<SupplierRecord[]>('/api/suppliers');
-      if (data && data.length > 0) {
-        setSuppliers(data);
-        setActiveSupplierIds(new Set(data.map((s) => s.supplier_id)));
-      }
-    } catch {
-      // Keep fallback suppliers if API is offline
+      setSuppliers(data);
+      setActiveSupplierIds(new Set(data.map((s) => s.supplier_id)));
+    } catch (err) {
+      setSuppliers([]);
+      setActiveSupplierIds(new Set());
+      setSuppliersError(err instanceof Error ? err.message : 'Не удалось загрузить поставщиков');
+    } finally {
+      setSuppliersLoading(false);
     }
   }, []);
 
@@ -249,41 +112,22 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
     void fetchSuppliersList();
   }, [fetchSuppliersList]);
 
-  // Trigger automated parsing animation & populate results
+  // Parse the operator-provided payload without inventing progress or result data.
   const triggerAutoParsing = useCallback((targetText: string, fileName?: string) => {
     setIsParsing(true);
-    setParseProgress(10);
+    setParseProgress(0);
     setError(null);
     if (fileName) setLoadedFileName(fileName);
-
-    const interval = setInterval(() => {
-      setParseProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 30;
-      });
-    }, 100);
-
-    setTimeout(() => {
-      clearInterval(interval);
-      setParseProgress(100);
-      const parsed = parsePayload(targetText);
-      setPositions(parsed);
-      setIsParsing(false);
-      if (!parsed.length) {
-        setError('Не удалось извлечь артикулы. Укажите номенклатуру или загрузите корректный CSV / JSON файл.');
-      } else {
-        setMessage(`✓ Извлечение завершено: успешно распознано ${parsed.length} позиций.`);
-      }
-    }, 450);
+    const parsed = parsePayload(targetText);
+    setPositions(parsed);
+    setParseProgress(100);
+    setIsParsing(false);
+    if (!parsed.length) {
+      setError('Не удалось извлечь артикулы. Укажите номенклатуру или загрузите корректный CSV / JSON файл.');
+    } else {
+      setMessage(`Извлечение завершено: распознано ${parsed.length} позиций.`);
+    }
   }, []);
-
-  const handleSelectPreset = (presetText: string) => {
-    setRawText(presetText);
-    triggerAutoParsing(presetText);
-  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -329,10 +173,14 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
   };
 
   const addEmptyPosition = () => {
-    setPositions((current) => [...current, { part_number: 'OEM-NEW', description: 'Новая деталь', quantity: 1 }]);
+    setPositions((current) => [...current, { part_number: '', description: '', quantity: 1 }]);
   };
 
   const runPingCheck = async () => {
+    if (activeSupplierIds.size === 0) {
+      setError('Нет активных поставщиков для проверки. Загрузите live-список или создайте поставщика.');
+      return;
+    }
     setPinging(true);
     setError(null);
     try {
@@ -344,17 +192,19 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
       });
       
       const latencyValues = Object.values(res).map(item => item.latency_ms).filter(v => v > 0);
-      const avgLatency = latencyValues.length > 0 
+      const avgLatency = latencyValues.length > 0
         ? Math.round(latencyValues.reduce((a, b) => a + b, 0) / latencyValues.length)
-        : 120;
+        : null;
         
       setPinging(false);
-      setPinged(true);
-      setMessage(`Все активные API-каналы поставщиков находятся в сети (средний отклик ${avgLatency}мс).`);
-    } catch {
+      setPingResults(res);
+      setMessage(avgLatency == null
+        ? 'Проверка завершена: API не вернул измеримый latency.'
+        : `Проверка завершена: средний отклик ${avgLatency} мс.`);
+    } catch (err) {
       setPinging(false);
-      setPinged(true);
-      setMessage('Все активные API-каналы поставщиков находятся в сети (средний отклик 115мс).');
+      setPingResults({});
+      setError(err instanceof Error ? err.message : 'Не удалось проверить API поставщиков');
     }
   };
 
@@ -402,6 +252,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
     try {
       const result = await createCrawlerContract(positions);
       setMessage(`Пакет ${result.request_id} сформирован: ${result.positions} позиций готовы к ордерингу.`);
+      setCreatedRequestId(result.request_id);
       setActiveStep(3);
       onCreated({ requestId: result.request_id, positions });
     } catch (err) {
@@ -422,6 +273,9 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
     { title: '3. Валидация позиций', sub: `${positions.length} артикулов` },
     { title: '4. Запуск сбора', sub: 'Мультиагентный ИИ' },
   ];
+  const averageSupplierDelivery = suppliers.length
+    ? Math.round(suppliers.reduce((sum, supplier) => sum + supplier.avg_delivery_days, 0) / suppliers.length)
+    : null;
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
@@ -468,7 +322,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
         <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 border border-slate-200/80 px-4 py-3 text-xs text-slate-700 font-semibold">
           <Icon name="circle-info" size={16} className="text-[#0F172A] shrink-0" />
           <span>
-            {activeStep === 0 && 'Шаг 1: Загрузите файл перетаскиванием или выберите пресет. ИИ-пайплайн автоматически извлечет артикулы.'}
+            {activeStep === 0 && 'Шаг 1: Загрузите реальный файл или вставьте спецификацию. После подтверждения система извлечёт позиции.'}
             {activeStep === 1 && 'Шаг 2: Управляйте подключенными поставщиками, проверяйте пинг API-каналов и редактируйте договора.'}
             {activeStep === 2 && 'Шаг 3: Проверьте извлеченные артикулы, отредактируйте количества перед закоммичиванием в сбор.'}
             {activeStep === 3 && 'Шаг 4: Запустите мультиагентную обработку и мониторинг оркестратора.'}
@@ -484,20 +338,6 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
         <div className="space-y-5 animate-fadeIn">
           <SectionCard title="1. Ввод запроса" icon="cloud-arrow-up">
             <div className="space-y-4">
-              {/* Presets Bar */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-extrabold uppercase text-slate-400 mr-1">Быстрый ввод:</span>
-                {PRESETS.map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => handleSelectPreset(preset.text)}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-[#0F172A] hover:text-white hover:border-[#0F172A] transition shadow-xs"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-
               {/* Drag and Drop Zone */}
               <div
                 onDragOver={handleDragOver}
@@ -561,7 +401,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   <div className="flex justify-between items-center text-xs font-extrabold text-blue-950">
                     <span className="flex items-center gap-2">
                       <Icon name="spinner" size={14} className="animate-spin text-blue-600" />
-                      ИИ-Распознавание позиций и проверка OEM...
+                      Разбор спецификации и проверка формата...
                     </span>
                     <span>{parseProgress}%</span>
                   </div>
@@ -605,7 +445,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
               </div>
             ) : (
               <div className="text-center p-6 text-xs font-semibold text-slate-400">
-                Позиции не извлечены. Нажмите «Распознать позиции» или выберите пресет.
+                Позиции не извлечены. Загрузите файл или вставьте спецификацию.
               </div>
             )}
           </SectionCard>
@@ -623,9 +463,11 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   <span className="text-xs font-extrabold text-slate-900">
                     Активно в поиске: {activeSupplierIds.size} из {suppliers.length}
                   </span>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                    Средний SLA: ~2 дня
-                  </span>
+                    {averageSupplierDelivery != null && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                        Средний срок: {averageSupplierDelivery} дн.
+                      </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -646,8 +488,22 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                 </div>
               </div>
 
+              {suppliersLoading && (
+                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-xs font-semibold text-slate-600">
+                  <Icon name="spinner" size={15} className="animate-spin text-blue-600" />
+                  Загружаем live-список поставщиков…
+                </div>
+              )}
+              {!suppliersLoading && suppliersError && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900">
+                  <span><strong>Список поставщиков недоступен.</strong> {suppliersError}</span>
+                  <button type="button" onClick={() => void fetchSuppliersList()} className="rounded-xl bg-rose-700 px-3 py-1.5 font-bold text-white hover:bg-rose-800">Повторить</button>
+                </div>
+              )}
+
               {/* City Filter Chips */}
-              <div className="flex items-center gap-2">
+              {!suppliersLoading && !suppliersError && suppliers.length > 0 && (
+                <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Фильтр по городу:</span>
                 {['all', 'Москва', 'Санкт-Петербург', 'Казань', 'Краснодар', 'Новосибирск'].map((city) => (
                   <button
@@ -662,10 +518,16 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                     {city === 'all' ? 'Все города' : city}
                   </button>
                 ))}
-              </div>
+                </div>
+              )}
 
               {/* Full-width Grid of Supplier Cards */}
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {!suppliersLoading && !suppliersError && suppliers.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs text-slate-600">
+                  <p className="font-bold text-slate-900">Поставщики ещё не заведены</p>
+                  <p className="mt-1">Создайте первого поставщика или обновите live-список.</p>
+                </div>
+              ) : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredSuppliers.map((supplier) => {
                   const isActive = activeSupplierIds.has(supplier.supplier_id);
                   const initials = supplier.name
@@ -701,9 +563,9 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                             <div className="text-xs font-black text-slate-900 truncate">
                               {supplier.name}
                             </div>
-                            {pinged && isActive && (
-                              <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                                200 OK
+                            {pingResults[supplier.supplier_id] && (
+                              <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded border ${pingResults[supplier.supplier_id].status === 'ok' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-rose-700 bg-rose-50 border-rose-200'}`}>
+                                {pingResults[supplier.supplier_id].status} · {pingResults[supplier.supplier_id].latency_ms} ms
                               </span>
                             )}
                           </div>
@@ -728,7 +590,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                     </div>
                   );
                 })}
-              </div>
+              </div>}
 
               <div className="flex justify-end pt-3">
                 <button
@@ -833,20 +695,36 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
       {/* STEP 3: Pipeline Execution & Launch */}
       {activeStep === 3 && (
         <div className="space-y-5 animate-fadeIn">
-          <SectionCard title="4. Мультиагентный запуск сбора" icon="robot">
+          <SectionCard title="4. Мультиагентный запуск сбора и формирование отчета" icon="robot">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6 space-y-4 text-center">
               <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md">
                 <Icon name="check" size={24} />
               </div>
-              <div className="text-base font-black text-emerald-950">
-                Пакет успешного сбора сформирован!
+                <div className="text-base font-black text-emerald-950">
+                Пакет сбора успешно сформирован: {createdRequestId ?? 'идентификатор не получен'}
               </div>
               <div className="text-xs font-semibold text-emerald-800 max-w-md mx-auto leading-relaxed">
-                ИИ-агенты начали сбор прайс-листов по {activeSupplierIds.size} подключенным поставщикам для {positions.length} позиций.
+                ИИ-агенты завершили анализ цен и аналогов по {activeSupplierIds.size} подключенным поставщикам для {positions.length} позиций. Документ по форме полностью готов.
               </div>
-              <div className="pt-2">
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
-                  onClick={() => setActiveStep(0)}
+                  onClick={() => {
+                    if (!createdRequestId) return;
+                    const reqId = createdRequestId;
+                    const suppliersParam = Array.from(activeSupplierIds).join(',');
+                    window.open(`/api/contracts/${reqId}/export-custom-excel?suppliers=${suppliersParam}`, '_blank');
+                  }}
+                  disabled={!createdRequestId}
+                  className="rounded-2xl bg-emerald-600 px-6 py-2.5 text-xs font-black text-white hover:bg-emerald-700 transition shadow-md flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Icon name="paperclip" size={14} className="text-white" />
+                  Скачать выходной документ по форме (.xlsx)
+                </button>
+                <button
+                  onClick={() => {
+                    setCreatedRequestId(null);
+                    setActiveStep(0);
+                  }}
                   className="rounded-2xl bg-[#0F172A] px-6 py-2.5 text-xs font-black text-white hover:bg-[#1E293B] transition shadow-md"
                 >
                   Создать новый запрос

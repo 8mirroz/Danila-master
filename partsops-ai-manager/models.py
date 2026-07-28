@@ -403,6 +403,40 @@ class JobRun(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class PipelineRun(SQLModel, table=True):
+    """Durable, tenant-scoped execution request for the operator pipeline."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    run_id: str = Field(index=True, unique=True)
+    tenant_id: str = Field(default="default", index=True)
+    request_id: str = Field(index=True)
+    requested_by: str = Field(default="operator")
+    requested_lane: Optional[str] = None
+    start_from: str
+    correlation_id: str = Field(index=True)
+    status: str = Field(default="queued", index=True)  # queued|running|completed|failed|blocked
+    result_json: Optional[str] = None
+    error_message: Optional[str] = None
+    lease_owner: Optional[str] = Field(default=None, index=True)
+    lease_expires_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PipelineRunEvent(SQLModel, table=True):
+    """Append-only, PII-safe event stream that supports SSE replay."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    run_id: str = Field(index=True)
+    tenant_id: str = Field(default="default", index=True)
+    sequence: int = Field(default=1)
+    event_type: str
+    phase: Optional[str] = None
+    message: str = Field(default="")
+    payload_json: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class AutomationLock(SQLModel, table=True):
     """Tenant-scoped named lock with TTL-based expiry."""
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -194,7 +194,9 @@ Stub-агенты: `supervisor`, `offer_ranker`, `invoice_draft`, `debug`, `cata
 - P2 engines honesty: Imp → Review (2 fixes applied) · full suite **259 passed, 1 skipped**  
 - P3 UX honesty: shortcuts, ERP labels, seed, AgentMonitor, JobReportView  
 - P4: PROD checklist + Devpack scaffold honesty  
-- P5 residual: AnalogComparisonMatrix live API; Excel no demo rows; escalate/VIN jobs use engines; quote_evaluate uses decide()
+- P5 residual: AnalogComparisonMatrix live API; Excel no demo rows; escalate/VIN jobs use engines; quote_evaluate uses decide()  
+- P6: analogs tenant default `default`; public portal token expiry on view/accept/reject  
+- **Git:** commit `72ac639` anti-mock hardening (main ahead of origin)
 
 ### P4 — Devpack
 17. Wire to ai-manager agents or mark spec-only  

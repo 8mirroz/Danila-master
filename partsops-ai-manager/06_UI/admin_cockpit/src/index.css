@@ -1977,6 +1977,35 @@ tr.cursor-pointer:hover {
 }
 
 /* Hermes assistant surface */
+.hermes-workspace-shell {
+  min-height: calc(100vh - 92px);
+  background:
+    radial-gradient(circle at 78% 4%, rgba(16, 185, 129, 0.08), transparent 30%),
+    linear-gradient(180deg, #eef3f8 0%, #e7edf4 100%);
+}
+
+.hermes-embedded-shell {
+  height: 100%;
+  min-height: 650px;
+}
+
+.hermes-embedded-panel {
+  min-height: 650px;
+  overflow: hidden;
+  border: 1px solid rgba(52, 211, 153, 0.24);
+  border-radius: 26px;
+  background: linear-gradient(145deg, #071a2b 0%, #0b1b33 48%, #10263b 100%);
+  box-shadow: 0 28px 70px -36px rgba(7, 26, 43, 0.86), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.hermes-embedded-panel::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(120deg, rgba(110, 231, 183, 0.06), transparent 32%, rgba(59, 130, 246, 0.04));
+}
+
 .hermes-launcher {
   background: linear-gradient(145deg, #0b1b33, #122746);
   border: 1px solid rgba(52, 211, 153, 0.46);
@@ -1985,6 +2014,82 @@ tr.cursor-pointer:hover {
 
 .hermes-launcher:hover {
   box-shadow: 0 22px 48px -24px rgba(11, 27, 51, 1), 0 0 0 1px rgba(52, 211, 153, 0.12) inset;
+}
+
+/* Hermes command dock: anchored to the left navigation, above operator meta. */
+.hermes-nav-dock {
+  isolation: isolate;
+  min-width: 0;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(10, 31, 52, 0.96), rgba(8, 58, 58, 0.92));
+  border-color: rgba(52, 211, 153, 0.26);
+  box-shadow: 0 16px 32px -24px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.hermes-nav-dock:hover {
+  transform: translateY(-2px);
+  border-color: rgba(110, 231, 183, 0.64);
+  box-shadow: 0 20px 34px -22px rgba(16, 185, 129, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.hermes-nav-dock:focus-visible {
+  outline: 2px solid #6ee7b7;
+  outline-offset: 2px;
+}
+
+.hermes-nav-dock__glow {
+  position: absolute;
+  inset: -40% 25% auto -20%;
+  z-index: -1;
+  width: 90px;
+  height: 90px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.2);
+  filter: blur(24px);
+  transition: transform 300ms ease, opacity 300ms ease;
+}
+
+.hermes-nav-dock:hover .hermes-nav-dock__glow {
+  transform: translate(22px, 12px) scale(1.35);
+  opacity: 0.9;
+}
+
+.hermes-nav-dock__icon {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(110, 231, 183, 0.32);
+  border-radius: 10px;
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.14);
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1), background 300ms ease;
+}
+
+.hermes-nav-dock:hover .hermes-nav-dock__icon {
+  transform: rotate(-5deg) scale(1.08);
+  background: rgba(16, 185, 129, 0.24);
+}
+
+.hermes-nav-dock__dot {
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid #0a1f34;
+  border-radius: 999px;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
+  animation: hermes-nav-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes hermes-nav-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.1); }
+  50% { box-shadow: 0 0 0 6px rgba(52, 211, 153, 0.02); }
 }
 
 .hermes-launcher__icon,
@@ -2265,7 +2370,10 @@ tr.cursor-pointer:hover {
   .hermes-prompt-chip:hover,
   .hermes-send-button:hover:not(:disabled),
   .hermes-stop-button:hover,
-  .hermes-launcher:hover { transform: none; }
+  .hermes-launcher:hover,
+  .hermes-nav-dock:hover,
+  .hermes-nav-dock:hover .hermes-nav-dock__icon { transform: none; }
+  .hermes-nav-dock__dot { animation: none; }
 }
 
 /* Status dot tones */

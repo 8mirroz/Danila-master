@@ -20,6 +20,7 @@ from enum import Enum
 from app.agents.base_agent import BaseAgent, AgentContext, AgentResult, AgentType
 from models import PartRequest, EventType, OutboundMessage, RequestState
 from sqlmodel import select
+from services.workflow_transitions import advance_request_state
 
 logger = logging.getLogger("agents.delivery")
 
@@ -458,18 +459,13 @@ class DeliveryAgent(BaseAgent):
         }
     
     def _update_status(self, request: PartRequest, status: RequestState):
-        """Update request status"""
-        request.status = status.value
-        request.updated_at = datetime.utcnow()
-        self.session.add(request)
-        self.session.commit()
-        
-        self.emit_event(
-            request_id=request.request_id,
-            event_type=EventType.STATE_CHANGED,
-            actor_type="agent",
+        """Advance through legal states and write an audit event for every step."""
+        advance_request_state(
+            self.session,
+            request,
+            status,
             actor_id="delivery_agent",
-            payload={"new_state": status.value}
+            reason="Delivery pipeline advanced request",
         )
     
     def _get_order(self, request_id: str) -> Optional[PartRequest]:

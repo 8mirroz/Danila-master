@@ -215,3 +215,19 @@ Refactored Custom intake: separated Sources into Step 2, added high-contrast but
 ## ⚖️ Decision | 2026-07-28T20:06:23+03:00
 
 Redesigned Dashboard and WorkspaceHeader into premium hero cards inspired by reference UI
+
+## ⚖️ Decision | 2026-07-28T20:20:50+03:00
+
+Connected real ping-all endpoint and localized UI states to Russian
+
+## ⚖️ Decision | 2026-07-28T21:53:54+03:00
+
+Кастомный экспорт цен в XLSX по форме договора с гиперссылками на скриншоты скрапинга
+
+## ⚖️ Decision | 2026-07-28T22:00:59+03:00
+
+Обновлены поставщики для скрапинга (Exist.ru, Autodoc.ru, Rossko.ru) и наименования в отчете Excel переведены на русский язык
+
+## ⚖️ Decision | 2026-07-28T22:25:11+03:00
+
+Интегрирован обновленный дизайн отчета пользователя: черная шапка DIN Condensed, 4-строчная геометрия блоков, DIN Alternate и зебра-подсветка

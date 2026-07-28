@@ -29,6 +29,9 @@ type HermesChatDrawerProps = {
   activeScreen: string;
   selectedRequestId?: string;
   onNavigate?: (screenId: string, requestId?: string) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  embedded?: boolean;
 };
 
 const emptyHealth: HermesHealth = {
@@ -54,8 +57,16 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
   activeScreen,
   selectedRequestId,
   onNavigate,
+  open: controlledOpen,
+  onOpenChange,
+  embedded = false,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlledOpen ?? internalOpen;
+  const setIsOpen = useCallback((open: boolean) => {
+    setInternalOpen(open);
+    onOpenChange?.(open);
+  }, [onOpenChange]);
   const [health, setHealth] = useState<HermesHealth>(emptyHealth);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -246,7 +257,7 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
     if (isProcessing) void handleStopRun();
     abortRef.current?.abort();
     setIsOpen(false);
-  }, [handleStopRun, isProcessing]);
+  }, [handleStopRun, isProcessing, setIsOpen]);
 
   const handleViewSource = async (sourceId: string) => {
     const res = await apiFetch(`/api/copilot/sources/${sourceId}`);
@@ -268,7 +279,7 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
 
   return (
     <>
-      {!isOpen && (
+      {!isOpen && controlledOpen === undefined && (
         <button
           data-testid="hermes-launcher"
           onClick={() => { setIsOpen(true); window.setTimeout(() => inputRef.current?.focus(), 120); }}
@@ -282,8 +293,8 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
       )}
 
       {isOpen && (
-        <div className="hermes-overlay fixed inset-0 z-[80] flex justify-end" onClick={closeDrawer}>
-          <div ref={drawerRef} data-testid="hermes-drawer" role="dialog" aria-modal="true" aria-label="Hermes — read-only помощник" className="hermes-drawer relative flex h-full w-full flex-col text-slate-100" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === 'Escape') closeDrawer(); }}>
+        <div className={embedded ? 'hermes-embedded-shell' : 'hermes-overlay fixed inset-0 z-[80] flex justify-end'} onClick={embedded ? undefined : closeDrawer}>
+          <div ref={drawerRef} data-testid="hermes-drawer" role={embedded ? 'region' : 'dialog'} aria-modal={embedded ? undefined : true} aria-label="Hermes — read-only помощник" className={embedded ? 'hermes-embedded-panel relative flex h-full w-full flex-col text-slate-100' : 'hermes-drawer relative flex h-full w-full flex-col text-slate-100'} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === 'Escape') closeDrawer(); }}>
             <div data-hermes-motion className="hermes-drawer__header flex items-center justify-between gap-3 px-5 py-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="hermes-avatar"><Icon name="robot" size={19} weight="duotone" /></div>
