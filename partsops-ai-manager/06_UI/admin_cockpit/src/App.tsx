@@ -276,17 +276,17 @@ function App() {
   };
 
   const navItems = [
-    { id: 'dashboard', label: 'Панель управления', icon: 'search' },
-    { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'robot' },
-    { id: 'orchestra', label: 'Мультиагентный оркестр', icon: 'wave-square' },
-    { id: 'agent_os', label: 'Консоль ИИ-агента', icon: 'robot' },
-    { id: 'kanban', label: 'Канбан-доска', icon: 'list' },
-    { id: 'suppliers', label: 'Каталог поставщиков', icon: 'car' },
-    { id: 'orders', label: 'Импорт заказов', icon: 'cloud-arrow-up' },
-    { id: 'contract_control', label: 'Договорный контроль', icon: 'user-shield' },
-    { id: 'matching', label: 'Матрица подбора', icon: 'rotate' },
-    { id: 'pricing', label: 'Калькулятор цен', icon: 'pencil' },
-    { id: 'audit', label: 'Аудит и логи', icon: 'circle-info' },
+    { id: 'dashboard', label: 'Панель управления', icon: 'search', group: 'main' as const },
+    { id: 'kanban', label: 'Канбан-доска', icon: 'list', group: 'main' as const },
+    { id: 'suppliers', label: 'Каталог поставщиков', icon: 'car', group: 'main' as const },
+    { id: 'orders', label: 'Импорт заказов', icon: 'cloud-arrow-up', group: 'main' as const },
+    { id: 'contract_control', label: 'Договорный контроль', icon: 'user-shield', group: 'main' as const },
+    { id: 'matching', label: 'Матрица подбора', icon: 'rotate', group: 'main' as const },
+    { id: 'pricing', label: 'Калькулятор цен', icon: 'pencil', group: 'main' as const },
+    { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'robot', group: 'admin' as const },
+    { id: 'orchestra', label: 'Мультиагентный оркестр', icon: 'wave-square', group: 'admin' as const },
+    { id: 'agent_os', label: 'Консоль ИИ-агента', icon: 'robot', group: 'admin' as const },
+    { id: 'audit', label: 'Аудит и логи', icon: 'circle-info', group: 'admin' as const },
   ];
 
   const steps = ['Каталог поставщиков', 'Импорт заказов', 'Анализ нормализации', 'Сравнение предложений', 'Согласование', 'Черновик цены'];

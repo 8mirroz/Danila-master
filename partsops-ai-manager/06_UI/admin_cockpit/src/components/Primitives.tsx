@@ -322,7 +322,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
 // =========================================
 // 6. LeftNavRail (deep-blue gradient + drawer mode)
 // =========================================
-interface NavItem { id: string; label: string; icon: string; }
+interface NavItem { id: string; label: string; icon: string; group?: 'main' | 'admin'; }
 
 interface LeftNavRailProps {
   activeTab: string;
@@ -347,64 +347,88 @@ export const LeftNavRail: React.FC<LeftNavRailProps> = ({
   useFocusTrap(drawerRef, drawerOpen);
   useKeydown('Escape', () => { if (drawerOpen && onCloseDrawer) onCloseDrawer(); }, [drawerOpen, onCloseDrawer]);
 
-  const railBody = (inDrawer: boolean) => (
-    <>
-      <div className="py-4 px-3 flex flex-col gap-1 flex-1 overflow-y-auto min-h-0">
-        <div className={`flex items-center mb-4 ${isCollapsed && !inDrawer ? 'justify-center' : 'justify-between px-3'}`}>
-          {(!isCollapsed || inDrawer) && (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--sidebar-muted)] animate-fadeIn">Рабочий стол</span>
-          )}
-          {inDrawer ? (
-            <IconButton icon="x-mark" label="Закрыть меню" variant="onDark" onClick={onCloseDrawer} />
-          ) : (
-            <button
-              onClick={onToggleCollapse}
-              aria-label={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-              title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-              className="w-7 h-7 rounded-full bg-white/10 border border-white/15 hover:bg-white/20 flex items-center justify-center text-white/80 transition-all duration-200 hover:scale-105 active:scale-95"
-            >
-              <Icon name={isCollapsed ? 'chevron-right' : 'chevron-left'} size={12} />
-            </button>
-          )}
-        </div>
+  const railBody = (inDrawer: boolean) => {
+    const mainItems = items.filter((item) => !item.group || item.group === 'main');
+    const adminItems = items.filter((item) => item.group === 'admin');
+    const collapsedView = isCollapsed && !inDrawer;
 
-        {items.map((item) => {
-          const isActive = activeTab === item.id;
-          const collapsedView = isCollapsed && !inDrawer;
-          return (
-            <button
-              key={item.id}
-              onClick={() => { onChangeTab(item.id); if (inDrawer && onCloseDrawer) onCloseDrawer(); }}
-              className={`relative group w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-xs font-semibold transition-all duration-200 text-left ${isActive ? 'sidebar-button-glass-active' : 'sidebar-button-glass-inactive'}`}
-            >
-              <Icon name={item.icon} size={16} className={`shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-white' : 'text-[var(--sidebar-muted)] group-hover:text-white'}`} />
-              {!collapsedView && <span className="animate-fadeIn truncate">{item.label}</span>}
-              {collapsedView && (
-                <div className="absolute left-16 px-3 py-1.5 rounded-[10px] bg-[#0b1b33]/95 backdrop-blur-md text-white/90 text-[11px] font-bold tracking-wide border border-white/15 shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-2 group-hover:translate-x-0 whitespace-nowrap z-50 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-300" />
-                  {item.label}
+    const renderButton = (item: NavItem) => {
+      const isActive = activeTab === item.id;
+      return (
+        <button
+          key={item.id}
+          onClick={() => { onChangeTab(item.id); if (inDrawer && onCloseDrawer) onCloseDrawer(); }}
+          className={`relative group w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-xs font-semibold transition-all duration-200 text-left ${isActive ? 'sidebar-button-glass-active' : 'sidebar-button-glass-inactive'}`}
+        >
+          <Icon name={item.icon} size={16} className={`shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-white' : 'text-[var(--sidebar-muted)] group-hover:text-white'}`} />
+          {!collapsedView && <span className="animate-fadeIn truncate">{item.label}</span>}
+          {collapsedView && (
+            <div className="absolute left-16 px-3 py-1.5 rounded-[10px] bg-[#0b1b33]/95 backdrop-blur-md text-white/90 text-[11px] font-bold tracking-wide border border-white/15 shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-2 group-hover:translate-x-0 whitespace-nowrap z-50 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-300" />
+              {item.label}
+            </div>
+          )}
+        </button>
+      );
+    };
+
+    return (
+      <>
+        <div className="py-4 px-3 flex flex-col gap-1 flex-1 overflow-y-auto min-h-0">
+          <div className={`flex items-center mb-4 ${isCollapsed && !inDrawer ? 'justify-center' : 'justify-between px-3'}`}>
+            {(!isCollapsed || inDrawer) && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--sidebar-muted)] animate-fadeIn">Рабочий стол</span>
+            )}
+            {inDrawer ? (
+              <IconButton icon="x-mark" label="Закрыть меню" variant="onDark" onClick={onCloseDrawer} />
+            ) : (
+              <button
+                onClick={onToggleCollapse}
+                aria-label={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+                title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+                className="w-7 h-7 rounded-full bg-white/10 border border-white/15 hover:bg-white/20 flex items-center justify-center text-white/80 transition-all duration-200 hover:scale-105 active:scale-95"
+              >
+                <Icon name={isCollapsed ? 'chevron-right' : 'chevron-left'} size={12} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1">
+            {mainItems.map(renderButton)}
+          </div>
+
+          {adminItems.length > 0 && (
+            <>
+              {collapsedView ? (
+                <div className="w-8 border-t border-white/10 my-3 mx-auto" />
+              ) : (
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--sidebar-muted)] animate-fadeIn mt-6 mb-2 px-3">
+                  Админ
                 </div>
               )}
-            </button>
-          );
-        })}
-      </div>
+              <div className="flex flex-col gap-1">
+                {adminItems.map(renderButton)}
+              </div>
+            </>
+          )}
+        </div>
 
-      {isCollapsed && !inDrawer ? (
-        <div className="p-4 border-t border-white/10 shrink-0 flex flex-col items-center gap-3 text-xs text-[var(--sidebar-muted)]">
-          <div title="ID Оператора: OP-4819" className="hover:text-white transition-colors cursor-help">
-            <Icon name="user-shield" size={14} />
+        {isCollapsed && !inDrawer ? (
+          <div className="p-4 border-t border-white/10 shrink-0 flex flex-col items-center gap-3 text-xs text-[var(--sidebar-muted)]">
+            <div title="ID Оператора: OP-4819" className="hover:text-white transition-colors cursor-help">
+              <Icon name="user-shield" size={14} />
+            </div>
+            <div title="Версия системы: v6.0.4" className="hover:text-white transition-colors cursor-help text-[10px] font-bold">v6</div>
           </div>
-          <div title="Версия системы: v6.0.4" className="hover:text-white transition-colors cursor-help text-[10px] font-bold">v6</div>
-        </div>
-      ) : (
-        <div className="p-4 border-t border-white/10 shrink-0 text-[10px] text-[var(--sidebar-muted)] space-y-1.5">
-          <div className="flex justify-between"><span>ID Оператора:</span><span className="font-semibold text-white/80">OP-4819</span></div>
-          <div className="flex justify-between"><span>Версия системы:</span><span className="font-semibold text-white/80">v6.0.4</span></div>
-        </div>
-      )}
-    </>
-  );
+        ) : (
+          <div className="p-4 border-t border-white/10 shrink-0 text-[10px] text-[var(--sidebar-muted)] space-y-1.5">
+            <div className="flex justify-between"><span>ID Оператора:</span><span className="font-semibold text-white/80">OP-4819</span></div>
+            <div className="flex justify-between"><span>Версия системы:</span><span className="font-semibold text-white/80">v6.0.4</span></div>
+          </div>
+        )}
+      </>
+    );
+  };
 
   return (
     <>
