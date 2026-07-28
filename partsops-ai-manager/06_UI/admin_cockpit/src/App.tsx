@@ -360,7 +360,7 @@ function App() {
           {selectedReq && ['matching', 'pricing'].includes(activeNav) ? (
             <div className="p-4 max-w-6xl mx-auto space-y-4">
               <WorkspaceHeader
-                title={`${selectedReq.customer_name} - План закупки запчастей`}
+                title={selectedReq.customer_name ? `${selectedReq.customer_name} - План закупки запчастей` : `${selectedReq.request_id} - План закупки запчастей`}
                 requestId={selectedReq.request_id}
                 status={selectedReq.status}
                 priority={selectedReq.priority || 'Normal'}
@@ -376,7 +376,6 @@ function App() {
                 }}
               />
               <ChevronStepper status={selectedReq.status} />
-              <StepGate currentStep={activeStep} steps={steps} onStepClick={handleStepClick} />
               <div className="space-y-4">
                 {activeStep === 2 && (
                   <SectionCard
@@ -402,6 +401,7 @@ function App() {
                   <SupplierMatrix
                     parts={normalizedParts}
                     selectedOffers={selectedOffers}
+                    requestId={selectedReq.request_id}
                     onSelectOffer={(partName, offer) =>
                       setSelectedOffers((prev) => ({
                         ...prev,
@@ -454,53 +454,106 @@ function App() {
             <div className={activeNav === 'suppliers' ? "h-full" : "p-4 max-w-6xl mx-auto space-y-4"}>
               {activeNav === 'dashboard' && (
                 <>
-                  {/* Compact Workspace Header (replaces hero) */}
-                  <div className="panel-card-tight p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                          Система активна
-                        </span>
-                        {dashboardVm.health?.tenant_id && (
-                          <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                            Tenant: {dashboardVm.health.tenant_id}
+                  {/* Premium Hero Banner inspired by reference design */}
+                  <div className="rounded-3xl border border-slate-700/40 bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] p-6 text-white shadow-lg space-y-5">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            Система активна
                           </span>
-                        )}
+                          {dashboardVm.health?.tenant_id && (
+                            <span className="text-[10px] font-mono text-slate-400">
+                              Tenant: {dashboardVm.health.tenant_id}
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="text-xl font-black tracking-tight text-white">
+                          Операционный пульт закупок PartsOps AI
+                        </h2>
+                        <p className="text-xs text-slate-300 font-medium">
+                          Мониторинг единой очереди запросов, ИИ-агентов LangGraph и синхронизации с ERP
+                        </p>
                       </div>
-                      <h2 className="text-lg font-bold tracking-tight text-[var(--text-primary)]">
-                        Операционный пульт закупок
-                      </h2>
-                      <p className="text-xs text-[var(--text-secondary)]">
-                        Мониторинг очереди, ИИ-агентов LangGraph и интеграции с ERP
-                      </p>
+
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <button
+                          onClick={() => setIsBatchModalOpen(true)}
+                          className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/20 shadow-xs flex items-center gap-2"
+                        >
+                          <Icon name="search" size={14} />
+                          Пакетный поиск OEM
+                        </button>
+                        <button
+                          onClick={() => {
+                            setFetchTrigger((prev) => prev + 1);
+                            notify.erpSync();
+                          }}
+                          className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/20 shadow-xs flex items-center gap-2"
+                        >
+                          <Icon name="rotate" size={14} />
+                          Синхронизация
+                        </button>
+                        <button
+                          onClick={() => setActiveNav('orders')}
+                          className="rounded-2xl bg-blue-600 hover:bg-blue-500 px-5 py-2.5 text-xs font-black text-white transition shadow-md flex items-center gap-2"
+                        >
+                          <Icon name="plus" size={14} />
+                          Новый запрос (Кастом)
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="secondary"
-                        icon="search"
-                        onClick={() => setIsBatchModalOpen(true)}
-                      >
-                        Пакетный поиск OEM
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        icon="rotate"
-                        onClick={() => {
-                          setFetchTrigger((prev) => prev + 1);
-                          notify.erpSync();
-                        }}
-                      >
-                        Синхронизация
-                      </Button>
-                      <Button
-                        variant="primary"
-                        icon="plus"
-                        onClick={() => setActiveNav('orders')}
-                      >
-                        Новый запрос
-                      </Button>
+                    {/* Integrated Glassmorphism KPI Grid */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+                      <div className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md">
+                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 mb-1">
+                          Активная очередь
+                        </div>
+                        <div className="text-2xl font-black text-white">
+                          {dashboardVm.loading ? '...' : activeQueueCount}
+                        </div>
+                        <div className="text-[10px] text-blue-200 mt-1 font-semibold">
+                          запросов в обработке
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md">
+                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 mb-1">
+                          Нагрузка согласования
+                        </div>
+                        <div className="text-2xl font-black text-white">
+                          {dashboardVm.loading ? '...' : pendingApprovalsCount}
+                        </div>
+                        <div className="text-[10px] text-violet-200 mt-1 font-semibold">
+                          ожидают подписи
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md">
+                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 mb-1">
+                          Устаревшие фиды
+                        </div>
+                        <div className="text-2xl font-black text-white">
+                          {dashboardVm.loading ? '...' : staleSuppliersCount}
+                        </div>
+                        <div className="text-[10px] text-amber-200 mt-1 font-semibold">
+                          поставщиков
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md">
+                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 mb-1">
+                          Статус ERP
+                        </div>
+                        <div className="text-2xl font-black text-white">
+                          {dashboardVm.loading ? '...' : isErpFailing ? 'Сбой' : '100% ОК'}
+                        </div>
+                        <div className="text-[10px] text-emerald-200 mt-1 font-semibold">
+                          {isErpFailing ? 'требует внимания' : 'синхронизировано'}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -516,39 +569,6 @@ function App() {
                       ))}
                     </div>
                   )}
-
-                  {/* Real KPI Cards with gradient skins */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <MetricTile
-                      label="Активная очередь"
-                      value={dashboardVm.loading ? '...' : activeQueueCount}
-                      delta="запросов в работе"
-                      gradient="blue"
-                      icon="list"
-                    />
-                    <MetricTile
-                      label="Нагрузка согласования"
-                      value={dashboardVm.loading ? '...' : pendingApprovalsCount}
-                      delta="ожидают подписи"
-                      gradient="violet"
-                      icon="circle-info"
-                    />
-                    <MetricTile
-                      label="Устаревшие фиды"
-                      value={dashboardVm.loading ? '...' : staleSuppliersCount}
-                      delta="поставщиков"
-                      gradient="amber"
-                      icon="car"
-                    />
-                    <MetricTile
-                      label="Статус ERP"
-                      value={dashboardVm.loading ? '...' : isErpFailing ? 'Сбой' : 'ОК'}
-                      delta={isErpFailing ? 'требует внимания' : 'синхронизировано'}
-                      gradient="teal"
-                      icon="rotate"
-                    />
-                  </div>
-
                   <BlockedQueue
                     requests={requests}
                     onSelectRequest={handleSelectRequest}

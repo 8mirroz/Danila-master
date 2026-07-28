@@ -67,6 +67,42 @@ class TestVINInspector:
         assert result["vehicle_model"] in ("X5", "3 Series")
         assert result["vehicle_year"] in (2018, 2014)
 
+    def test_vin_decode_exception_no_mock_vehicle(self):
+        """B12: LLM decode failure must not assign mock BMW X5 / Toyota Camry from WBA."""
+        from unittest.mock import patch
+
+        # VIN present, no brand/model keywords in free text
+        state = {
+            "raw_request": "Ищу колодки для VIN WBA3C3C50EF123456 срочно",
+            "agent_trace": [],
+        }
+        with patch("app.agents.legacy_intake_pipeline.call_llm", side_effect=Exception("llm down")):
+            result = vin_inspector_node(state)
+
+        assert result["vehicle_vin"] == "WBA3C3C50EF123456"
+        assert result["vin_validity"] == "unknown"
+        assert result["vehicle_make"] is None
+        assert result["vehicle_model"] is None
+        assert result["vehicle_year"] is None
+        assert any("decode failed" in t for t in result["agent_trace"])
+        assert not any("Assigned mock" in t for t in result["agent_trace"])
+
+    def test_vin_decode_exception_keeps_text_brand_heuristic(self):
+        """B12: text keyword brand extraction still allowed after VIN decode failure."""
+        from unittest.mock import patch
+
+        state = {
+            "raw_request": "Колодки BMW X5 VIN WBA3C3C50EF123456",
+            "agent_trace": [],
+        }
+        with patch("app.agents.legacy_intake_pipeline.call_llm", side_effect=Exception("llm down")):
+            result = vin_inspector_node(state)
+
+        assert result["vin_validity"] == "unknown"
+        assert result["vehicle_make"] == "BMW"
+        assert result["vehicle_model"] == "X5"
+        assert any("Extracted from text" in t for t in result["agent_trace"])
+
 
 class TestPartsExtractor:
     def test_keyword_extraction_brakepads(self):

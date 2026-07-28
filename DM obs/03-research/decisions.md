@@ -207,3 +207,7 @@ Redesigned Custom intake with chevron stepper, real supplier sources and modal e
 ## ⚖️ Decision | 2026-07-28T19:41:47+03:00
 
 Deploy-ready enhancements for Custom intake panel: presets, API pings, position management
+
+## ⚖️ Decision | 2026-07-28T19:53:42+03:00
+
+Refactored Custom intake: separated Sources into Step 2, added high-contrast buttons and automated Drag and Drop parsing

@@ -37,76 +37,8 @@ export const CompletedOrdersHistory = ({
         const data: Request[] = await res.json();
         // Filter for completed/archived orders
         const completedStates = ['APPROVED', 'CANCELLED', 'INVOICE_DRAFTED', 'CLOSED', 'FULFILLED', 'PAID', 'CLIENT_REJECTED'];
-        let filtered = data.filter((req) => completedStates.includes(req.status.toUpperCase()));
-        
-        // If empty, let's provide some mock completed orders to demonstrate the scrolling sticky calendar
-        if (filtered.length === 0) {
-          filtered = [
-            {
-              id: 101,
-              request_id: 'REQ-EE601B73',
-              source: 'MANUAL_INTAKE',
-              status: 'APPROVED',
-              customer_name: 'John D***',
-              created_at: new Date(Date.now() - 3600 * 1000 * 2).toISOString(), // 2 hours ago (Today)
-              parts_json: '[{"name": "Тормозные колодки", "quantity": 2}]',
-              priority: 'High',
-              vehicle_make: 'BMW',
-              vehicle_model: 'X5',
-            },
-            {
-              id: 102,
-              request_id: 'REQ-C822F6BF',
-              source: 'UI_UPLOAD',
-              status: 'CLIENT_REJECTED',
-              customer_name: 'Клиент П***',
-              created_at: new Date(Date.now() - 3600 * 1000 * 25).toISOString(), // Yesterday
-              parts_json: '[{"name": "Свечи зажигания", "quantity": 4}]',
-              priority: 'Normal',
-            },
-            {
-              id: 103,
-              request_id: 'REQ-TR-8812',
-              source: 'CRM_MOCK',
-              status: 'APPROVED',
-              customer_name: 'ИП Иванов А.В.',
-              created_at: new Date(Date.now() - 3600 * 1000 * 27).toISOString(), // Yesterday
-              parts_json: '[{"name": "Фильтр масляный", "quantity": 1}, {"name": "Масло моторное 5W30", "quantity": 5}]',
-              priority: 'Normal',
-            },
-            {
-              id: 104,
-              request_id: 'REQ-TR-7721',
-              source: 'EMAIL',
-              status: 'CANCELLED',
-              customer_name: 'ООО ТрансЛогистик',
-              created_at: new Date(Date.now() - 3600 * 1000 * 50).toISOString(), // 2 days ago
-              parts_json: '[{"name": "Амортизатор передний", "quantity": 2}]',
-              priority: 'High',
-            },
-            {
-              id: 105,
-              request_id: 'REQ-TR-6611',
-              source: 'API',
-              status: 'CLOSED',
-              customer_name: 'Автосервис Лидер',
-              created_at: new Date(Date.now() - 3600 * 1000 * 120).toISOString(), // 5 days ago
-              parts_json: '[{"name": "Ремень ГРМ", "quantity": 1}]',
-              priority: 'Normal',
-            },
-            {
-              id: 106,
-              request_id: 'REQ-TR-5532',
-              source: 'CRM_MOCK',
-              status: 'APPROVED',
-              customer_name: 'Василий Петров',
-              created_at: new Date(Date.now() - 3600 * 1000 * 200).toISOString(), // 8 days ago
-              parts_json: '[{"name": "Лобовое стекло", "quantity": 1}]',
-              priority: 'Normal',
-            }
-          ];
-        }
-        
+        const filtered = data.filter((req) => completedStates.includes(req.status.toUpperCase()));
+
         // Sort newest first
         filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         setCompletedOrders(filtered);

@@ -137,18 +137,13 @@ Respond ONLY with a JSON object: {"valid": true/false, "make": "string/null", "m
                 vin_validity = "invalid"
                 trace.append("VIN Inspector NIM: Candidate is invalid")
         except Exception:
-            # Fallback simple decoder (mock)
-            vin_validity = "valid"
-            # Simple heuristics based on standard prefixes
-            if vin.startswith("WBA") or "BMW" in raw.upper():
-                make = "BMW"
-                model = "X5"
-                year = 2018
-            else:
-                make = "Toyota"
-                model = "Camry"
-                year = 2017
-            trace.append(f"VIN Inspector Fallback: Assigned mock {make} {model}")
+            # Decode failed — do not invent make/model/year from WBA/mock vehicle heuristics.
+            # Legitimate text-based brand extraction still runs below when make/model are None.
+            vin_validity = "unknown"
+            make = None
+            model = None
+            year = None
+            trace.append("VIN Inspector Fallback: decode failed → unknown")
     else:
         trace.append("VIN Inspector: No VIN candidates found in text")
 

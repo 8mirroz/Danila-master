@@ -5,7 +5,7 @@ import pytest
 from sqlmodel import Session, delete
 from database import engine, init_db
 from suppliers import SupplierCatalogItem, Supplier
-from matcher import match_part_from_db
+from matcher import match_part_from_db, match_part
 
 @pytest.fixture
 def session():
@@ -64,3 +64,33 @@ def test_cross_brand_penalty(session):
         if "Toyota" in res["item"]["name"]:
             assert res["breakdown"]["vehicle_score"] == 0.0
             assert res["score"] < 50.0  # Because of the -35.0 penalty
+
+
+def test_match_part_empty_db_without_testing_returns_empty(session, monkeypatch):
+    """B8: production path must not fall back to MOCK_INVENTORY when catalog is empty."""
+    from sqlmodel import delete as sql_delete
+    session.exec(sql_delete(SupplierCatalogItem))
+    session.commit()
+
+    monkeypatch.delenv("TESTING", raising=False)
+    results = match_part("Тормозные колодки BMW X5", threshold=10.0)
+    assert results == []
+
+
+def test_match_part_empty_db_with_testing_allows_mock(session, monkeypatch):
+    """B8: TESTING=1 may still use MOCK_INVENTORY for legacy experiments."""
+    from sqlmodel import delete as sql_delete
+    session.exec(sql_delete(SupplierCatalogItem))
+    session.commit()
+
+    monkeypatch.setenv("TESTING", "1")
+    results = match_part("Тормозные колодки BMW X5", threshold=10.0)
+    assert len(results) > 0
+    assert "BMW" in results[0]["item"]["name"]
+
+
+def test_match_part_from_db_seeded_still_works(session):
+    """B8: primary production path match_part_from_db unchanged with seeded catalog."""
+    results = match_part_from_db("Тормозные колодки BMW", session, threshold=10.0)
+    assert len(results) > 0
+    assert results[0]["item"]["name"]

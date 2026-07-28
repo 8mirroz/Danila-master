@@ -1,7 +1,9 @@
 """
 Fuzzy matching engine for part name lookups.
-Uses RapidFuzz against SupplierCatalogItem rows in the database,
-falling back to the in-memory MOCK_INVENTORY if no DB items exist.
+Uses RapidFuzz against SupplierCatalogItem rows in the database.
+Primary path: match_part_from_db. Legacy match_part returns [] when the DB
+has no catalog items (no silent MOCK_INVENTORY in production). When TESTING=1,
+match_part may use an in-memory MOCK_INVENTORY for isolated legacy experiments.
 
 v4 improvements:
   - Keywords loaded from 01_CONFIGS/matcher_keywords.yaml (no hardcoded lists)
@@ -362,7 +364,11 @@ def match_part(query: str, threshold: float = 55.0) -> List[Dict]:
         if results:
             return results
 
-    # Fallback: in-memory mock (for unit tests that don't seed the DB)
+    # Production: empty catalog → no silent fake inventory
+    if os.environ.get("TESTING") != "1":
+        return []
+
+    # TESTING-only: in-memory mock for legacy experiments without seeded DB
     MOCK_INVENTORY = [
         {"id": "1", "name": "Тормозные колодки передние BMW X5", "price": 4500, "supplier": "АвтоАльянс", "stock": 10},
         {"id": "2", "name": "Тормозные колодки задние BMW X5", "price": 3800, "supplier": "АвтоАльянс", "stock": 5},

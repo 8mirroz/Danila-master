@@ -548,37 +548,60 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
   onBack,
 }) => {
   const isUrgent = ['high', 'urgent', 'высокий', 'срочный'].includes(priority.toLowerCase());
+  const cleanTitle = (title && !title.startsWith('null'))
+    ? title
+    : customerName
+    ? `${customerName} · План закупки запчастей`
+    : `${requestId} · План закупки запчастей`;
+
   return (
-    <div className="panel-card-tight mb-4 flex flex-col gap-3 p-4">
+    <div className="mb-4 rounded-3xl border border-slate-700/40 bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] p-5 text-white shadow-md">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="rounded-full border border-[var(--border-default)] bg-[var(--surface-2)] px-2.5 py-1 font-mono text-[10px] font-semibold text-[var(--text-secondary)] shrink-0">{requestId}</span>
-          <h2 className="text-sm font-bold text-[var(--text-primary)] truncate max-w-[280px] md:max-w-[450px]">{title || customerName || 'Постоянный клиент'}</h2>
-          <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase shrink-0 border ${isUrgent ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="rounded-full border border-blue-400/30 bg-blue-500/15 px-3 py-1 font-mono text-xs font-bold text-blue-300 shrink-0">
+            {requestId}
+          </span>
+          <h2 className="text-base font-black text-white truncate max-w-[280px] md:max-w-[500px]">
+            {cleanTitle}
+          </h2>
+          <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider shrink-0 border ${
+            isUrgent
+              ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+              : 'bg-slate-700/60 text-slate-300 border-slate-600/50'
+          }`}>
             {isUrgent ? (priority.toLowerCase() === 'urgent' || priority === 'Срочный' ? 'Срочный' : 'Высокий') : 'Обычный'}
           </span>
           {vehicleMake && (
-            <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded font-medium shrink-0">{vehicleMake} {vehicleModel || ''}</span>
+            <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2.5 py-0.5 rounded-full font-bold shrink-0">
+              {vehicleMake} {vehicleModel || ''}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={status} />
-          {onBack && <Button size="sm" icon="arrow-left" onClick={onBack} className="rounded-full">Закрыть</Button>}
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="rounded-2xl border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-bold text-white/90 hover:bg-white/20 transition flex items-center gap-1.5"
+            >
+              <Icon name="arrow-left" size={12} />
+              Закрыть
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-2 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)]">
-        <div className="flex items-center gap-3 text-[var(--text-muted)]">
-          {customerEmail && <span className="text-[var(--text-secondary)] font-medium">{customerEmail}</span>}
-          {customerPhone && <span className="text-[var(--text-secondary)] font-medium">{customerPhone}</span>}
+      {(customerEmail || customerPhone || vin) && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-3 border-t border-white/10 text-xs text-slate-300 font-medium">
+          {customerEmail && <span>📧 {customerEmail}</span>}
+          {customerPhone && <span>📞 {customerPhone}</span>}
+          {vin && (
+            <span className="font-mono text-[11px] bg-white/10 px-2 py-0.5 rounded-lg border border-white/15 text-blue-200 font-bold">
+              VIN: {vin}
+            </span>
+          )}
         </div>
-        {vin && (
-          <div className="flex items-center gap-1 font-mono text-[10px] text-[var(--text-muted)] bg-[var(--surface-2)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
-            <span className="font-sans uppercase text-[9px] font-bold text-[var(--text-muted)]">VIN</span>
-            <span className="text-[var(--text-secondary)] font-semibold">{vin}</span>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };

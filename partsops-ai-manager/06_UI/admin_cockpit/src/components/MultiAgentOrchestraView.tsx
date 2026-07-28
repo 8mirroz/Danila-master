@@ -137,10 +137,12 @@ export function MultiAgentOrchestraView() {
         const data = await res.json();
         setRuns(data);
         setLastUpdate(new Date().toISOString());
+      } else {
+        setRuns([]);
       }
     } catch (e) {
       console.warn('Pipeline graph data unavailable:', e);
-      setRuns((prev) => prev.length > 0 ? prev : [mockRun()]);
+      setRuns([]);
     } finally {
       setLoading(false);
     }
@@ -399,20 +401,6 @@ function enrichPhases(run: PipelineRun, traces: any[]): Record<string, PhaseDeta
     };
   }
   return result;
-}
-
-function mockRun(): PipelineRun {
-  return {
-    request_id: 'demo-pipeline-1',
-    correlation_id: 'corr-demo-2026-07-08',
-    status: 'in_progress',
-    phases: {
-      intake: { agent_type: 'intake', success: true, execution_time_ms: 420, correlation_id: 'corr-demo', errors: [] },
-      processing: { agent_type: 'processing', success: true, execution_time_ms: 1840, correlation_id: 'corr-demo', errors: [] },
-      delivery: { agent_type: 'delivery', success: false, execution_time_ms: 0, correlation_id: 'corr-demo', errors: ['Mail delivery blocked'] },
-      reporting: { agent_type: 'reporting', success: false, execution_time_ms: 0, correlation_id: 'corr-demo', errors: ['Dependency on delivery'] },
-    },
-  };
 }
 
 export default MultiAgentOrchestraView;
