@@ -199,3 +199,7 @@ Fixed Suppliers tab content wrapping in App.tsx to enable true edge-to-edge layo
 ## ⚖️ Decision | 2026-07-28T19:18:33+03:00
 
 Grouped monitoring/tech menu items in sidebar under Admin section
+
+## ⚖️ Decision | 2026-07-28T19:26:58+03:00
+
+Redesigned Custom intake with chevron stepper, real supplier sources and modal editor
