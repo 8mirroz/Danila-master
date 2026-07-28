@@ -161,22 +161,27 @@ Stub-агенты: `supervisor`, `offer_ranker`, `invoice_draft`, `debug`, `cata
 
 
 ### P1 — critical production stubs
-5. B4 notify_owner → real channel  
-6. B1 real VIN engine or mark partial  
+5. ~~B4 notify_owner → real channel~~ **DONE 2026-07-28** (outbox enqueue, not false sent)  
+6. ~~B1 real VIN engine or mark partial~~ **DONE 2026-07-28** (offline WMI via `pii.decode_vin_offline`)  
 7. B10/B11 PROD env checklist  
 8. U8 ERP/payment status UI  
-9. B6 fix/remove verify_tracking_token  
+9. ~~B6 fix/remove verify_tracking_token~~ **DONE 2026-07-28** (DB-backed, tests)  
 
 ### P2 — automation engines
-10. Implement used engines vs delete and inline  
-11. B5 dead_letter cleanup  
+10. Implement used engines vs delete and inline (remaining 11 engines still noop/placeholder)  
+11. ~~B5 dead_letter cleanup~~ **DONE 2026-07-28** (failed exhausted + retention)  
 12. Policy/quote/supplier discovery if jobs depend  
 
 ### P3 — UX honesty
-13. U3 rename UI_MOCK  
+13. ~~U3 rename UI_MOCK~~ **DONE 2026-07-28** (`UI_MANUAL`)  
 14. U6 CMD+K / shortcuts  
 15. U7 live overview metrics  
 16. Seed behind SEED_ON_START=1  
+
+### SDD execution log
+- W1 P0 (U1,U2,B8,B12): Spec → Imp×2 → Review LGTM  
+- W2 (U3,B6): Imp → Review LGTM  
+- W3 (B4,B5,B1): Imp → Review LGTM · tests 36 related passed
 
 ### P4 — Devpack
 17. Wire to ai-manager agents or mark spec-only  

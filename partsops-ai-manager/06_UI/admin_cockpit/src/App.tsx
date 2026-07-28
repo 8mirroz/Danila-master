@@ -280,6 +280,7 @@ function App() {
     { id: 'orders', label: 'Кастом', icon: 'cloud-arrow-up', group: 'main' as const },
     { id: 'matching', label: 'Матрица подбора', icon: 'rotate', group: 'main' as const },
     { id: 'pricing', label: 'Калькулятор цен', icon: 'pencil', group: 'main' as const },
+    { id: 'contract_control', label: 'Договорный контроль', icon: 'file-shield', group: 'bottom' as const },
     { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'robot', group: 'admin' as const },
     { id: 'orchestra', label: 'Мультиагентный оркестр', icon: 'wave-square', group: 'admin' as const },
     { id: 'agent_os', label: 'Консоль ИИ-агента', icon: 'robot', group: 'admin' as const },

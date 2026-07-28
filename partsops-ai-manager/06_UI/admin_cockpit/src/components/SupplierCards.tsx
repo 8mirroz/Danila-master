@@ -38,6 +38,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
       {suppliers.map((s) => {
         const isSelected = selectedSupplierId === s.supplier_id;
         const activeStatus = s.status === 'active' ? 'Active' : s.status === 'blocked' ? 'Blocked' : 'Pending';
+        const displayStatus = s.status === 'active' ? 'Активен' : s.status === 'blocked' ? 'Заблокирован' : 'Ожидает';
         const categories = (s.categories.length ? s.categories : s.specialization.split(','))
           .map((spec) => spec.trim())
           .filter(Boolean);
@@ -71,7 +72,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                       : 'bg-amber-50 text-amber-700 border border-amber-200'
                   }`}
                 >
-                  {activeStatus}
+                  {displayStatus}
                 </span>
                 <div className="flex items-center gap-2 text-right">
                   {renderStars(s.reliability_score)}
@@ -109,7 +110,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                       : 'bg-slate-100 text-slate-600'
                   }`}
                 >
-                  {s.last_sync_status}
+                  {s.last_sync_status === 'synced' ? 'Синхронизирован' : s.last_sync_status === 'stale' ? 'Устарел' : 'Сбой'}
                 </span>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
                   SLA {s.avg_delivery_days} дн.

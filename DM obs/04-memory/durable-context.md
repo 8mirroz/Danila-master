@@ -198,3 +198,7 @@ Deploy-ready enhancements for Custom intake panel: presets, API pings, position 
 ## 🧠 Durable Fact | 2026-07-28T19:53:42+03:00
 
 Refactored Custom intake: separated Sources into Step 2, added high-contrast buttons and automated Drag and Drop parsing
+
+## 🧠 Durable Fact | 2026-07-28T20:06:23+03:00
+
+Redesigned Dashboard and WorkspaceHeader into premium hero cards inspired by reference UI

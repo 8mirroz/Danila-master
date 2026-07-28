@@ -1700,6 +1700,49 @@ aside::-webkit-scrollbar-thumb:hover {
   animation: fadeIn 0.2s ease-out forwards !important;
 }
 
+/* Bottom administrative control module: quiet luxury, not another nav row. */
+.contract-control-nav {
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(16, 54, 70, 0.92), rgba(8, 29, 48, 0.96));
+  border-color: rgba(93, 232, 183, 0.24);
+  box-shadow: 0 10px 24px rgba(1, 12, 24, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.contract-control-nav:hover {
+  border-color: rgba(93, 232, 183, 0.55);
+  box-shadow: 0 14px 30px rgba(1, 12, 24, 0.3), 0 0 0 1px rgba(93, 232, 183, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.contract-control-nav-active {
+  background: linear-gradient(135deg, rgba(21, 111, 104, 0.98), rgba(8, 53, 67, 0.98));
+  border-color: rgba(110, 245, 194, 0.72);
+}
+
+.contract-control-nav-glow {
+  position: absolute;
+  inset: -45%;
+  z-index: -1;
+  background: radial-gradient(circle, rgba(64, 220, 169, 0.2), transparent 56%);
+  opacity: 0;
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+.contract-control-nav:hover .contract-control-nav-glow,
+.contract-control-nav-active .contract-control-nav-glow {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contract-control-nav,
+  .contract-control-nav-glow {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
 /* Premium Panel / Card enhancements */
 .panel-card-tight, .panel-card {
   transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base) !important;

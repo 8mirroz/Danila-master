@@ -44,10 +44,42 @@ def create_tracking_token(request_id: str, tenant_id: str, expires_hours: int = 
     
     return token
 
-def verify_tracking_token(token: str, request_id: str) -> bool:
-    """Verify token matches request_id (token never stored, verified by re-hashing)."""
-    # In production, compare against stored token in DB
-    return False  # Placeholder — actual verification uses DB lookup
+def verify_tracking_token(
+    token: str,
+    request_id: str,
+    *,
+    tenant_id: str = "default",
+    session: Optional[Session] = None,
+) -> bool:
+    """Verify token is stored for request_id, tenant-scoped, not expired."""
+    if not token or not request_id:
+        return False
+
+    from database import engine
+
+    owns_session = session is None
+    if owns_session:
+        session = Session(engine)
+
+    try:
+        req = session.exec(
+            select(PartRequest).where(
+                PartRequest.tracking_token == token,
+                PartRequest.request_id == request_id,
+                PartRequest.tenant_id == tenant_id,
+            )
+        ).first()
+        if not req:
+            return False
+        if (
+            req.tracking_token_expires_at is not None
+            and req.tracking_token_expires_at < datetime.utcnow()
+        ):
+            return False
+        return True
+    finally:
+        if owns_session and session is not None:
+            session.close()
 
 def get_public_request_view(token: str, session: Session, tenant_id: str) -> Optional[Dict[str, Any]]:
     """Return public view of request (no purchase price, margin, supplier_id)."""

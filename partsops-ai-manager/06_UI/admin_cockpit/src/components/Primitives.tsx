@@ -27,6 +27,7 @@ import {
   Robot,
   SpinnerGap,
   Stop,
+  ShieldCheck,
   Trash,
   Warning,
   WarningDiamond,
@@ -80,6 +81,7 @@ const ICON_MAP = {
   bell: Bell,
   list: List,
   'user-shield': Robot,
+  'file-shield': ShieldCheck,
   'code-fork': ArrowsClockwise,
 } as const;
 
@@ -322,7 +324,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
 // =========================================
 // 6. LeftNavRail (deep-blue gradient + drawer mode)
 // =========================================
-interface NavItem { id: string; label: string; icon: string; group?: 'main' | 'admin'; }
+interface NavItem { id: string; label: string; icon: string; group?: 'main' | 'admin' | 'bottom'; }
 
 interface LeftNavRailProps {
   activeTab: string;
@@ -344,12 +346,31 @@ export const LeftNavRail: React.FC<LeftNavRailProps> = ({
   onCloseDrawer,
 }) => {
   const drawerRef = React.useRef<HTMLElement | null>(null);
+  const bottomActionRef = React.useRef<HTMLDivElement | null>(null);
   useFocusTrap(drawerRef, drawerOpen);
   useKeydown('Escape', () => { if (drawerOpen && onCloseDrawer) onCloseDrawer(); }, [drawerOpen, onCloseDrawer]);
+
+  React.useLayoutEffect(() => {
+    if (!bottomActionRef.current) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const ctx = gsap.context(() => {
+      if (reduceMotion) {
+        gsap.set(bottomActionRef.current, { opacity: 1, y: 0 });
+        return;
+      }
+      gsap.fromTo(
+        bottomActionRef.current,
+        { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, duration: 0.42, delay: 0.08, ease: 'power3.out' },
+      );
+    }, bottomActionRef.current);
+    return () => ctx.revert();
+  }, [isCollapsed, drawerOpen]);
 
   const railBody = (inDrawer: boolean) => {
     const mainItems = items.filter((item) => !item.group || item.group === 'main');
     const adminItems = items.filter((item) => item.group === 'admin');
+    const bottomItems = items.filter((item) => item.group === 'bottom');
     const collapsedView = isCollapsed && !inDrawer;
 
     const renderButton = (item: NavItem) => {
@@ -412,6 +433,37 @@ export const LeftNavRail: React.FC<LeftNavRailProps> = ({
             </>
           )}
         </div>
+
+        {bottomItems.length > 0 && (
+          <div ref={bottomActionRef} className={`px-3 pb-3 shrink-0 ${collapsedView ? 'flex justify-center' : ''}`}>
+            {bottomItems.map((item) => {
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => { onChangeTab(item.id); if (inDrawer && onCloseDrawer) onCloseDrawer(); }}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={collapsedView ? item.label : undefined}
+                  className={`contract-control-nav group relative flex items-center gap-3 rounded-2xl border text-left transition-all duration-300 ${collapsedView ? 'h-11 w-11 justify-center px-0' : 'w-full px-3 py-3'} ${isActive ? 'contract-control-nav-active' : ''}`}
+                >
+                  <span className="contract-control-nav-glow" aria-hidden="true" />
+                  <Icon name={item.icon} size={17} weight={isActive ? 'fill' : 'regular'} className="relative z-10 shrink-0 text-emerald-300 transition-transform duration-300 group-hover:scale-110" />
+                  {!collapsedView && (
+                    <span className="relative z-10 min-w-0 animate-fadeIn">
+                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200/90">Control room</span>
+                      <span className="mt-0.5 block truncate text-xs font-bold text-white">{item.label}</span>
+                    </span>
+                  )}
+                  {collapsedView && (
+                    <span className="pointer-events-none absolute left-14 z-50 whitespace-nowrap rounded-xl border border-emerald-300/20 bg-[#071a2b]/95 px-3 py-2 text-[11px] font-bold text-white opacity-0 shadow-xl transition-all duration-200 group-hover:translate-x-1 group-hover:opacity-100">
+                      {item.label}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {isCollapsed && !inDrawer ? (
           <div className="p-4 border-t border-white/10 shrink-0 flex flex-col items-center gap-3 text-xs text-[var(--sidebar-muted)]">

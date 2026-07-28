@@ -6,7 +6,7 @@ from sqlmodel import SQLModel, Session, select
 
 from database import engine
 from models import PartRequest, RequestState
-from client_portal import generate_tracking_token, get_public_request_view, accept_offer, reject_offer
+from client_portal import generate_tracking_token, verify_tracking_token, get_public_request_view, accept_offer, reject_offer
 
 
 @pytest.fixture(autouse=True)
@@ -129,3 +129,69 @@ def test_accept_already_accepted_request_fails():
         result = accept_offer("token-already", session, "default")
         assert result["ok"] is False
         assert "Cannot accept" in result["error"]
+
+
+def test_verify_tracking_token_valid():
+    """Valid stored token + matching request_id → True."""
+    with Session(engine) as session:
+        req = PartRequest(
+            request_id="REQ-VERIFY-OK",
+            tenant_id="default",
+            source="manual",
+            status=RequestState.SENT_TO_CLIENT,
+            tracking_token="token-verify-ok",
+            tracking_token_expires_at=datetime.utcnow() + timedelta(hours=24),
+            customer_name="Verify User",
+        )
+        session.add(req)
+        session.commit()
+
+        assert verify_tracking_token("token-verify-ok", "REQ-VERIFY-OK", session=session) is True
+
+
+def test_verify_tracking_token_wrong_request_id():
+    """Wrong request_id → False."""
+    with Session(engine) as session:
+        req = PartRequest(
+            request_id="REQ-VERIFY-WRONG",
+            tenant_id="default",
+            source="manual",
+            status=RequestState.SENT_TO_CLIENT,
+            tracking_token="token-verify-wrong-id",
+            tracking_token_expires_at=datetime.utcnow() + timedelta(hours=24),
+            customer_name="Verify User",
+        )
+        session.add(req)
+        session.commit()
+
+        assert verify_tracking_token(
+            "token-verify-wrong-id", "REQ-OTHER", session=session
+        ) is False
+
+
+def test_verify_tracking_token_expired():
+    """Expired token → False."""
+    with Session(engine) as session:
+        req = PartRequest(
+            request_id="REQ-VERIFY-EXPIRED",
+            tenant_id="default",
+            source="manual",
+            status=RequestState.SENT_TO_CLIENT,
+            tracking_token="token-verify-expired",
+            tracking_token_expires_at=datetime.utcnow() - timedelta(hours=1),
+            customer_name="Verify User",
+        )
+        session.add(req)
+        session.commit()
+
+        assert verify_tracking_token(
+            "token-verify-expired", "REQ-VERIFY-EXPIRED", session=session
+        ) is False
+
+
+def test_verify_tracking_token_unknown():
+    """Unknown token → False."""
+    with Session(engine) as session:
+        assert verify_tracking_token(
+            "nonexistent-token", "REQ-ANY", session=session
+        ) is False

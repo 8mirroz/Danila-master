@@ -116,7 +116,7 @@ export const RightPanel = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source: attachedFile ? attachedFile.name.split('.').pop()?.toUpperCase() || 'FILE' : 'UI_MOCK',
+          source: attachedFile ? attachedFile.name.split('.').pop()?.toUpperCase() || 'FILE' : 'UI_MANUAL',
           text: newRequestText || `[Файл: ${attachedFile?.name}] Распознавание спецификации и деталей запчастей...`,
           customer_name: 'Постоянный клиent',
         }),
