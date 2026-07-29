@@ -102,7 +102,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
 # 2b. Optional durable pipeline worker (Kanban queue consumers)
-if [ "${PARTSOPS_START_PIPELINE_WORKER:-0}" = "1" ]; then
+if [ "${PARTSOPS_START_PIPELINE_WORKER:-1}" = "1" ]; then
   echo "Starting Pipeline Worker (PARTSOPS_START_PIPELINE_WORKER=1)..."
   python -m app.automation.pipeline_worker --poll-seconds "${PARTSOPS_PIPELINE_POLL_SECONDS:-1}" &
   PIPELINE_WORKER_PID=$!

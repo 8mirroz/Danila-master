@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional, List, Dict
-from fastapi import APIRouter, Depends, Header, HTTPException, Body, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Body, File, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field as PydanticField
 from sqlmodel import Session, select, desc
@@ -22,6 +22,7 @@ from services.pipeline_runs import (
     TERMINAL_STATUSES,
     get_pipeline_run,
     list_run_events,
+    run_once,
     serialize_run,
     start_pipeline_run,
 )
