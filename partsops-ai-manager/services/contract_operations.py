@@ -10,11 +10,12 @@ import uuid
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence, Optional, cast
 from urllib.parse import urlparse
+from openpyxl.cell import Cell
 
 from fastapi import HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, select, col
 
 from event_store import emit_event, emit_state_change
 from models import (AdaptationDecisionRecord, AnalogCandidate, ClientApproval, CompatibilityEvidence,
@@ -246,6 +247,7 @@ def _write_export_xlsx(tenant_id: str, export_id: str, document_kind: str, rows:
 
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "Client Form" if document_kind == "client" else "Internal Registry"
     ws.append([label for _, label in columns])
     for row in rows:
@@ -258,8 +260,10 @@ def _write_export_xlsx(tenant_id: str, export_id: str, document_kind: str, rows:
     meta.append(["generated_at", _now().isoformat()])
 
     for column_cells in ws.columns:
-        width = max(len(str(cell.value or "")) for cell in column_cells)
-        ws.column_dimensions[column_cells[0].column_letter].width = min(max(width + 2, 10), 48)
+        cells = [c for c in column_cells if isinstance(c, Cell)]
+        if cells:
+            width = max(len(str(c.value or "")) for c in cells)
+            ws.column_dimensions[cells[0].column_letter].width = min(max(width + 2, 10), 48)
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -627,10 +631,10 @@ def _seed_contract_control(session: Session, request_id: str, tenant_id: str, ac
 
 
 def _position_evidence(session: Session, position: ContractPosition, tenant_id: str) -> list[PriceEvidence]:
-    return session.exec(select(PriceEvidence).where(
+    return list(session.exec(select(PriceEvidence).where(
         PriceEvidence.position_id == position.position_id,
         PriceEvidence.tenant_id == tenant_id,
-    )).all()
+    )).all())
 
 
 def _valid_price_evidence(evidence: PriceEvidence) -> bool:
@@ -645,7 +649,7 @@ def _valid_price_evidence(evidence: PriceEvidence) -> bool:
     return evidence.evidence_status in {"valid", "pending"}
 
 
-def _offers_are_comparable(evidence: list[PriceEvidence]) -> bool:
+def _offers_are_comparable(evidence: Sequence[PriceEvidence]) -> bool:
     if not evidence:
         return False
     comparable_key = None
@@ -661,10 +665,10 @@ def _offers_are_comparable(evidence: list[PriceEvidence]) -> bool:
 def _coverage_for_code(
     code: str,
     req: PartRequest,
-    positions: list[ContractPosition],
-    exports: list[ContractExport],
-    approvals: list[ClientApproval],
-    authorizations: list[PurchaseAuthorization],
+    positions: Sequence[ContractPosition],
+    exports: Sequence[ContractExport],
+    approvals: Sequence[ClientApproval],
+    authorizations: Sequence[PurchaseAuthorization],
     evidence_by_position: dict[str, list[PriceEvidence]],
     oems_by_position: dict[str, list[OEMCandidate]],
     analogs_by_position: dict[str, list[AnalogCandidate]],
@@ -697,7 +701,7 @@ def _coverage_for_code(
     client_approved = bool(approvals)
     purchase_authorized = bool(authorizations)
 
-    checks: dict[str, dict[str, bool]] = {
+    checks: dict[str, dict[str, Any]] = {
         "AUD-REQ-001": dict(has_data=True, has_check=True, has_evidence=True, has_workflow_gate=True,
                             export_covered=False),
         "REG-REQ-001": dict(has_data=has_positions, has_check=has_positions, has_evidence=has_positions,
@@ -800,17 +804,17 @@ def _sync_control_coverage(session: Session, req: PartRequest) -> None:
     )).all()
     evidence_by_position = {p.position_id: _position_evidence(session, p, req.tenant_id) for p in positions}
     oems_by_position = {
-        p.position_id: session.exec(select(OEMCandidate).where(
+        p.position_id: list(session.exec(select(OEMCandidate).where(
             OEMCandidate.position_id == p.position_id,
             OEMCandidate.tenant_id == req.tenant_id,
-        )).all()
+        )).all())
         for p in positions
     }
     analogs_by_position = {
-        p.position_id: session.exec(select(AnalogCandidate).where(
+        p.position_id: list(session.exec(select(AnalogCandidate).where(
             AnalogCandidate.position_id == p.position_id,
             AnalogCandidate.tenant_id == req.tenant_id,
-        )).all()
+        )).all())
         for p in positions
     }
     candidate_ids = [
@@ -820,10 +824,10 @@ def _sync_control_coverage(session: Session, req: PartRequest) -> None:
     ]
     compatibility_by_candidate: dict[str, list[CompatibilityEvidence]] = {}
     for candidate_id in candidate_ids:
-        compatibility_by_candidate[candidate_id] = session.exec(select(CompatibilityEvidence).where(
+        compatibility_by_candidate[candidate_id] = list(session.exec(select(CompatibilityEvidence).where(
             CompatibilityEvidence.candidate_id == candidate_id,
             CompatibilityEvidence.tenant_id == req.tenant_id,
-        )).all()
+        )).all())
 
     requirements = session.exec(select(ContractRequirement).where(
         ContractRequirement.request_id == req.request_id,
@@ -1023,7 +1027,7 @@ def collect_evidence(session: Session, request_id: str, tenant_id: str, rows: li
                                 "screenshot_sha256": screenshot_sha256,
                                 "screenshot_readability_status": screenshot_validation["readability_status"],
                                 "screenshot_completeness_status": screenshot_validation["completeness_status"],
-                                "expires_at": evidence.expires_at.isoformat()},
+                                "expires_at": evidence.expires_at.isoformat() if evidence.expires_at else None},
                        evidence_refs=[evidence.evidence_id], tenant_id=tenant_id, commit=False)
             created += 1
     except Exception:
@@ -1448,12 +1452,12 @@ def _exception_payload(row: ContractExceptionRecord) -> dict[str, Any]:
     }
 
 
-def _contract_metrics(req: PartRequest, positions: list[ContractPosition], requirements: list[ContractRequirement],
-                      gaps: list[ContractGap], evidence_by_position: dict[str, list[PriceEvidence]],
-                      exports: list[ContractExport], approvals: list[ClientApproval],
-                      authorizations: list[PurchaseAuthorization], exceptions: list[ContractExceptionRecord],
-                      workflow_events: list[ContractWorkflowEvent], purchases: list[ContractPurchaseRecord],
-                      receipts: list[ContractReceiptVerification], archives: list[ContractArchiveRecord]) -> dict[str, Any]:
+def _contract_metrics(req: PartRequest, positions: Sequence[ContractPosition], requirements: Sequence[ContractRequirement],
+                      gaps: Sequence[ContractGap], evidence_by_position: dict[str, list[PriceEvidence]],
+                      exports: Sequence[ContractExport], approvals: Sequence[ClientApproval],
+                      authorizations: Sequence[PurchaseAuthorization], exceptions: Sequence[ContractExceptionRecord],
+                      workflow_events: Sequence[ContractWorkflowEvent], purchases: Sequence[ContractPurchaseRecord],
+                      receipts: Sequence[ContractReceiptVerification], archives: Sequence[ContractArchiveRecord]) -> dict[str, Any]:
     requirement_total = len(requirements)
     requirement_covered = len([row for row in requirements if row.coverage_status == "Covered"])
     position_total = len(positions)
@@ -1534,7 +1538,7 @@ def list_contract_exceptions(session: Session, request_id: str, tenant_id: str) 
     rows = session.exec(select(ContractExceptionRecord).where(
         ContractExceptionRecord.request_id == request_id,
         ContractExceptionRecord.tenant_id == tenant_id,
-    ).order_by(ContractExceptionRecord.created_at)).all()
+    ).order_by(col(ContractExceptionRecord.created_at))).all()
     return {"request_id": request_id, "exceptions": [_exception_payload(row) for row in rows]}
 
 
@@ -1614,11 +1618,11 @@ def get_control_plane(session: Session, request_id: str, tenant_id: str) -> dict
     gaps = session.exec(select(ContractGap).where(
         ContractGap.request_id == request_id,
         ContractGap.tenant_id == tenant_id,
-    ).order_by(ContractGap.created_at)).all()
+    ).order_by(col(ContractGap.created_at))).all()
     adrs = session.exec(select(AdaptationDecisionRecord).where(
         AdaptationDecisionRecord.request_id == request_id,
         AdaptationDecisionRecord.tenant_id == tenant_id,
-    ).order_by(AdaptationDecisionRecord.created_at)).all()
+    ).order_by(col(AdaptationDecisionRecord.created_at))).all()
     approvals = session.exec(select(ClientApproval).where(
         ClientApproval.request_id == request_id,
         ClientApproval.tenant_id == tenant_id,
@@ -1639,24 +1643,24 @@ def get_control_plane(session: Session, request_id: str, tenant_id: str) -> dict
     exceptions = session.exec(select(ContractExceptionRecord).where(
         ContractExceptionRecord.request_id == request_id,
         ContractExceptionRecord.tenant_id == tenant_id,
-    ).order_by(ContractExceptionRecord.created_at)).all()
+    ).order_by(col(ContractExceptionRecord.created_at))).all()
     purchases = session.exec(select(ContractPurchaseRecord).where(
         ContractPurchaseRecord.request_id == request_id,
         ContractPurchaseRecord.tenant_id == tenant_id,
-    ).order_by(ContractPurchaseRecord.ordered_at)).all()
+    ).order_by(col(ContractPurchaseRecord.ordered_at))).all()
     receipts = session.exec(select(ContractReceiptVerification).where(
         ContractReceiptVerification.request_id == request_id,
         ContractReceiptVerification.tenant_id == tenant_id,
-    ).order_by(ContractReceiptVerification.verified_at)).all()
+    ).order_by(col(ContractReceiptVerification.verified_at))).all()
     archives = session.exec(select(ContractArchiveRecord).where(
         ContractArchiveRecord.request_id == request_id,
         ContractArchiveRecord.tenant_id == tenant_id,
-    ).order_by(ContractArchiveRecord.archived_at)).all()
+    ).order_by(col(ContractArchiveRecord.archived_at))).all()
     workflow = _workflow_state(session, req, "system")
     workflow_events = session.exec(select(ContractWorkflowEvent).where(
         ContractWorkflowEvent.request_id == request_id,
         ContractWorkflowEvent.tenant_id == tenant_id,
-    ).order_by(ContractWorkflowEvent.id)).all()
+    ).order_by(col(ContractWorkflowEvent.id))).all()
     return {
         "request_id": request_id,
         "contract_ref": CONTRACT_REF,
@@ -1874,7 +1878,7 @@ def record_purchase(session: Session, request_id: str, tenant_id: str, authoriza
         authorization_id=authorization_id,
         supplier_ref=supplier_ref.strip(),
         ordered_by=actor,
-        amount_total=round(float(amount_total), 2) if amount_total is not None else _selected_contract_total(session, request_id, tenant_id),
+        amount_total=round(amount_total, 2) if amount_total is not None else _selected_contract_total(session, request_id, tenant_id),
         evidence_ref=evidence_ref,
         comment=comment,
     )
@@ -1939,7 +1943,7 @@ def archive_contract(session: Session, request_id: str, tenant_id: str, receipt_
         ContractExport.request_id == request_id,
         ContractExport.tenant_id == tenant_id,
         ContractExport.diff_status == "validated",
-    ).order_by(ContractExport.id.desc())).first()
+    ).order_by(col(ContractExport.id).desc())).first()
     archive = ContractArchiveRecord(
         tenant_id=tenant_id,
         archive_id=_rid("ARC"),
@@ -1987,7 +1991,7 @@ def export_custom_contract_xlsx(
     from suppliers import Supplier, SupplierTableRow
 
     def _clean_oem(oem: str) -> str:
-        return re.sub(r"[^a-zA-Z0-9а-яА-Я]", "", str(oem or "")).upper()
+        return re.sub(r"[^a-zA-Z0-9а-яА-Я]", "", oem or "").upper()
 
     FONT_FAMILY = "DIN Alternate"
 
@@ -2007,6 +2011,10 @@ def export_custom_contract_xlsx(
         raise ValueError("Шаблон выгрузки не найден: экспорт заблокирован до загрузки production-шаблона")
     wb = openpyxl.load_workbook(template_path, data_only=False)
     ws = wb.active
+    assert ws is not None
+
+    def _c(row: int, column: int) -> Cell:
+        return cast(Cell, ws.cell(row=row, column=column))
 
     # 2. Получаем поставщиков
     all_suppliers = session.exec(select(Supplier).where(Supplier.tenant_id == tenant_id)).all()
@@ -2027,23 +2035,23 @@ def export_custom_contract_xlsx(
         raise ValueError("Недостаточно live-поставщиков для выгрузки: требуется минимум 3")
 
     # Заменяем имена маркетплейсов в шапке (строка 3)
-    ws.cell(row=3, column=4).value = selected_suppliers[0].name
-    ws.cell(row=3, column=5).value = selected_suppliers[1].name
-    ws.cell(row=3, column=6).value = selected_suppliers[2].name
+    _c(3, 4).value = selected_suppliers[0].name
+    _c(3, 5).value = selected_suppliers[1].name
+    _c(3, 6).value = selected_suppliers[2].name
     
-    ws.cell(row=3, column=10).value = selected_suppliers[0].name
-    ws.cell(row=3, column=11).value = selected_suppliers[1].name
-    ws.cell(row=3, column=12).value = selected_suppliers[2].name
+    _c(3, 10).value = selected_suppliers[0].name
+    _c(3, 11).value = selected_suppliers[1].name
+    _c(3, 12).value = selected_suppliers[2].name
 
     # Записываем заголовок в строку 1
-    now_str = datetime.utcnow().strftime("%d.%m.%Y %H:%M UTC")
-    ws.cell(row=1, column=1).value = f"ОТЧЕТ О СБОРЕ ЦЕН И АНАЛОГОВ ПО ЗАПРОСУ {request_id} (Дата: {now_str} | Система PartsOps AI v6.0)"
+    now_str = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+    _c(1, 1).value = f"ОТЧЕТ О СБОРЕ ЦЕН И АНАЛОГОВ ПО ЗАПРОСУ {request_id} (Дата: {now_str} | Система PartsOps AI v6.0)"
 
     # 3. Получаем позиции
     positions = session.exec(select(ContractPosition).where(
         ContractPosition.request_id == request_id,
         ContractPosition.tenant_id == tenant_id
-    ).order_by(ContractPosition.line_no)).all()
+    ).order_by(col(ContractPosition.line_no))).all()
 
     def copy_4row_block_style_and_merge(ws, src_start, dest_start, is_even=False):
         for r_offset in range(4):
@@ -2054,8 +2062,8 @@ def export_custom_contract_xlsx(
                 ws.row_dimensions[dest_row].height = ws.row_dimensions[src_row].height
                 
             for col in range(1, 14):
-                src_cell = ws.cell(row=src_row, column=col)
-                dest_cell = ws.cell(row=dest_row, column=col)
+                src_cell = _c(src_row, col)
+                dest_cell = _c(dest_row, col)
                 
                 dest_cell.font = copy(src_cell.font)
                 dest_cell.border = copy(src_cell.border)
@@ -2068,7 +2076,7 @@ def export_custom_contract_xlsx(
             for r_offset in range(3):
                 dest_row = dest_start + r_offset
                 for col in range(1, 8):
-                    ws.cell(row=dest_row, column=col).fill = zebra_fill
+                    _c(dest_row, col).fill = zebra_fill
         
         for col in range(1, 9):
             ws.merge_cells(start_row=dest_start, start_column=col, end_row=dest_start+2, end_column=col)
@@ -2091,15 +2099,15 @@ def export_custom_contract_xlsx(
         oem_total_cells.append(f"G{start_row}")
         
         # Столбцы 1-3
-        ws.cell(row=start_row, column=1).value = idx
-        ws.cell(row=start_row, column=2).value = pos.description or "Автозапчасть"
-        ws.cell(row=start_row, column=3).value = pos.part_number
+        _c(start_row, 1).value = idx
+        _c(start_row, 2).value = pos.description or "Автозапчасть"
+        _c(start_row, 3).value = pos.part_number
         
         # Столбцы 4-6 (Цены оригинала у поставщиков)
         oem_prices = []
         for s_idx, supplier in enumerate(selected_suppliers):
             col_idx = 4 + s_idx
-            cell = ws.cell(row=start_row, column=col_idx)
+            cell = _c(start_row, col_idx)
             
             clean_oem = _clean_oem(pos.part_number)
             row_price = session.exec(select(SupplierTableRow).where(
@@ -2143,9 +2151,9 @@ def export_custom_contract_xlsx(
         # Столбец 7 (Стоимость оригинала: лучшая числовая цена из трех предложенных * количество)
         if oem_prices:
             best_oem_price = min(oem_prices)
-            ws.cell(row=start_row, column=7).value = round(best_oem_price * qty, 2)
+            _c(start_row, 7).value = round(best_oem_price * qty, 2)
         else:
-            ws.cell(row=start_row, column=7).value = "-"
+            _c(start_row, 7).value = "-"
 
         # 5. Аналоги (ровно 3 строки)
         analogs = session.exec(select(AnalogCandidate).where(
@@ -2156,7 +2164,7 @@ def export_custom_contract_xlsx(
         # Missing analog evidence remains empty; it is never promoted to approved.
         for a_idx in range(3):
             row_num = start_row + a_idx
-            cell_i = ws.cell(row=row_num, column=9)
+            cell_i = _c(row_num, 9)
             
             if a_idx < len(analogs):
                 analog = analogs[a_idx]
@@ -2166,7 +2174,7 @@ def export_custom_contract_xlsx(
                 analog_prices = []
                 for s_idx, supplier in enumerate(selected_suppliers):
                     col_idx = 10 + s_idx
-                    cell = ws.cell(row=row_num, column=col_idx)
+                    cell = _c(row_num, col_idx)
                     
                     row_price = session.exec(select(SupplierTableRow).where(
                         SupplierTableRow.supplier_id == supplier.supplier_id,
@@ -2193,15 +2201,15 @@ def export_custom_contract_xlsx(
                         
                 if analog_prices:
                     best_anl_price = min(analog_prices)
-                    ws.cell(row=row_num, column=13).value = round(best_anl_price * qty, 2)
+                    _c(row_num, 13).value = round(best_anl_price * qty, 2)
                 else:
-                    ws.cell(row=row_num, column=13).value = "-"
+                    _c(row_num, 13).value = "-"
             else:
                 cell_i.value = "-"
-                ws.cell(row=row_num, column=10).value = "-"
-                ws.cell(row=row_num, column=11).value = "-"
-                ws.cell(row=row_num, column=12).value = "-"
-                ws.cell(row=row_num, column=13).value = "-"
+                _c(row_num, 10).value = "-"
+                _c(row_num, 11).value = "-"
+                _c(row_num, 12).value = "-"
+                _c(row_num, 13).value = "-"
 
     # 6. Добавление ИТОГОВОЙ строки (TOTAL ROW) только для колонок G и M
     last_data_row = 4 + 4 * len(positions)
@@ -2212,28 +2220,28 @@ def export_custom_contract_xlsx(
     total_fill = PatternFill(start_color="EEEEEE", end_color="EEEEEE", fill_type="solid")
     
     ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=6)
-    tot_label = ws.cell(row=total_row, column=1)
+    tot_label = _c(total_row, 1)
     tot_label.value = "ИТОГО ПО ДОГОВОРУ:"
     tot_label.font = bold_font
     tot_label.alignment = Alignment(horizontal="right", vertical="center")
     
     oem_sum_formula = "=SUM(" + ",".join(oem_total_cells) + ")" if oem_total_cells else "=0"
-    cell_g_tot = ws.cell(row=total_row, column=7)
+    cell_g_tot = _c(total_row, 7)
     cell_g_tot.value = oem_sum_formula
     cell_g_tot.font = Font(name="DIN Alternate", size=13, bold=True, color="000000")
     cell_g_tot.alignment = Alignment(horizontal="center", vertical="center")
     cell_g_tot.fill = total_fill
 
-    ws.cell(row=total_row, column=8).value = ""
+    _c(total_row, 8).value = ""
     
-    tot_anl_label = ws.cell(row=total_row, column=9)
+    tot_anl_label = _c(total_row, 9)
     tot_anl_label.value = "ИТОГО АНАЛОГИ:"
     tot_anl_label.font = bold_font
     tot_anl_label.alignment = Alignment(horizontal="right", vertical="center")
     
     first_anl_row = 5
     last_anl_row = last_data_row - 1
-    cell_m_tot = ws.cell(row=total_row, column=13)
+    cell_m_tot = _c(total_row, 13)
     cell_m_tot.value = f"=SUM(M{first_anl_row}:M{last_anl_row})"
     cell_m_tot.font = Font(name="DIN Alternate", size=13, bold=True, color="000000")
     cell_m_tot.alignment = Alignment(horizontal="center", vertical="center")

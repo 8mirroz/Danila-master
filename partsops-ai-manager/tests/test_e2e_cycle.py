@@ -139,6 +139,7 @@ def run_single_test(scenario: dict, session: Session) -> TestResult:
 
     # 1. Agent processing
     t0 = time.perf_counter()
+    agent_result = None
     try:
         agent_result = process_intake_request(scenario["text"])
         result.agent_time_ms = round((time.perf_counter() - t0) * 1000, 2)
@@ -151,7 +152,7 @@ def run_single_test(scenario: dict, session: Session) -> TestResult:
     result.status_correct = result.actual_status == result.expected_status
 
     # 2. Matching (separate timing)
-    extracted_parts = agent_result.get("extracted_parts", []) if "agent_result" not in str(result.errors) else []
+    extracted_parts = agent_result.get("extracted_parts", []) if agent_result is not None else []
     t1 = time.perf_counter()
     try:
         for part in extracted_parts:

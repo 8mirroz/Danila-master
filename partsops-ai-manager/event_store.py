@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlmodel import Session, select
+from sqlmodel import Session, select, col
 
 from models import EventType, RequestEvent
 
@@ -50,7 +50,7 @@ def _get_last_event_hash(request_id: str, session: Session, tenant_id: Optional[
     query = select(RequestEvent).where(RequestEvent.request_id == request_id)
     if tenant_id is not None:
         query = query.where(RequestEvent.tenant_id == tenant_id)
-    events = session.exec(query.order_by(RequestEvent.id.desc())).all()
+    events = session.exec(query.order_by(col(RequestEvent.id).desc())).all()
     return events[0].event_hash if events else None
 
 
@@ -92,7 +92,7 @@ def get_events(request_id: str, session: Session, tenant_id: Optional[str] = Non
     query = select(RequestEvent).where(RequestEvent.request_id == request_id)
     if tenant_id is not None:
         query = query.where(RequestEvent.tenant_id == tenant_id)
-    return session.exec(query.order_by(RequestEvent.id.asc())).all()
+    return list(session.exec(query.order_by(col(RequestEvent.id).asc())).all())
 
 
 def verify_event_chain(request_id: str, session: Session, tenant_id: Optional[str] = None) -> dict:

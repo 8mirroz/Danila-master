@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from pydantic import BaseModel, Field
-from sqlmodel import Session, select
+from sqlmodel import Session, select, col
 
 from database import get_session
 from rbac import get_privileged_tenant
@@ -169,7 +169,7 @@ async def upload_crawler_results(request_id: str, file: UploadFile = File(...),
 @router.get("/{request_id}/positions")
 def positions(request_id: str, session: Session = Depends(get_session), tenant_id: str = Depends(get_privileged_tenant)):
     rows = session.exec(select(ContractPosition).where(ContractPosition.request_id == request_id,
-                                                       ContractPosition.tenant_id == tenant_id).order_by(ContractPosition.line_no)).all()
+                                                       ContractPosition.tenant_id == tenant_id).order_by(col(ContractPosition.line_no))).all()
     return [{"position_id": row.position_id, "line_no": row.line_no, "part_number": row.part_number,
              "description": row.description, "quantity": row.quantity, "review_status": row.review_status,
              "selected_evidence_id": row.selected_evidence_id, "position_uuid": row.position_uuid,
@@ -198,7 +198,7 @@ def positions(request_id: str, session: Session = Depends(get_session), tenant_i
 @router.get("/{request_id}/crawler-manifest")
 def crawler_manifest(request_id: str, session: Session = Depends(get_session), tenant_id: str = Depends(get_privileged_tenant)):
     rows = session.exec(select(ContractPosition).where(ContractPosition.request_id == request_id,
-                                                       ContractPosition.tenant_id == tenant_id).order_by(ContractPosition.line_no)).all()
+                                                       ContractPosition.tenant_id == tenant_id).order_by(col(ContractPosition.line_no))).all()
     if not rows:
         raise HTTPException(status_code=404, detail="Contract request not found")
     return {"request_id": request_id, "contract_ref": "2026.170160",

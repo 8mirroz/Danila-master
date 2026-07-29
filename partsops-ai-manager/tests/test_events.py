@@ -49,6 +49,7 @@ class TestEventEmission:
         import json
         payload = {"source": "telegram", "parts_count": 3}
         event = emit_event(session, "REQ-001", EventType.REQUEST_RECEIVED, payload=payload)
+        assert event.payload_json is not None
         stored_payload = json.loads(event.payload_json)
         assert stored_payload["source"] == "telegram"
         assert stored_payload["parts_count"] == 3
@@ -57,6 +58,7 @@ class TestEventEmission:
         event = emit_state_change(session, "REQ-001", "NEW", "NORMALIZING", reason="Test")
         assert event.event_type == EventType.STATE_CHANGED
         import json
+        assert event.payload_json is not None
         payload = json.loads(event.payload_json)
         assert payload["from"] == "NEW"
         assert payload["to"] == "NORMALIZING"

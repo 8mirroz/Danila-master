@@ -141,7 +141,7 @@ test.describe('PartsOps AI Manager E2E', () => {
   };
 
   const clickPaletteButton = async (page: any, label: string) => {
-    await page.evaluate((l) => {
+    await page.evaluate((l: string) => {
       const palette = document.querySelector('input[placeholder*="команду"]')?.closest('div.fixed');
       const btn = Array.from(palette?.querySelectorAll('button') ?? []).find((b) =>
         b.textContent?.trim().includes(l)

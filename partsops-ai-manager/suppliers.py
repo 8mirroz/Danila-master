@@ -97,7 +97,7 @@ class SupplierCatalogItem(SQLModel, table=True):
     stock_qty: int = 0
     delivery_days: int = 0
     category: str = ""  # brake, filter, engine, body, etc.
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Invoice(SQLModel, table=True):
@@ -113,7 +113,7 @@ class Invoice(SQLModel, table=True):
     tax: float = 0.0
     total: float = 0.0
     status: str = Field(default="DRAFT")  # DRAFT -> SENT -> PAID -> CLOSED
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ──────────────────────────────────────────────

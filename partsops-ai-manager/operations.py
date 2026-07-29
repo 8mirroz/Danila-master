@@ -1,7 +1,7 @@
 """
 Operations algorithms: Greedy Minimum Weight Set Cover and Multi-Criteria Ranking (SAW).
 """
-from typing import List, Dict, Set, Any
+from typing import List, Dict, Set, Any, Optional
 import math
 
 # ──────────────────────────────────────────────
@@ -17,7 +17,7 @@ def normalize(value: float, v_min: float, v_max: float, larger_is_better: bool =
     else:
         return (v_max - value) / (v_max - v_min)
 
-def rank_offers(offers: List[Dict[str, Any]], weights: Dict[str, float] = None) -> List[Dict[str, Any]]:
+def rank_offers(offers: List[Dict[str, Any]], weights: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
     """
     Rank offers using Simple Additive Weighting (SAW).
     Expected offer format:

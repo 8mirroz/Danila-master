@@ -360,7 +360,7 @@ def sync_results_to_evidence(
             position_id=item.article,
             tenant_id=run_result.tenant_id,
             source=f"{item.site}.ru",
-            price=item.price,
+            price=item.price if item.price is not None else 0.0,
             currency=item.currency,
             source_url=item.source_url,
             captured_at=_dt.fromisoformat(item.captured_at.replace("Z", "+00:00"))
