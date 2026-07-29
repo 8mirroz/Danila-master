@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 
 test.describe('PartsOps AI Manager E2E', () => {
   test.beforeEach(async ({ page }) => {
+    await page.route('**/api/session', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ tenant_id: 'default', role: 'manager', authenticated: true, auth_mode: 'token', permissions: { can_manage_matching: true } }),
+      });
+    });
     await page.route('**/api/admin/data-health', async (route) => {
       await route.fulfill({
         status: 200,
@@ -66,22 +73,35 @@ test.describe('PartsOps AI Manager E2E', () => {
       }
     });
 
-    await page.route('**/api/suppliers', async (route) => {
+    await page.route(/\/api\/suppliers(\?.*)?$/, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
           {
-            id: '1',
             supplier_id: 'SUP-001',
             name: 'Nordline Supply',
-            rating: 4.8,
-            active: true,
+            contact_person: 'Иван Петров',
+            phone: '+7-495-111-22-33',
+            email: 'sales@nordline.test',
+            city: 'Москва',
+            specialization: 'OEM',
+            reliability_score: 0.94,
+            avg_delivery_days: 3,
+            status: 'active',
+            rating_manual: 4.8,
+            rating_auto: 0.9,
+            account_owner: 'Ops',
+            payment_terms: 'Net 30',
+            delivery_terms: 'EXW',
+            currency_default: 'RUB',
+            notes_internal: '',
+            last_feed_at: new Date().toISOString(),
+            last_sync_status: 'synced',
             categories: ['Тормозная система'],
-            regions: ['МСК'],
-            catalog_type: 'API',
-            reliability_score: 95,
-            feed_updated_at: new Date().toISOString(),
+            table_count: 1,
+            active_table_count: 1,
+            last_activity_at: new Date().toISOString(),
           },
         ]),
       });
@@ -122,7 +142,8 @@ test.describe('PartsOps AI Manager E2E', () => {
 
   const clickPaletteButton = async (page: any, label: string) => {
     await page.evaluate((l) => {
-      const btn = Array.from(document.querySelectorAll('button')).find((b) =>
+      const palette = document.querySelector('input[placeholder*="команду"]')?.closest('div.fixed');
+      const btn = Array.from(palette?.querySelectorAll('button') ?? []).find((b) =>
         b.textContent?.trim().includes(l)
       );
       if (btn) btn.click();
@@ -130,7 +151,7 @@ test.describe('PartsOps AI Manager E2E', () => {
   };
 
   test('should load dashboard and show workspace title', async ({ page }) => {
-    await expect(page.locator('h2:has-text("Операционный пульт закупок")').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h2:has-text("Рабочая очередь PartsOps")').first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('text=Активная очередь').first()).toBeVisible();
     await expect(page.locator('text=Нагрузка согласования')).toBeVisible();
   });
@@ -139,7 +160,7 @@ test.describe('PartsOps AI Manager E2E', () => {
     await openCommandPalette(page);
 
     await expect(page.locator('text=Навигация')).toBeVisible();
-    await expect(page.locator('text=Действия')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Действия', exact: true })).toBeVisible();
     await expect(page.locator('text=Помощь')).toBeVisible();
 
     await page.keyboard.press('Escape');
@@ -173,7 +194,7 @@ test.describe('PartsOps AI Manager E2E', () => {
     await page.getByRole('button', { name: 'Запустить pipeline для REQ-4821', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Подтверждение запуска pipeline' })).toBeVisible();
     await expect(page.getByText('Финальный этап определяет pipeline, а не drag-and-drop.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Запустить pipeline' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Запустить pipeline', exact: true })).toBeVisible();
   });
 
   test('Right panel shows request queue', async ({ page }) => {
@@ -191,6 +212,8 @@ test.describe('PartsOps AI Manager E2E', () => {
     await openCommandPalette(page);
     await clickPaletteButton(page, 'Каталог поставщиков');
 
-    await expect(page.locator('button:has-text("Поставщики"), button:has-text("Каталог поставщиков")').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Поставщики' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'Добавить поставщика' })).toBeVisible();
+    await expect(page.getByText('Nordline Supply')).toBeVisible();
   });
 });

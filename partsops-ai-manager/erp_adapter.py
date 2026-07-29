@@ -115,6 +115,7 @@ def sync_invoice_draft(
     session: Session,
     tenant_id: str = "default",
     dry_run: Optional[bool] = None,
+    idempotency_key: Optional[str] = None,
 ) -> dict:
     """
     Synchronize an invoice draft to ERPNext via Transactional Outbox.
@@ -155,6 +156,9 @@ def sync_invoice_draft(
         }
     
     # Idempotency: check if already synced
+    # Invoice reference is the durable business key. Client idempotency keys
+    # are recorded only as correlation context and must not create a second
+    # ERP document for the same invoice.
     idempotency_key = f"erp-sync-invoice-{invoice.invoice_number}"
     existing_sync = session.exec(
         select(ERPSyncLog).where(

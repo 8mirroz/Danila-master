@@ -1,325 +1,138 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActionButton, InlineAlert } from './Primitives';
 import { apiFetch } from '../lib/api';
 
-type MatchItem = {
-  item: { name: string; price: number };
-  supplier: { name: string; reliability_score: number };
-};
-
 type PricingCalculatorProps = {
-  parts: Array<{ 
-    name: string; 
-    quantity: number; 
-    best_match?: MatchItem['item'] & { 
-      price: number;
-      price_deviation_from_median?: number;
-    } 
-  }>;
-  onDraftInvoice: (invoiceData: any) => void;
   requestId: string;
+  version?: string | null;
   isApproved: boolean;
+  canCreateInvoice: boolean;
+  canSyncErp: boolean;
   erpQuotationRef?: string | null;
-  allowedNextStates?: string[];
-  onTransition?: (targetState: string, reason: string) => Promise<void>;
+  onDraftInvoice: (invoiceData: any) => void;
 };
 
-export const PricingCalculator = ({
-  parts: _parts,
-  onDraftInvoice,
-  requestId,
-  isApproved,
-  erpQuotationRef,
-  allowedNextStates: _allowedNextStates = [],
-  onTransition: _onTransition,
-}: PricingCalculatorProps) => {
-  const [logisticsCost, setLogisticsCost] = useState<number>(500);
-  const [marginOverride, setMarginOverride] = useState<number>(15);
-  const [urgency, setUrgency] = useState<string>("normal");
+type ErpStatus = {
+  sync_status: string;
+  invoice_ref?: string | null;
+  quotation_ref?: string | null;
+  last_error?: string | null;
+};
 
-  const [subtotal, setSubtotal] = useState(0);
-  const [tax, setTax] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [marginPolicyPassed, setMarginPolicyPassed] = useState(true);
-  const [violations, setViolations] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [erpStatus, setErpStatus] = useState<{ sync_status: string; invoice_ref?: string | null; quotation_ref?: string | null; last_error?: string | null } | null>(null);
-  const [erpStatusError, setErpStatusError] = useState<string | null>(null);
+export const PricingCalculator = ({ requestId, version, isApproved, canCreateInvoice, canSyncErp, erpQuotationRef, onDraftInvoice }: PricingCalculatorProps) => {
+  const [preview, setPreview] = useState<any | null>(null);
+  const [erpStatus, setErpStatus] = useState<ErpStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [drafting, setDrafting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setErpStatusError(null);
-    void apiFetch(`/api/erp/status/${requestId}`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`ERP status HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        if (!cancelled) setErpStatus(data);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setErpStatus(null);
-          setErpStatusError(error instanceof Error ? error.message : 'ERP status unavailable');
-        }
-      });
-    return () => { cancelled = true; };
-  }, [requestId]);
-
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!requestId) {
-      setSubtotal(0);
-      setTax(0);
-      setTotal(0);
-      return;
-    }
-
-    const loadPreview = async () => {
-      setPreviewLoading(true);
-      setPreviewError(null);
-      try {
-          const res = await apiFetch(`/api/erp/pricing/preview/${requestId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            logistics_cost: logisticsCost,
-            target_margin_override: marginOverride / 100,
-            urgency_level: urgency,
-          }),
-        });
-
-        if (!res.ok) {
-          const errorBody = await res.json().catch(() => null);
-          throw new Error(errorBody?.detail || `Request failed: ${res.status} ${res.statusText}`);
-        }
-
-        const data = await res.json();
-        if (cancelled) return;
-
-          const pricing = data.pricing || {};
-        setSubtotal(Math.round(pricing.subtotal_before_tax || 0));
-        setTax(Math.round(pricing.tax_amount || 0));
-        setTotal(Math.round(pricing.client_price || 0));
-        setMarginPolicyPassed(Boolean(pricing.margin_policy_passed));
-        setViolations([
-          ...(pricing.violations || []),
-          ...(pricing.margin_violations || []),
-          ...(pricing.warnings || []),
-        ]);
-      } catch (error) {
-        if (cancelled) return;
-        setPreviewError(error instanceof Error ? error.message : 'Не удалось получить pricing preview');
-        setSubtotal(0);
-        setTax(0);
-        setTotal(0);
-        setViolations([]);
-        setMarginPolicyPassed(false);
-      } finally {
-        if (!cancelled) {
-          setPreviewLoading(false);
-        }
-      }
-    };
-
-    void loadPreview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [logisticsCost, marginOverride, requestId, urgency]);
-
-  const handleCreateDraft = async () => {
-    if (!isApproved) {
-      alert("Заказ должен быть согласован перед выпиской счета.");
-      return;
-    }
+  const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const res = await apiFetch(`/api/erp/invoice/${requestId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          logistics_cost: logisticsCost,
-          target_margin_override: marginOverride / 100,
-          urgency_level: urgency,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        onDraftInvoice(data);
-      } else {
-        const err = await res.json().catch(() => null);
-        const detail = typeof err?.detail === 'string'
-          ? err.detail
-          : err?.detail?.reason || err?.detail?.message || 'ошибка API';
-        alert(`Не удалось создать счет: ${detail}`);
+      const [pricingResponse, erpResponse] = await Promise.all([
+        apiFetch(`/api/erp/pricing/preview/${requestId}`, { method: 'POST' }),
+        apiFetch(`/api/erp/status/${requestId}`),
+      ]);
+      if (!pricingResponse.ok) {
+        const body = await pricingResponse.json().catch(() => null);
+        throw new Error(body?.detail || `Pricing preview недоступен (HTTP ${pricingResponse.status})`);
       }
-    } catch (e) {
-      console.error("Error drafting invoice", e);
-      alert("Не удалось создать счет: backend недоступен");
+      setPreview((await pricingResponse.json()).pricing ?? null);
+      if (erpResponse.ok) setErpStatus(await erpResponse.json());
+      else setErpStatus(null);
+    } catch (cause) {
+      setPreview(null);
+      setErpStatus(null);
+      setError(cause instanceof Error ? cause.message : 'Не удалось загрузить pricing');
     } finally {
       setLoading(false);
     }
+  }, [requestId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const createDraft = async () => {
+    setDrafting(true);
+    setError(null);
+    try {
+      const response = await apiFetch(`/api/requests/${requestId}/actions/create_invoice`, {
+        method: 'POST', headers: version ? { 'X-Request-Version': version } : undefined,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.detail || `Не удалось создать черновик (HTTP ${response.status})`);
+      onDraftInvoice(payload);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Backend недоступен: черновик не создан');
+    } finally {
+      setDrafting(false);
+    }
   };
 
-  return (
-    <div className="glass-panel-dark rounded-2xl text-slate-200 p-5 space-y-5 border border-slate-800 shadow-2xl">
-      {/* Header Banner */}
-      {previewError && <InlineAlert type="danger" message={`Pricing preview недоступен: ${previewError}`} />}
-      
-      <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-        <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-200">
-          <i className="fas fa-calculator text-emerald-400" />
-          <span>Калькулятор маржи & Консоль Синхронизации ERP</span>
-        </h3>
-        <span className="font-mono text-xs text-slate-400">
-              Request Ref: <strong className="text-emerald-400 font-mono">{requestId}</strong>
-              {erpQuotationRef && <span className="ml-2">Quotation: <strong className="text-emerald-400 font-mono">{erpQuotationRef}</strong></span>}
-        </span>
+  const syncErp = async () => {
+    setSyncing(true);
+    setError(null);
+    try {
+      const response = await apiFetch(`/api/erp/sync/${requestId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(version ? { 'X-Request-Version': version } : {}) },
+        body: '{}',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.detail || `ERP недоступна (HTTP ${response.status})`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'ERP sync не выполнен');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const policyPassed = Boolean(preview?.margin_policy_passed) && !(preview?.margin_violations?.length);
+  const invoiceAvailable = Boolean(erpStatus?.invoice_ref);
+  const syncFailed = ['FAILED', 'RETRYING'].includes((erpStatus?.sync_status ?? '').toUpperCase());
+
+  return <section className="glass-panel-dark rounded-2xl border border-slate-800 p-5 text-slate-200 shadow-2xl space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+      <div>
+        <h3 className="text-xs font-bold uppercase tracking-wider">Pricing и ERP</h3>
+        <p className="mt-1 text-[11px] text-slate-400">Расчёт выполняется серверной policy; ручные client-side overrides отключены.</p>
       </div>
-
-      {/* Main 2-Column Grid: Pricing Left, ERP Console Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: Pricing Controls & Margin Guard */}
-        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/80 p-4">
-          <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              Параметры Ценообразования
-            </span>
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold border ${
-              marginPolicyPassed 
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
-                : 'bg-red-500/20 text-red-400 border-red-500/30'
-            }`}>
-              <i className={`fas ${marginPolicyPassed ? 'fa-shield-check' : 'fa-triangle-exclamation'}`} />
-              <span>{marginPolicyPassed ? 'Margin Policy Passed' : 'Policy Violation'}</span>
-            </span>
-          </div>
-
-          {/* Slider Margin */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs font-semibold text-slate-300">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Целевая наценка (Margin Override)</span>
-              <span className="font-mono text-emerald-400 font-bold">{marginOverride}%</span>
-            </div>
-            <input 
-              type="range" 
-              min="5" 
-              max="40" 
-              value={marginOverride}
-              onChange={(e) => setMarginOverride(Number(e.target.value))}
-              className="w-full h-2 rounded-lg bg-slate-800 accent-emerald-400 cursor-pointer"
-            />
-          </div>
-
-          {/* Inputs: Logistics & Urgency */}
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <div>
-              <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-                Логистика (Logistics Fee)
-              </label>
-              <input 
-                type="number" 
-                value={logisticsCost}
-                onChange={(e) => setLogisticsCost(Number(e.target.value))}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white font-mono outline-none focus:border-emerald-400"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-                Срочность
-              </label>
-              <select 
-                value={urgency} 
-                onChange={(e) => setUrgency(e.target.value)}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-emerald-400"
-              >
-                <option value="normal">Обычная</option>
-                <option value="urgent">Срочно (+5%)</option>
-                <option value="critical">Критично (+10%)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Calculations Summary */}
-          <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-800 text-center">
-            <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
-              <span className="text-[9px] text-slate-400 block font-bold uppercase">Субтотал</span>
-              <span className="font-mono text-xs text-slate-200 font-bold">{subtotal.toLocaleString()} ₽</span>
-            </div>
-            <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
-              <span className="text-[9px] text-slate-400 block font-bold uppercase">НДС 20%</span>
-              <span className="font-mono text-xs text-slate-300 font-bold">{tax.toLocaleString()} ₽</span>
-            </div>
-            <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30">
-              <span className="text-[9px] text-emerald-400 block font-bold uppercase">Итого к оплате</span>
-              <span className="font-mono text-sm text-emerald-400 font-extrabold">{total.toLocaleString()} ₽</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: ERP Sync Status Console */}
-        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/80 p-4 flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3 mb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Консоль Синхронизации 1С/SAP ERP
-              </span>
-              <span className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
-                <span className="h-2 w-2 rounded-full bg-slate-500" />
-                <span>LIVE STATUS</span>
-              </span>
-            </div>
-
-            <div className="space-y-2.5 text-xs text-slate-300">
-              <div className="flex justify-between items-center p-2.5 rounded-xl border border-slate-800 bg-slate-950/60">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Quotation Reference</span>
-                <span className="font-mono text-emerald-400 font-bold">{requestId}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-2.5 rounded-xl border border-slate-800 bg-slate-950/60">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">ERP Sync Status</span>
-                <span className="font-mono text-white font-bold bg-slate-800 px-2 py-0.5 rounded">
-                  {erpStatus?.sync_status ?? erpStatusError ?? 'LOADING'}
-                </span>
-              </div>
-              {(erpStatus?.invoice_ref || erpStatus?.quotation_ref || erpStatus?.last_error) && (
-                <div className="space-y-1 rounded-xl border border-slate-800 bg-slate-950/60 p-2.5 text-[10px]">
-                  {erpStatus.quotation_ref && <div>Quotation: <span className="font-mono text-emerald-300">{erpStatus.quotation_ref}</span></div>}
-                  {erpStatus.invoice_ref && <div>Invoice: <span className="font-mono text-emerald-300">{erpStatus.invoice_ref}</span></div>}
-                  {erpStatus.last_error && <div className="text-rose-300">{erpStatus.last_error}</div>}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {!marginPolicyPassed && (
-            <InlineAlert 
-              type="danger" 
-              message={violations.join(', ')}
-            />
-          )}
-
-          <div className="pt-3">
-            {previewLoading && <div className="text-[10px] text-emerald-300">Пересчитываем live pricing…</div>}
-            <ActionButton 
-              variant="primary" 
-              icon="fa-file-invoice-dollar"
-              loading={loading}
-              disabled={!marginPolicyPassed || !isApproved}
-              onClick={handleCreateDraft}
-              className="w-full py-3 text-xs font-bold glow-emerald shadow-lg"
-            >
-              Draft Invoice in 1C / SAP ERP
-            </ActionButton>
-          </div>
-        </div>
-      </div>
+      <span className="font-mono text-[10px] text-slate-400">{erpStatus?.quotation_ref || erpQuotationRef || 'Quotation не создана'}</span>
     </div>
-  );
+    {error && <InlineAlert type="danger" message={error} />}
+    {loading ? <p className="text-xs text-slate-400">Загрузка подтверждённого расчёта…</p> : preview ? <>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <Metric label="Субтотал" value={preview.subtotal_before_tax} />
+        <Metric label="НДС" value={preview.tax_amount} />
+        <Metric label="Итого" value={preview.client_price} emphasis />
+      </div>
+      <div className={`rounded-xl border p-3 text-xs ${policyPassed ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-200' : 'border-rose-500/30 bg-rose-950/30 text-rose-200'}`}>
+        {policyPassed ? 'Pricing policy пройдена.' : (preview.margin_violations ?? preview.warnings ?? ['Pricing policy блокирует создание счета.']).join(' ')}
+      </div>
+    </> : <InlineAlert type="warning" message="Pricing evidence отсутствует или недоступен. Создание счета заблокировано." />}
+    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs">
+      <div className="flex justify-between gap-3"><span className="text-slate-400">ERP status</span><span className={syncFailed ? 'text-rose-300' : 'text-slate-100'}>{erpStatus?.sync_status ?? 'недоступен'}</span></div>
+      {erpStatus?.invoice_ref && <div className="mt-1 flex justify-between gap-3"><span className="text-slate-400">Invoice</span><span className="font-mono text-emerald-300">{erpStatus.invoice_ref}</span></div>}
+      {erpStatus?.last_error && <p className="mt-2 text-rose-300">{erpStatus.last_error}</p>}
+    </div>
+    <div className="flex flex-wrap gap-2">
+      <ActionButton variant="primary" icon="fa-file-invoice-dollar" loading={drafting} disabled={!isApproved || !canCreateInvoice || !policyPassed} onClick={() => void createDraft()}>
+        Создать черновик счета
+      </ActionButton>
+      {invoiceAvailable && canSyncErp && <ActionButton variant="secondary" icon="fa-rotate" loading={syncing} onClick={() => void syncErp()}>
+        {syncFailed ? 'Повторить ERP sync' : 'Синхронизировать ERP'}
+      </ActionButton>}
+    </div>
+    {!isApproved && <p className="text-[11px] text-amber-300">Черновик доступен только после finance approval.</p>}
+  </section>;
 };
+
+function Metric({ label, value, emphasis = false }: { label: string; value?: number; emphasis?: boolean }) {
+  return <div className={`rounded-lg border border-slate-800 p-2 ${emphasis ? 'bg-emerald-950/40 text-emerald-300' : 'bg-slate-950/60 text-slate-200'}`}>
+    <span className="block text-[9px] font-bold uppercase text-slate-400">{label}</span>
+    <span className="font-mono text-xs font-bold">{typeof value === 'number' ? `${Math.round(value).toLocaleString()} ₽` : '—'}</span>
+  </div>;
+}

@@ -69,7 +69,13 @@ class ManualCorrectionPayload(BaseModel):
 class MatchSelectionPayload(BaseModel):
     part_name: str = PydanticField(min_length=1)
     offer: dict[str, Any]
-    actor_id: str = "operator"
+
+
+class WorkspaceActionPayload(BaseModel):
+    target_state: Optional[str] = None
+    reason: str = ""
+    part_name: Optional[str] = None
+    offer: Optional[dict[str, Any]] = None
 
 
 class PipelineRunPayload(BaseModel):
@@ -85,6 +91,58 @@ class ImportFromArtifactPayload(BaseModel):
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _require_action_permission(action: str, principal: CurrentPrincipal) -> None:
+    permissions = RequestService._role_permissions(principal.role)
+    required = {
+        "select_offer": "can_manage_matching",
+        "create_invoice": "can_create_invoice",
+        "sync_erp": "can_sync_erp",
+        "retry_pipeline": "can_retry_pipeline",
+    }.get(action, "can_manage_matching")
+    if not permissions.get(required, False):
+        raise HTTPException(status_code=403, detail=f"Action '{action}' is not permitted for role {principal.role}")
+
+
+def _require_transition_permission(target_state: str, principal: CurrentPrincipal) -> None:
+    if target_state in RequestService.INTERNAL_ONLY_STATES:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "INTERNAL_TRANSITION_ONLY", "target_state": target_state},
+        )
+    permissions = RequestService._role_permissions(principal.role)
+    required = "can_manage_matching"
+    if target_state == "APPROVED":
+        required = "can_approve_pricing"
+    elif target_state == "ERP_SYNCING":
+        required = "can_sync_erp"
+    if not permissions.get(required, False):
+        raise HTTPException(status_code=403, detail=f"Transition to {target_state} is not permitted for role {principal.role}")
+
+
+def _require_current_version(session: Session, request_id: str, tenant_id: str, version: Optional[str]) -> None:
+    if not version:
+        return
+    request = RequestService.get_request(session, request_id, tenant_id)
+    current_version = request.updated_at.isoformat() if request.updated_at else ""
+    if version != current_version:
+        raise HTTPException(status_code=409, detail={
+            "code": "REQUEST_VERSION_CONFLICT",
+            "current_version": current_version,
+        })
+
+
+@router.get("/session")
+def get_session_identity(principal: CurrentPrincipal = Depends(get_current_principal)):
+    """Expose the authenticated server principal; the UI must not infer a role."""
+    return {
+        "tenant_id": principal.tenant_id,
+        "role": principal.role,
+        "authenticated": principal.authenticated,
+        "auth_mode": principal.auth_mode,
+        "permissions": RequestService._role_permissions(principal.role),
+    }
 
 
 @router.post("/attachments/upload", status_code=201)
@@ -146,8 +204,25 @@ async def upload_attachment(
 def get_requests(
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant),
+    principal: CurrentPrincipal = Depends(get_current_principal),
 ):
-    return RequestService.get_requests(session, tenant_id)
+    items = []
+    for request in RequestService.get_requests(session, tenant_id):
+        workspace = RequestService.get_workspace(session, request.request_id, tenant_id, principal.role)
+        actions = workspace["allowed_actions"]
+        targets = [action["target_state"] for action in actions if action.get("kind") == "transition" and action.get("target_state")]
+        items.append({
+            **request.model_dump(),
+            "allowed_targets": targets,
+            "allowed_actions": actions,
+            "recommended_action": actions[0] if actions else None,
+            "version": request.updated_at.isoformat() if request.updated_at else None,
+            "is_blocked": request.status in {
+                "FAILED", "ERP_SYNC_FAILED", "SUPPLIER_ISSUE", "NEEDS_CLARIFICATION",
+                "NEEDS_MANUAL_PARSE", "CLIENT_REJECTED", "EXPIRED",
+            },
+        })
+    return items
 
 
 @router.post("/requests/import-from-artifact")
@@ -269,19 +344,70 @@ def get_request(
     return RequestService.get_request(session, request_id, tenant_id)
 
 
+@router.get("/requests/{request_id}/workspace")
+def get_request_workspace(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+    principal: CurrentPrincipal = Depends(get_current_principal),
+):
+    return RequestService.get_workspace(session, request_id, tenant_id, principal.role)
+
+
 @router.post("/requests/{request_id}/transition")
 def transition_state(
     request_id: str,
     body: dict[str, Any] = Body(...),
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant),
+    principal: CurrentPrincipal = Depends(get_current_principal),
+    x_request_version: Optional[str] = Header(default=None),
 ):
     target_state = body.get("target_state")
     reason = body.get("reason", "")
-    actor_id = body.get("actor_id", "admin")
     if not target_state:
         raise HTTPException(status_code=400, detail="target_state is required")
-    return RequestService.transition_state(session, request_id, tenant_id, target_state, reason, actor_id)
+    _require_transition_permission(target_state, principal)
+    _require_current_version(session, request_id, tenant_id, x_request_version)
+    transition = RequestService.transition_state(
+        session, request_id, tenant_id, target_state, reason, actor_id=f"operator:{principal.role}"
+    )
+    return {"transition": transition, "workspace": RequestService.get_workspace(session, request_id, tenant_id, principal.role)}
+
+
+@router.post("/requests/{request_id}/actions/{action}")
+def execute_workspace_action(
+    request_id: str,
+    action: str,
+    payload: WorkspaceActionPayload,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+    principal: CurrentPrincipal = Depends(get_current_principal),
+    x_request_version: Optional[str] = Header(default=None),
+):
+    """Canonical mutation surface for the operator workspace."""
+    _require_current_version(session, request_id, tenant_id, x_request_version)
+    if action == "transition":
+        if not payload.target_state:
+            raise HTTPException(status_code=400, detail="target_state is required")
+        _require_transition_permission(payload.target_state, principal)
+        RequestService.transition_state(
+            session, request_id, tenant_id, payload.target_state, payload.reason,
+            actor_id=f"operator:{principal.role}",
+        )
+    elif action == "select_offer":
+        _require_action_permission(action, principal)
+        if not payload.part_name or not payload.offer:
+            raise HTTPException(status_code=400, detail="part_name and offer are required")
+        RequestService.select_match(
+            session, request_id, tenant_id, payload.part_name, payload.offer, actor_id=f"operator:{principal.role}"
+        )
+    elif action == "create_invoice":
+        _require_action_permission(action, principal)
+        RequestService.generate_invoice(session, request_id, tenant_id)
+    else:
+        raise HTTPException(status_code=404, detail=f"Unsupported workspace action: {action}")
+    return RequestService.get_workspace(session, request_id, tenant_id, principal.role)
 
 
 @router.post("/requests/{request_id}/correction")
@@ -382,14 +508,16 @@ def select_match(
     payload: MatchSelectionPayload,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant),
+    principal: CurrentPrincipal = Depends(get_current_principal),
 ):
+    _require_action_permission("select_offer", principal)
     return RequestService.select_match(
         session,
         request_id,
         tenant_id,
         payload.part_name,
         payload.offer,
-        payload.actor_id,
+        f"operator:{principal.role}",
     )
 
 
@@ -1082,26 +1210,23 @@ def export_request_excel(
             parts_list = json.loads(req.parts_json)
     except Exception:
         parts_list = []
+    if not isinstance(parts_list, list) or not parts_list:
+        raise HTTPException(status_code=422, detail="Экспорт заблокирован: в заявке нет подтверждённых позиций")
 
     start_data_row = header_row + 1
-    if not parts_list:
-        parts_list = [
-            {"name": "Комплект тормозных колодок", "oem": "34116858047", "quantity": 1, "price": 4500},
-            {"name": "Фильтр масляный ДВС", "oem": "11427953129", "quantity": 2, "price": 1200},
-        ]
 
     for idx, item in enumerate(parts_list, start=1):
-        name = item.get("name") or item.get("part_name") or "Автозапчасть"
-        oem = item.get("oem") or item.get("oem_number") or item.get("article") or "—"
-        qty = int(item.get("quantity") or 1)
-        supplier = item.get("supplier_name") or "Autodoc Direct (OEM)"
-        stock_qty = item.get("stock_qty") or 12
-        delivery_days = item.get("delivery_days") or 1
-        buy_price = float(item.get("price") or 3500.0)
-        margin_pct = 15.0
-        client_price = buy_price * (1 + margin_pct / 100.0)
-        row_total = client_price * qty
-        match_score = "98%"
+        name = item.get("name") or item.get("part_name") or ""
+        oem = item.get("oem") or item.get("oem_number") or item.get("article") or ""
+        qty = int(item.get("quantity") or 0)
+        supplier = item.get("supplier_name") or ""
+        stock_qty = item.get("stock_qty")
+        delivery_days = item.get("delivery_days")
+        buy_price = item.get("price")
+        margin_pct = item.get("margin_pct") or item.get("margin")
+        client_price = item.get("client_price")
+        row_total = item.get("line_total")
+        match_score = item.get("match_score") or item.get("score") or ""
 
         row_data = [idx, oem, name, supplier, stock_qty, delivery_days, buy_price, margin_pct, client_price, row_total, match_score]
         ws.append(row_data)

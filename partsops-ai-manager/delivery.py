@@ -2,7 +2,7 @@
 PartsOps AI Manager v3 — PDF Invoice & Delivery Channels (Phase 5).
 
 Implements:
-- InvoicePDFGenerator: Generates PDF invoice using reportlab (fallback to formatted HTML/text).
+- InvoicePDFGenerator: Generates PDF invoice using reportlab.
 - sanitize_for_delivery: Cleans text against prompt-injection (forget all, ignore previous instructions, etc.).
 - EmailAdapter: Queues and dispatches email notifications.
 - TelegramAdapter: Queues and dispatches telegram notifications.
@@ -34,9 +34,7 @@ class InvoicePDFGenerator:
     @staticmethod
     def generate(invoice: Invoice) -> bytes:
         """
-        Generate invoice content.
-        Uses reportlab if available; otherwise falls back to a clean, structured HTML/text representation.
-        Returns bytes representing the document content.
+        Generate invoice content. Reportlab is required for a valid PDF.
         """
         # Try importing reportlab
         try:
@@ -100,32 +98,8 @@ class InvoicePDFGenerator:
             buffer.close()
             return pdf_bytes
             
-        except ImportError:
-            # Fallback text/HTML representation
-            lines = [
-                f"=== INVOICE {invoice.invoice_number} ===",
-                f"Date: {invoice.created_at.strftime('%Y-%m-%d %H:%M')}",
-                f"Customer: {invoice.customer_name}",
-                "-" * 40,
-                f"{'Part Name':<25} | {'Qty':<4} | {'Price':<10} | {'Total':<10}",
-                "-" * 40,
-            ]
-            raw_items = json.loads(invoice.items_json) if invoice.items_json else []
-            for item in raw_items:
-                lines.append(
-                    f"{item.get('part_name', '')[:25]:<25} | "
-                    f"{item.get('quantity', 1):<4} | "
-                    f"{item.get('sale_price', 0):<10.2f} | "
-                    f"{item.get('line_total', 0):<10.2f}"
-                )
-            lines.extend([
-                "-" * 40,
-                f"Subtotal: {invoice.subtotal:.2f} RUB",
-                f"Tax: {invoice.tax:.2f} RUB",
-                f"Total: {invoice.total:.2f} RUB",
-                "========================="
-            ])
-            return "\n".join(lines).encode("utf-8")
+        except ImportError as exc:
+            raise RuntimeError("PDF generation unavailable: install the reportlab production dependency") from exc
 
 
 # ──────────────────────────────────────────────

@@ -318,9 +318,10 @@ async def sse_stream(request: Request, tenant_id: Optional[str] = None):
         visited_corr_cache: set[str] = set()
 
         async def event_generator():
-          last_request_count = 0
-          last_llm_cost = 0.0
-          last_llm_count = 0
+          last_request_count = -1
+          last_status_counts = None
+          last_llm_cost = -1.0
+          last_llm_count = -1
           visited_corr_cache.clear()
 
           while True:
@@ -342,7 +343,7 @@ async def sse_stream(request: Request, tenant_id: Optional[str] = None):
 
               status_counts = {status: sum(1 for r in requests if r.status == status) for status in ["NEW", "PART_EXTRACTION", "OFFER_MATCHING", "APPROVAL_GATE", "APPROVED", "INVOICE_DRAFTED", "ERP_SYNC", "CLOSED", "CANCELLED"]}
               
-              if request_count != last_request_count or status_counts != getattr(event_generator, 'last_status_counts', None):
+              if request_count != last_request_count or status_counts != last_status_counts:
                 events.append({
                   "type": "requests_updated",
                   "data": {
@@ -352,7 +353,7 @@ async def sse_stream(request: Request, tenant_id: Optional[str] = None):
                   }
                 })
                 last_request_count = request_count
-                event_generator.last_status_counts = status_counts
+                last_status_counts = status_counts
 
               if llm_cost != last_llm_cost or llm_count != last_llm_count:
                 events.append({

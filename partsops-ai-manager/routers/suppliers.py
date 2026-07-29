@@ -87,6 +87,13 @@ def get_suppliers(
     return SupplierService.get_suppliers(session, tenant_id, status, q)
 
 
+@router.get("/auth-status")
+def get_suppliers_auth_status():
+    from services.evidence_manager import get_all_profiles_status
+    return get_all_profiles_status()
+
+
+
 @router.post("")
 def create_supplier(
     payload: SupplierUpsertPayload,

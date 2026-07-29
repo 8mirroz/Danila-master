@@ -32,6 +32,7 @@ class RequestState(str, Enum):
     READY_FOR_APPROVAL = "READY_FOR_APPROVAL"
     APPROVED = "APPROVED"
     ERP_SYNCING = "ERP_SYNCING"
+    ERP_SYNCED = "ERP_SYNCED"
     INVOICE_DRAFTED = "INVOICE_DRAFTED"
     SENT_TO_CLIENT = "SENT_TO_CLIENT"
     PAID = "PAID"
@@ -63,9 +64,10 @@ ALLOWED_TRANSITIONS: dict[str, list[str]] = {
     RequestState.OFFER_RANKING: [RequestState.PRICING_REVIEW, RequestState.MANUAL_REVIEW],
     RequestState.PRICING_REVIEW: [RequestState.READY_FOR_APPROVAL, RequestState.FINANCE_REVIEW, RequestState.MANUAL_REVIEW],
     RequestState.READY_FOR_APPROVAL: [RequestState.APPROVED, RequestState.CLIENT_REJECTED, RequestState.REWORK],
-    RequestState.APPROVED: [RequestState.ERP_SYNCING, RequestState.REWORK],
-    RequestState.ERP_SYNCING: [RequestState.INVOICE_DRAFTED, RequestState.ERP_SYNC_FAILED],
-    RequestState.INVOICE_DRAFTED: [RequestState.SENT_TO_CLIENT, RequestState.REWORK],
+    RequestState.APPROVED: [RequestState.INVOICE_DRAFTED, RequestState.REWORK],
+    RequestState.INVOICE_DRAFTED: [RequestState.ERP_SYNCING, RequestState.REWORK],
+    RequestState.ERP_SYNCING: [RequestState.ERP_SYNCED, RequestState.ERP_SYNC_FAILED],
+    RequestState.ERP_SYNCED: [RequestState.SENT_TO_CLIENT, RequestState.REWORK],
     RequestState.SENT_TO_CLIENT: [RequestState.PAID, RequestState.CLIENT_REJECTED, RequestState.EXPIRED],
     RequestState.PAID: [RequestState.PURCHASE_ORDERED, RequestState.FULFILLED],
     RequestState.PURCHASE_ORDERED: [RequestState.FULFILLED, RequestState.SUPPLIER_ISSUE],

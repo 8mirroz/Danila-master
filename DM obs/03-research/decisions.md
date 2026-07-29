@@ -235,3 +235,43 @@ Connected real ping-all endpoint and localized UI states to Russian
 ## ⚖️ Decision | 2026-07-28T22:31:23+03:00
 
 Реализована итоговая строка Total (G и M), прочерки '-', безопасный фоллбэк Calibri и архитектура хранилища скриншотов storage/evidence
+
+## ⚖️ Decision | 2026-07-28T23:25:55+03:00
+
+Заменены формулы MIN() на точные рассчитанные лучшие числовые цены в столбцах G и M
+
+## ⚖️ Decision | 2026-07-28T23:51:40+03:00
+
+Завершен этап разработки кастомного XLSX экспорта по форме договора с доказательной архитектурой скриншотов
+
+## ⚖️ Decision | 2026-07-29T00:00:08+03:00
+
+Внедрен Live Scraper Pipeline + 4-gate Validation Layer: PriceAnomalyDetector, EvidenceIntegrityAuditor, AnalogCompatibilityChecker, CircuitBreaker
+
+## ⚖️ Decision | 2026-07-29T00:06:42+03:00
+
+Рефакторинг Быстрого поиска по артикулу и раздела загрузки заказов (Premium UI/UX)
+
+## ⚖️ Decision | 2026-07-29T00:09:03+03:00
+
+Исправлены типы и ошибки linter в routers/erp.py и test_live_scraper_validation.py
+
+## ⚖️ Decision | 2026-07-29T00:25:35+03:00
+
+Исправлена ошибка 500 UnboundLocalError в sse_stream и восстановлен запуск backend сервера FastAPI для графиков затрат LLM и очереди
+
+## ⚖️ Decision | 2026-07-29T00:27:05+03:00
+
+Архитектура скриншотов: EvidenceManager + CrawlerBridge + режимы full/simple/evidence-pack
+
+## ⚖️ Decision | 2026-07-29T00:33:02+03:00
+
+Усиление Live Scraper Intake & Evidence Manager: авторизация 3 поставщиков, двойной экспорт Full vs Light, Quality Gates
+
+## ⚖️ Decision | 2026-07-29T00:42:02+03:00
+
+Устранение конфликта меню Матрицы подбора и Калькулятора цен, внедрение двухрежимной подсистемы (Global Standalone + Order Context)
+
+## ⚖️ Decision | 2026-07-29T00:50:19+03:00
+
+Восстановление исходной структуры левого сайдбара, создание складного трей-фильтра поставщиков и исправление вертикального скролла на странице поставщиков

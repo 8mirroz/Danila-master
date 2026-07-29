@@ -40,8 +40,9 @@ class TestStateMachineTransitions:
             RequestState.PRICING_REVIEW,
             RequestState.READY_FOR_APPROVAL,
             RequestState.APPROVED,
-            RequestState.ERP_SYNCING,
             RequestState.INVOICE_DRAFTED,
+            RequestState.ERP_SYNCING,
+            RequestState.ERP_SYNCED,
             RequestState.SENT_TO_CLIENT,
             RequestState.PAID,
             RequestState.FULFILLED,
@@ -69,12 +70,12 @@ class TestStateMachineTransitions:
         """INVOICE_DRAFTED without pricing_evidence should fail invariants."""
         result = validate_transition(
             RequestState.APPROVED,
-            RequestState.ERP_SYNCING,
+            RequestState.INVOICE_DRAFTED,
             request_data={},
             strict_invariants=True,
         )
-        # ERP_SYNCING itself has no invariants, should pass
-        assert result["allowed"] is True
+        assert result["allowed"] is False
+        assert "pricing_evidence_json" in result["violations"][0]
 
     def test_closed_invariant_requires_audit_chain(self):
         """CLOSED requires audit_chain_complete=True."""

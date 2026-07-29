@@ -375,24 +375,169 @@ def archive(request_id: str, payload: ArchivePayload,
                             payload.archive_ref, payload.comment)
 
 
+
 @router.get("/{request_id}/export-custom-excel")
 def export_custom_excel(
     request_id: str,
     suppliers: str | None = None,
+    mode: str = "full",
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant)
 ):
+    """
+    Генерирует XLSX по форме договора.
+
+    ?mode=full   — с гиперссылками на скриншоты (для внутреннего пользования)
+    ?mode=simple — без скриншотов (для отправки клиенту, только после подтверждения)
+    """
     from fastapi.responses import StreamingResponse
     from services.contract_operations import export_custom_contract_xlsx
-    
+
+    if mode not in ("full", "simple"):
+        raise HTTPException(status_code=422, detail="mode должен быть 'full' или 'simple'")
+
     supplier_ids = [s.strip() for s in suppliers.split(",") if s.strip()] if suppliers else []
     try:
-        buffer, filename = export_custom_contract_xlsx(session, request_id, tenant_id, supplier_ids)
+        buffer, filename = export_custom_contract_xlsx(session, request_id, tenant_id, supplier_ids, mode=mode)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    
+
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+@router.get("/{request_id}/export-evidence-pack")
+def export_evidence_pack(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """
+    Формирует ZIP-архив со всеми реальными скриншотами + index.json.
+    Только для внутреннего использования (не для клиента).
+    """
+    from fastapi.responses import StreamingResponse, FileResponse
+    from services.evidence_manager import get_evidence_manager
+    import io
+
+    em = get_evidence_manager(tenant_id, request_id)
+    stats = em.get_stats()
+
+    if stats["total"] == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Скриншоты для данного запроса не найдены. Запустите скрапинг цен."
+        )
+
+    archive_path = em.pack_archive()
+    archive_bytes = archive_path.read_bytes()
+
+    return StreamingResponse(
+        io.BytesIO(archive_bytes),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{request_id}_evidence_pack.zip"'}
+    )
+
+
+
+
+@router.post("/{request_id}/validate")
+def validate_contract_data(
+    request_id: str,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """
+    Запускает полный аудит данных контракта через Validation Layer (4 Quality Gates):
+      1. PriceAnomalyDetector     — ценовые выбросы
+      2. EvidenceIntegrityAuditor — целостность скриншотов
+      3. AnalogCompatibilityChecker — корректность аналогов
+      4. ScraperHealthChecker     — состояние Circuit Breaker-ов
+
+    Возвращает ValidationReport в виде JSON.
+    """
+    from services.validation_layer import run_full_validation
+    from services.live_scraper_service import get_circuit_breaker_statuses
+
+    # Собираем цены по позициям из БД (PriceEvidence)
+    evidences = session.exec(
+        select(PriceEvidence).where(
+            PriceEvidence.request_id == request_id,
+            PriceEvidence.tenant_id == tenant_id,
+        )
+    ).all()
+
+    prices_by_article: dict[str, dict[str, float | None]] = {}
+    evidence_records: list[dict] = []
+
+    for ev in evidences:
+        art = ev.position_id  # используем position_id как ключ артикула
+        if art not in prices_by_article:
+            prices_by_article[art] = {}
+        prices_by_article[art][ev.source] = ev.price
+        evidence_records.append({
+            "article": art,
+            "source": ev.source,
+            "screenshot_ref": ev.screenshot_ref,
+            "screenshot_sha256": ev.screenshot_sha256,
+            "price": ev.price,
+        })
+
+    # Собираем аналоги из БД
+    positions = session.exec(
+        select(ContractPosition).where(
+            ContractPosition.request_id == request_id,
+            ContractPosition.tenant_id == tenant_id,
+        )
+    ).all()
+
+    analogs_data: list[dict] = []
+    for pos in positions:
+        analogs = session.exec(
+            select(AnalogCandidate).where(
+                AnalogCandidate.position_id == pos.position_id,
+                AnalogCandidate.tenant_id == tenant_id,
+            )
+        ).all()
+        for ana in analogs:
+            analogs_data.append({
+                "brand": ana.brand,
+                "article": ana.article,
+                "position_oem": pos.part_number,
+            })
+
+    circuit_statuses = get_circuit_breaker_statuses()
+
+    report = run_full_validation(
+        tenant_id=tenant_id,
+        request_id=request_id,
+        prices_by_article=prices_by_article,
+        evidence_records=evidence_records,
+        analogs=analogs_data,
+        circuit_statuses=circuit_statuses,
+    )
+
+    return report.to_dict()
+
+
+@router.post("/circuit-breaker/reset/{source}")
+def reset_circuit_breaker(
+    source: str,
+    tenant_id: str = Depends(get_privileged_tenant),
+):
+    """
+    Ручной сброс Circuit Breaker для указанного поставщика.
+    Разрешённые значения: exist.ru, autodoc.ru, rossko.ru
+    """
+    from services.live_scraper_service import reset_circuit_breaker as do_reset, SCRAPER_REGISTRY
+    if source not in SCRAPER_REGISTRY:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Неизвестный источник: {source}. Допустимые: {list(SCRAPER_REGISTRY.keys())}"
+        )
+    do_reset(source)
+    return {"status": "ok", "message": f"Circuit breaker для {source} сброшен."}
+

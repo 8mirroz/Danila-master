@@ -254,10 +254,10 @@ export const SupplierEditorModal: React.FC<SupplierEditorModalProps> = ({
               onChange={(e) => setDraft((c) => ({ ...c, status: e.target.value }))}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[var(--accent-primary)] focus:bg-white"
             >
-              <option value="active">Active (Активен)</option>
-              <option value="pending">Pending (На проверке)</option>
-              <option value="blocked">Blocked (Заблокирован)</option>
-              <option value="archived">Archived (В архиве)</option>
+              <option value="active">Активен</option>
+              <option value="pending">Ожидает</option>
+              <option value="blocked">Заблокирован</option>
+              <option value="archived">Архив</option>
             </select>
           </div>
 

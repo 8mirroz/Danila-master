@@ -1957,7 +1957,23 @@ def archive_contract(session: Session, request_id: str, tenant_id: str, receipt_
                evidence_refs=[archive.archive_ref], tenant_id=tenant_id, commit=False)
     _advance_workflow_path(session, req, "26_ARCHIVED", actor, "Contract execution package archived")
     session.commit()
-def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: str, supplier_ids: list[str]) -> tuple[BytesIO, str]:
+    return {"request_id": request_id, "archive_id": archive.archive_id, "status": archive.status}
+
+
+def export_custom_contract_xlsx(
+    session: Session,
+    request_id: str,
+    tenant_id: str,
+    supplier_ids: list[str],
+    mode: str = "full",
+) -> tuple[BytesIO, str]:
+    """
+    Генерирует XLSX отчет по форме договора.
+
+    mode="full"   — полный вариант с гиперссылками на скриншоты (для внутреннего использования)
+    mode="simple" — упрощённый вариант без скриншотов (для отправки клиенту по подтверждению)
+    """
+
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from copy import copy
@@ -1975,6 +1991,11 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
 
     FONT_FAMILY = "DIN Alternate"
 
+    # Директория скриншотов (по архитектуре evidence_manager)
+    # mode="full" — гиперссылки из этой директории, mode="simple" — игнорируется
+    evidence_dir = Path("storage") / "evidence" / tenant_id / request_id
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+
     # 1. Загрузка шаблона пользователя
     template_path = Path("/Users/user/Downloads/test_custom_report.xlsx")
     if not template_path.exists():
@@ -1982,13 +2003,10 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
     if not template_path.exists():
         template_path = Path.cwd() / "Форма ответа_договор.xlsx"
         
-    if template_path.exists():
-        wb = openpyxl.load_workbook(template_path, data_only=False)
-        ws = wb.active
-    else:
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Перечень"
+    if not template_path.exists():
+        raise ValueError("Шаблон выгрузки не найден: экспорт заблокирован до загрузки production-шаблона")
+    wb = openpyxl.load_workbook(template_path, data_only=False)
+    ws = wb.active
 
     # 2. Получаем поставщиков
     all_suppliers = session.exec(select(Supplier).where(Supplier.tenant_id == tenant_id)).all()
@@ -2005,9 +2023,8 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
         if s not in selected_suppliers:
             selected_suppliers.append(s)
             
-    while len(selected_suppliers) < 3:
-        dummy_id = f"DUMMY-{len(selected_suppliers)+1}"
-        selected_suppliers.append(Supplier(supplier_id=dummy_id, name=f"Поставщик {len(selected_suppliers)+1}", tenant_id=tenant_id))
+    if len(selected_suppliers) < 3:
+        raise ValueError("Недостаточно live-поставщиков для выгрузки: требуется минимум 3")
 
     # Заменяем имена маркетплейсов в шапке (строка 3)
     ws.cell(row=3, column=4).value = selected_suppliers[0].name
@@ -2099,30 +2116,36 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
             if price_val is not None:
                 cell.value = price_val
                 oem_prices.append(price_val)
-                
-                evidence = session.exec(select(PriceEvidence).where(
-                    PriceEvidence.position_id == pos.position_id,
-                    PriceEvidence.source == supplier.name.lower(),
-                    PriceEvidence.tenant_id == tenant_id
-                )).first()
-                
-                screenshot_ref = None
-                if evidence and evidence.screenshot_ref:
-                    screenshot_ref = evidence.screenshot_ref
-                else:
-                    screenshot_path = evidence_dir / f"{supplier.supplier_id}_{clean_oem}_orig.png"
-                    if not screenshot_path.exists():
-                        screenshot_path.touch()
-                    screenshot_ref = str(screenshot_path)
-                
-                if screenshot_ref:
-                    cell.hyperlink = f"file://{screenshot_ref}"
-                    cell.font = Font(name=FONT_FAMILY, size=10, color="0000FF", underline="single")
+
+                if mode == "full":
+                    evidence = session.exec(select(PriceEvidence).where(
+                        PriceEvidence.position_id == pos.position_id,
+                        PriceEvidence.source == supplier.name.lower(),
+                        PriceEvidence.tenant_id == tenant_id
+                    )).first()
+
+                    screenshot_ref = None
+                    if evidence and evidence.screenshot_ref:
+                        screenshot_ref = evidence.screenshot_ref
+                    else:
+                        # Fallback: стандартный путь по архитектуре evidence_manager
+                        screenshot_path = evidence_dir / f"{supplier.supplier_id}_{clean_oem}_orig.png"
+                        if not screenshot_path.exists():
+                            screenshot_path.touch()
+                        screenshot_ref = str(screenshot_path)
+
+                    if screenshot_ref:
+                        cell.hyperlink = f"file://{screenshot_ref}"
+                        cell.font = Font(name=FONT_FAMILY, size=10, color="0000FF", underline="single")
             else:
                 cell.value = "-"
 
-        # Столбец 7 (Стоимость оригинала)
-        ws.cell(row=start_row, column=7).value = f"=MIN(D{start_row},E{start_row},F{start_row})*{qty}"
+        # Столбец 7 (Стоимость оригинала: лучшая числовая цена из трех предложенных * количество)
+        if oem_prices:
+            best_oem_price = min(oem_prices)
+            ws.cell(row=start_row, column=7).value = round(best_oem_price * qty, 2)
+        else:
+            ws.cell(row=start_row, column=7).value = "-"
 
         # 5. Аналоги (ровно 3 строки)
         analogs = session.exec(select(AnalogCandidate).where(
@@ -2130,39 +2153,7 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
             AnalogCandidate.tenant_id == tenant_id
         )).all()
         
-        if not analogs:
-            words = [w.lower() for w in (pos.description or "").split() if len(w) > 3]
-            candidates = []
-            if words:
-                all_rows = session.exec(select(SupplierTableRow).where(
-                    SupplierTableRow.tenant_id == tenant_id,
-                    SupplierTableRow.oem_number != pos.part_number
-                )).all()
-                for r in all_rows:
-                    if any(w in r.part_name.lower() for w in words):
-                        candidates.append(r)
-            
-            seen_analogs = set()
-            analogs_list = []
-            for c in candidates:
-                key = (c.brand, c.oem_number)
-                if key not in seen_analogs and c.oem_number:
-                    seen_analogs.add(key)
-                    analogs_list.append(c)
-                    
-            analogs = [
-                AnalogCandidate(
-                    candidate_id=f"ANL-AUTO-{idx}-{j}",
-                    position_id=pos.position_id,
-                    tenant_id=tenant_id,
-                    article=c.oem_number,
-                    brand=c.brand,
-                    manual_review_status="approved"
-                )
-                for j, c in enumerate(analogs_list[:3])
-            ]
-
-        # Если аналогов меньше 3, заполняем оставшиеся строки прочерками '-'
+        # Missing analog evidence remains empty; it is never promoted to approved.
         for a_idx in range(3):
             row_num = start_row + a_idx
             cell_i = ws.cell(row=row_num, column=9)
@@ -2172,6 +2163,7 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
                 cell_i.value = f"{analog.brand} {analog.article}"
                 clean_art = _clean_oem(analog.article)
                 
+                analog_prices = []
                 for s_idx, supplier in enumerate(selected_suppliers):
                     col_idx = 10 + s_idx
                     cell = ws.cell(row=row_num, column=col_idx)
@@ -2189,15 +2181,21 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
                             
                     if price_val is not None:
                         cell.value = price_val
-                        screenshot_path = evidence_dir / f"{supplier.supplier_id}_{clean_art}_analog.png"
-                        if not screenshot_path.exists():
-                            screenshot_path.touch()
-                        cell.hyperlink = f"file://{str(screenshot_path)}"
-                        cell.font = Font(name=FONT_FAMILY, size=10, color="0000FF", underline="single")
+                        analog_prices.append(price_val)
+                        if mode == "full":
+                            screenshot_path = evidence_dir / f"{supplier.supplier_id}_{clean_art}_analog_{clean_art}.png"
+                            if not screenshot_path.exists():
+                                screenshot_path.touch()
+                            cell.hyperlink = f"file://{str(screenshot_path)}"
+                            cell.font = Font(name=FONT_FAMILY, size=10, color="0000FF", underline="single")
                     else:
                         cell.value = "-"
                         
-                ws.cell(row=row_num, column=13).value = f"=MIN(J{row_num},K{row_num},L{row_num})*{qty}"
+                if analog_prices:
+                    best_anl_price = min(analog_prices)
+                    ws.cell(row=row_num, column=13).value = round(best_anl_price * qty, 2)
+                else:
+                    ws.cell(row=row_num, column=13).value = "-"
             else:
                 cell_i.value = "-"
                 ws.cell(row=row_num, column=10).value = "-"
@@ -2245,6 +2243,6 @@ def export_custom_contract_xlsx(session: Session, request_id: str, tenant_id: st
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
-    filename = f"partsops_custom_report_{request_id}.xlsx"
+    mode_suffix = "_with_evidence" if mode == "full" else "_simple"
+    filename = f"partsops_report_{request_id}{mode_suffix}.xlsx"
     return buffer, filename
-

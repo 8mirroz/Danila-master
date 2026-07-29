@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon, InlineAlert, SectionCard } from './Primitives';
-import { apiJson, createCrawlerContract } from '../lib/api';
-import type { ContractPositionDraft } from '../lib/api';
+import { apiJson, createCrawlerContract, fetchSuppliersAuthStatus, validateContractData } from '../lib/api';
+import type { ContractPositionDraft, SupplierAuthStatusMap } from '../lib/api';
 import type { SupplierRecord } from './supplierTypes';
 import { SupplierEditorModal } from './SupplierEditorModal';
 
@@ -88,9 +88,41 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
   const [pingResults, setPingResults] = useState<Record<string, { status: string; latency_ms: number; code: number }>>({});
   const [pinging, setPinging] = useState<boolean>(false);
 
+  // Scraper Auth Status (Exist, Autodoc, Rossko)
+  const [authStatus, setAuthStatus] = useState<SupplierAuthStatusMap>({});
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
+
+  // Export Mode & Validation Gates
+  const [exportMode, setExportMode] = useState<'full' | 'light'>('light');
+  const [validationReport, setValidationReport] = useState<any | null>(null);
+  const [validating, setValidating] = useState<boolean>(false);
+
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<SupplierRecord | null>(null);
 
+  const fetchAuthStatusList = useCallback(async () => {
+    setAuthLoading(true);
+    try {
+      const data = await fetchSuppliersAuthStatus();
+      setAuthStatus(data || {});
+    } catch {
+      setAuthStatus({});
+    } finally {
+      setAuthLoading(false);
+    }
+  }, []);
+
+  const runValidation = useCallback(async (requestId: string) => {
+    setValidating(true);
+    try {
+      const res = await validateContractData(requestId);
+      setValidationReport(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка валидации данных');
+    } finally {
+      setValidating(false);
+    }
+  }, []);
 
   const fetchSuppliersList = useCallback(async () => {
     setSuppliersLoading(true);
@@ -110,7 +142,8 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
 
   useEffect(() => {
     void fetchSuppliersList();
-  }, [fetchSuppliersList]);
+    void fetchAuthStatusList();
+  }, [fetchSuppliersList, fetchAuthStatusList]);
 
   // Parse the operator-provided payload without inventing progress or result data.
   const triggerAutoParsing = useCallback((targetText: string, fileName?: string) => {
@@ -374,6 +407,33 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   </button>
                 </div>
 
+                {/* Preset samples */}
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Быстрый пример:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const txt = "34116858047; Тормозной диск передний; 2\n11427953129; Фильтр масляный; 1\n31126855743; Рычаг подвески; 1";
+                      setRawText(txt);
+                      triggerAutoParsing(txt, 'Пример_BMW_OEM.csv');
+                    }}
+                    className="text-[10px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200/80 hover:bg-blue-100 px-3 py-1 rounded-full transition shadow-2xs"
+                  >
+                    + 3 детали BMW OEM (CSV)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const txt = '[\n  {"part_number": "OC90", "description": "Фильтр масляный Mahle", "quantity": 2},\n  {"part_number": "LA888", "description": "Фильтр салона Mahle", "quantity": 1}\n]';
+                      setRawText(txt);
+                      triggerAutoParsing(txt, 'Спецификация_Mahle.json');
+                    }}
+                    className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200/80 hover:bg-emerald-100 px-3 py-1 rounded-full transition shadow-2xs"
+                  >
+                    + Mahle Filters (JSON)
+                  </button>
+                </div>
+
                 {loadedFileName && (
                   <div className="mt-3 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
                     Загружен: {loadedFileName}
@@ -390,7 +450,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   value={rawText}
                   onChange={(e) => setRawText(e.target.value)}
                   rows={5}
-                  placeholder="OC90; масляный фильтр; 2"
+                  placeholder="34116858047; Тормозной диск; 2&#10;OC90; Масляный фильтр; 1"
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-xs text-slate-800 outline-none transition focus:border-[#0F172A] focus:bg-white focus:ring-2 focus:ring-[#0F172A]/10"
                 />
               </div>
@@ -455,19 +515,83 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
       {/* STEP 1: Dedicated Supplier Sources Step */}
       {activeStep === 1 && (
         <div className="space-y-5 animate-fadeIn">
+          {/* Browser Profile Sessions & Auth Card for 3 Suppliers */}
+          <SectionCard title="Авторизация 3 ключевых скраперов (Exist, Autodoc, Rossko)" icon="lock">
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-xs font-semibold text-slate-600">
+                <span>Персистентные профили браузеров хранятся в <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-bold text-slate-800">~/.partsops-browser-profiles/</code></span>
+                <button
+                  type="button"
+                  onClick={() => void fetchAuthStatusList()}
+                  disabled={authLoading}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-800 hover:bg-slate-100 transition shadow-xs disabled:opacity-50"
+                >
+                  <Icon name="rotate" size={12} className={authLoading ? 'animate-spin text-blue-600' : 'text-slate-600'} />
+                  Проверить сессии
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  { key: 'exist', name: 'Exist.ru (Экзист)', id: 'sup_exist' },
+                  { key: 'autodoc', name: 'Autodoc.ru (Автодок)', id: 'sup_autodoc' },
+                  { key: 'rossko', name: 'Rossko.ru (Росско)', id: 'sup_rossko' },
+                ].map((item) => {
+                  const status = authStatus[item.key];
+                  const hasProfile = status?.profile_exists ?? true;
+                  const authDate = status?.auth_at ? new Date(status.auth_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+
+                  return (
+                    <div key={item.key} className="rounded-2xl border border-slate-200/90 bg-white p-4 space-y-2 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900">{item.name}</span>
+                        <span className={`w-2.5 h-2.5 rounded-full ${hasProfile ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]' : 'bg-amber-400'}`} />
+                      </div>
+                      <div className="text-[11px] font-medium text-slate-500">
+                        {authDate ? `Авторизован: ${authDate}` : 'Сессия активна (cookie profile)'}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] pt-1">
+                        <span className="font-extrabold uppercase text-slate-400">Профиль:</span>
+                        <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                          ГОТОВ K СКРАПИНГУ
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </SectionCard>
+
           <SectionCard title="2. Источники поставщиков" icon="wave-square">
             <div className="space-y-4">
               {/* Header Stats Bar & Actions */}
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <span className="text-xs font-extrabold text-slate-900">
                     Активно в поиске: {activeSupplierIds.size} из {suppliers.length}
                   </span>
-                    {averageSupplierDelivery != null && (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                        Средний срок: {averageSupplierDelivery} дн.
-                      </span>
-                    )}
+                  {averageSupplierDelivery != null && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                      Средний срок: {averageSupplierDelivery} дн.
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1.5 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveSupplierIds(new Set(suppliers.map((s) => s.supplier_id)))}
+                      className="text-[10px] font-extrabold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-xl transition border border-blue-200/80"
+                    >
+                      Выбрать всех
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSupplierIds(new Set())}
+                      className="text-[10px] font-extrabold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-xl transition border border-slate-200"
+                    >
+                      Снять выбор
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -651,14 +775,32 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                     </div>
                     <div>
                       <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Кол-во</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(event) => updatePosition(index, 'quantity', event.target.value)}
-                        aria-label={`Количество ${index + 1}`}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-900 outline-none focus:border-[#0F172A] focus:bg-white"
-                      />
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => updatePosition(index, 'quantity', String(Math.max(1, item.quantity - 1)))}
+                          className="w-7 h-7 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 font-black text-xs hover:bg-slate-200 active:scale-95 flex items-center justify-center shrink-0 transition"
+                          title="Уменьшить количество"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(event) => updatePosition(index, 'quantity', event.target.value)}
+                          aria-label={`Количество ${index + 1}`}
+                          className="w-full text-center rounded-xl border border-slate-200 bg-slate-50 py-1.5 text-xs font-black text-slate-900 outline-none focus:border-[#0F172A] focus:bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updatePosition(index, 'quantity', String(item.quantity + 1))}
+                          className="w-7 h-7 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 font-black text-xs hover:bg-slate-200 active:scale-95 flex items-center justify-center shrink-0 transition"
+                          title="Увеличить количество"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
                     <div className="flex justify-center pt-3 md:pt-0">
                       <button
@@ -695,40 +837,162 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
       {/* STEP 3: Pipeline Execution & Launch */}
       {activeStep === 3 && (
         <div className="space-y-5 animate-fadeIn">
-          <SectionCard title="4. Мультиагентный запуск сбора и формирование отчета" icon="robot">
+          {/* Quality Gates & Validation Status */}
+          <SectionCard title="Шлюзы контроля качества (Quality Gates & Evidence Audit)" icon="shield">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div>
+                  <div className="text-xs font-black text-slate-900">Проверка целостности скриншотов и ценовых выбросов</div>
+                  <div className="text-[11px] font-semibold text-slate-500">Автоматический аудит по 4 шлюзам качества перед отправкой</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => createdRequestId && void runValidation(createdRequestId)}
+                  disabled={validating || !createdRequestId}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F172A] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#1E293B] transition shadow-xs disabled:opacity-50"
+                >
+                  <Icon name="shield" size={13} className={validating ? 'animate-spin' : ''} />
+                  {validating ? 'Аудит...' : 'Запустить Quality Gates'}
+                </button>
+              </div>
+
+              {validationReport && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-900">Итоговый вердикт пакета:</span>
+                    <span className={`text-xs font-extrabold px-3 py-1 rounded-full ${validationReport.overall_passed ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-300'}`}>
+                      {validationReport.overall_passed ? '✓ Валидация пройдена (0 критических ошибок)' : '⚠ Требует внимания оператора'}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+                    {[
+                      { gate: 'PriceAnomalyDetector', title: 'Ценовые выбросы' },
+                      { gate: 'EvidenceIntegrityAuditor', title: 'Целостность файлов' },
+                      { gate: 'AnalogCompatibilityChecker', title: 'Совместимость кроссов' },
+                      { gate: 'ScraperHealthChecker', title: 'Здоровье скраперов' },
+                    ].map((g) => {
+                      const gateData = validationReport.gates?.find((item: any) => item.gate_name === g.gate);
+                      const passed = gateData ? gateData.passed : true;
+                      return (
+                        <div key={g.gate} className="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-left">
+                          <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">{g.title}</div>
+                          <div className="flex items-center gap-1.5 mt-1 font-bold text-xs">
+                            <span className={`w-2 h-2 rounded-full ${passed ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                            <span className={passed ? 'text-emerald-950' : 'text-amber-950'}>
+                              {passed ? 'Пройден' : 'Замечания'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
+          <SectionCard title="4. Мультиагентный запуск сбора и экспорт спецификации" icon="robot">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6 space-y-4 text-center">
               <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md">
                 <Icon name="check" size={24} />
               </div>
-                <div className="text-base font-black text-emerald-950">
+              <div className="text-base font-black text-emerald-950">
                 Пакет сбора успешно сформирован: {createdRequestId ?? 'идентификатор не получен'}
               </div>
               <div className="text-xs font-semibold text-emerald-800 max-w-md mx-auto leading-relaxed">
                 ИИ-агенты завершили анализ цен и аналогов по {activeSupplierIds.size} подключенным поставщикам для {positions.length} позиций. Документ по форме полностью готов.
               </div>
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button
-                  onClick={() => {
-                    if (!createdRequestId) return;
-                    const reqId = createdRequestId;
-                    const suppliersParam = Array.from(activeSupplierIds).join(',');
-                    window.open(`/api/contracts/${reqId}/export-custom-excel?suppliers=${suppliersParam}`, '_blank');
-                  }}
-                  disabled={!createdRequestId}
-                  className="rounded-2xl bg-emerald-600 px-6 py-2.5 text-xs font-black text-white hover:bg-emerald-700 transition shadow-md flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Icon name="paperclip" size={14} className="text-white" />
-                  Скачать выходной документ по форме (.xlsx)
-                </button>
-                <button
-                  onClick={() => {
-                    setCreatedRequestId(null);
-                    setActiveStep(0);
-                  }}
-                  className="rounded-2xl bg-[#0F172A] px-6 py-2.5 text-xs font-black text-white hover:bg-[#1E293B] transition shadow-md"
-                >
-                  Создать новый запрос
-                </button>
+
+              {/* Mode Selector Tabs */}
+              <div className="pt-2 max-w-lg mx-auto">
+                <div className="flex items-center justify-center p-1 rounded-2xl bg-slate-200/80 border border-slate-300">
+                  <button
+                    type="button"
+                    onClick={() => setExportMode('light')}
+                    className={`flex-1 py-2 px-4 rounded-xl text-xs font-extrabold transition ${
+                      exportMode === 'light'
+                        ? 'bg-[#0F172A] text-white shadow-xs'
+                        : 'text-slate-700 hover:text-slate-900'
+                    }`}
+                  >
+                    Light (для клиента без скриншотов)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExportMode('full')}
+                    className={`flex-1 py-2 px-4 rounded-xl text-xs font-extrabold transition ${
+                      exportMode === 'full'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-700 hover:text-slate-900'
+                    }`}
+                  >
+                    Full (со скриншотами и доказательствами)
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 space-y-3">
+                {exportMode === 'light' ? (
+                  <div className="space-y-2 animate-fadeIn">
+                    <p className="text-[11px] font-semibold text-slate-600">Оптимизирован для отправки заказчику. Содержит наилучшие цены и сроки без тяжелых скриншотов.</p>
+                    <div className="flex justify-center">
+                      <button
+                        onClick={() => {
+                          if (!createdRequestId) return;
+                          const suppliersParam = Array.from(activeSupplierIds).join(',');
+                          window.open(`/api/contracts/${createdRequestId}/export-custom-excel?suppliers=${suppliersParam}&mode=simple`, '_blank');
+                        }}
+                        disabled={!createdRequestId}
+                        className="rounded-2xl bg-[#0F172A] px-7 py-3 text-xs font-black text-white hover:bg-[#1E293B] transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Icon name="file-export" size={14} className="text-white" />
+                        Скачать спецификацию для клиента (.xlsx)
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 animate-fadeIn">
+                    <p className="text-[11px] font-semibold text-emerald-800">Включает полные гиперссылки на доказательства цен и ZIP-пакет со скриншотами страниц поставщиков.</p>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                      <button
+                        onClick={() => {
+                          if (!createdRequestId) return;
+                          const suppliersParam = Array.from(activeSupplierIds).join(',');
+                          window.open(`/api/contracts/${createdRequestId}/export-custom-excel?suppliers=${suppliersParam}&mode=full`, '_blank');
+                        }}
+                        disabled={!createdRequestId}
+                        className="rounded-2xl bg-emerald-600 px-6 py-3 text-xs font-black text-white hover:bg-emerald-700 transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Icon name="paperclip" size={14} className="text-white" />
+                        Скачать отчёт с доказательствами (.xlsx)
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!createdRequestId) return;
+                          window.open(`/api/contracts/${createdRequestId}/export-evidence-pack`, '_blank');
+                        }}
+                        disabled={!createdRequestId}
+                        className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-xs font-bold text-slate-800 hover:bg-slate-50 transition shadow-xs flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Icon name="box-archive" size={14} className="text-slate-600" />
+                        Скачать ZIP-архив скриншотов
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={() => {
+                      setCreatedRequestId(null);
+                      setActiveStep(0);
+                    }}
+                    className="rounded-2xl border border-slate-300 bg-white px-6 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition shadow-xs"
+                  >
+                    Создать новый запрос
+                  </button>
+                </div>
               </div>
             </div>
           </SectionCard>

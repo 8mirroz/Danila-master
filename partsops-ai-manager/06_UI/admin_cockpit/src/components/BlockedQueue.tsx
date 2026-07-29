@@ -1,5 +1,4 @@
 import React from 'react';
-import { isBlocked } from '../lib/stateMachine';
 import { StatusBadge, EmptyState } from './Primitives';
 import { TransitionActions } from './TransitionActions';
 
@@ -17,12 +16,17 @@ type Request = {
   priority?: string;
   vehicle_make?: string;
   vehicle_model?: string;
+  allowed_targets?: string[];
+  allowed_actions?: Array<{ id: string; kind: string; target_state?: string }>;
+  recommended_action?: { id: string; kind: string; target_state?: string } | null;
+  is_blocked?: boolean;
+  version?: string | null;
 };
 
 interface BlockedQueueProps {
   requests: Request[];
   onSelectRequest: (req: Request) => void;
-  onTransitionRequest: (requestId: string, targetState: string, reason: string) => Promise<void>;
+  onTransitionRequest: (requestId: string, targetState: string, reason: string, version?: string | null) => Promise<void>;
 }
 
 export const BlockedQueue: React.FC<BlockedQueueProps> = ({
@@ -30,7 +34,7 @@ export const BlockedQueue: React.FC<BlockedQueueProps> = ({
   onSelectRequest,
   onTransitionRequest,
 }) => {
-  const blockedRequests = requests.filter((r) => isBlocked(r.status));
+  const actionableRequests = requests.filter((r) => r.is_blocked === true || r.recommended_action);
 
   return (
     <section className="panel-card-tight overflow-hidden p-5 space-y-4">
@@ -40,23 +44,23 @@ export const BlockedQueue: React.FC<BlockedQueueProps> = ({
             <i className="fas fa-triangle-exclamation" />
           </span>
           <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
-            Заблокированные процессы ({blockedRequests.length})
+            Следующие действия ({actionableRequests.length})
           </h3>
         </div>
         <span className="text-[10px] text-[var(--text-muted)] font-mono">
-          Требуют вмешательства оператора
+          Подтверждено backend capabilities
         </span>
       </div>
 
-      {blockedRequests.length === 0 ? (
+      {actionableRequests.length === 0 ? (
         <EmptyState
-          title="Заблокированных процессов нет"
+          title="Действий, требующих оператора, нет"
           description="Все текущие запросы проходят этапы обработки в штатном режиме."
           icon="fa-shield-check"
         />
       ) : (
         <div className="space-y-3">
-          {blockedRequests.map((req) => (
+          {actionableRequests.map((req) => (
             <div
               key={req.request_id}
               className="group flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border border-amber-200/80 bg-amber-50/40 hover:bg-amber-50/80 transition-all shadow-sm hover:shadow-md"
@@ -98,14 +102,25 @@ export const BlockedQueue: React.FC<BlockedQueueProps> = ({
               </div>
 
               <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-amber-200/60 shrink-0">
-                <TransitionActions
-                  status={req.status}
-                  requestId={req.request_id}
-                  onTransition={(targetState, reason) =>
-                    onTransitionRequest(req.request_id, targetState, reason)
-                  }
-                  compact
-                />
+                {(req.allowed_targets?.length ?? 0) > 0 ? (
+                  <TransitionActions
+                    status={req.status}
+                    requestId={req.request_id}
+                    onTransition={(targetState, reason) =>
+                      onTransitionRequest(req.request_id, targetState, reason, req.version)
+                    }
+                    allowedTargets={req.allowed_targets ?? []}
+                    compact
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSelectRequest(req)}
+                    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+                  >
+                    Открыть заявку
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import ast
+from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, select
 import pytest
@@ -10,6 +12,9 @@ import zlib
 from database import engine
 from main import app
 from suppliers import seed_database
+from models import PartRequest
+from suppliers import Invoice
+from app.automation.rate_limiter import rate_limiter
 
 client = TestClient(app, headers={"Authorization": "Bearer test-token"})
 
@@ -29,6 +34,7 @@ def write_png(path, width: int = 640, height: int = 360):
 
 @pytest.fixture(autouse=True)
 def setup_db():
+    rate_limiter._windows.clear()
     SQLModel.metadata.drop_all(engine)
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
@@ -408,28 +414,33 @@ def test_invoice_generation():
         step_response = client.post(
             f"/api/requests/{request_id}/transition",
             json={"target_state": target_state, "reason": f"test {target_state}", "actor_id": "admin"},
+            headers={"X-User-Role": "finance"} if target_state == "APPROVED" else None,
         )
         assert step_response.status_code == 200
 
-    preview = client.post(
-        f"/api/erp/pricing/preview/{request_id}",
-        json={
-            "logistics_cost": 500,
-            "target_margin_override": 0.15,
-            "urgency_level": "normal",
-        },
-    )
+    # Evidence and quotation are produced by an upstream integration in production.
+    # This explicit in-memory fixture keeps the test from inventing them in runtime code.
+    with Session(engine) as session:
+        request = session.exec(select(PartRequest).where(PartRequest.request_id == request_id)).one()
+        request.pricing_evidence_json = json.dumps({"source": "test-pricing-evidence"})
+        request.margin_policy_passed = True
+        request.erp_quotation_ref = "Q-TEST-001"
+        request.match_evidence_json = json.dumps({
+            part["name"]: {"item": {"catalog_id": "CAT-001"}}
+            for part in json.loads(request.parts_json or "[]")
+            if isinstance(part, dict) and part.get("name")
+        })
+        session.add(request)
+        session.commit()
+
+    preview = client.post(f"/api/erp/pricing/preview/{request_id}")
     assert preview.status_code == 200
     assert preview.json()["pricing"]["client_price"] > 0
 
     # 2. Generate invoice after approval
     resp2 = client.post(
         f"/api/erp/invoice/{request_id}",
-        json={
-            "logistics_cost": 500,
-            "target_margin_override": 0.15,
-            "urgency_level": "normal",
-        },
+        headers={"X-User-Role": "finance"},
     )
     assert resp2.status_code == 200
     invoice = resp2.json()
@@ -440,15 +451,217 @@ def test_invoice_generation():
 
     duplicate = client.post(
         f"/api/erp/invoice/{request_id}",
-        json={
-            "logistics_cost": 500,
-            "target_margin_override": 0.15,
-            "urgency_level": "normal",
-        },
+        headers={"X-User-Role": "finance"},
     )
     assert duplicate.status_code == 200
     assert duplicate.json()["idempotent"] is True
     assert duplicate.json()["invoice"]["invoice_number"] == invoice["invoice"]["invoice_number"]
+
+    sync = client.post(f"/api/erp/sync/{request_id}", json={}, headers={"X-User-Role": "admin"})
+    assert sync.status_code == 200
+    assert sync.json()["sync"]["sync_id"]
+
+
+def test_workspace_contract_uses_server_principal_and_rejects_manager_approval():
+    created = client.post("/api/requests", json={
+        "source": "TEST_MOCK",
+        "text": "Нужен масляный фильтр BMW",
+        "customer_name": "Workspace Test",
+    })
+    assert created.status_code == 200
+    request_id = created.json()["request"]["request_id"]
+
+    session_payload = client.get("/api/session").json()
+    assert session_payload["role"] == "manager"
+    workspace = client.get(f"/api/requests/{request_id}/workspace")
+    assert workspace.status_code == 200
+    data = workspace.json()
+    assert data["request"]["request_id"] == request_id
+    assert "allowed_actions" in data
+    assert "principal_permissions" in data
+
+    forbidden = client.post(
+        f"/api/requests/{request_id}/transition",
+        json={"target_state": "APPROVED", "reason": "forbidden", "actor_id": "admin"},
+    )
+    assert forbidden.status_code == 403
+
+
+def test_pricing_policy_rejects_client_side_overrides():
+    created = client.post("/api/requests", json={
+        "source": "TEST_MOCK",
+        "text": "Нужны тормозные колодки BMW X5",
+        "customer_name": "Pricing Policy Test",
+    })
+    request_id = created.json()["request"]["request_id"]
+    response = client.post(
+        f"/api/erp/pricing/preview/{request_id}",
+        json={"margin_override": 0.99, "logistics_cost": 1},
+    )
+    assert response.status_code == 422
+    status = client.get(f"/api/erp/status/{request_id}")
+    assert status.status_code == 200
+    assert status.json()["sync_status"] == "NOT_SYNCED"
+
+
+def _set_request_lifecycle_fixture(request_id: str, status: str) -> None:
+    with Session(engine) as session:
+        request = session.exec(select(PartRequest).where(PartRequest.request_id == request_id)).one()
+        request.status = status
+        request.match_evidence_json = json.dumps({
+            "Тормозные колодки": {"item": {"catalog_id": "CAT-001"}},
+        })
+        request.pricing_evidence_json = json.dumps({
+            "source": "test-pricing-evidence",
+            "approved_offer_snapshot": {
+                "Тормозные колодки": {"item": {"catalog_id": "CAT-001"}},
+            },
+        })
+        request.margin_policy_passed = True
+        request.erp_quotation_ref = "Q-TEST-LOCK"
+        session.add(request)
+        session.commit()
+
+
+def _offer_payload() -> dict:
+    return {
+        "part_name": "Тормозные колодки",
+        "offer": {"item": {"catalog_id": "CAT-001"}},
+    }
+
+
+def test_admin_cannot_transition_directly_to_erp_syncing():
+    created = client.post("/api/requests", json={
+        "source": "TEST_MOCK", "text": "Нужны тормозные колодки BMW", "customer_name": "ERP Transition Test",
+    })
+    request_id = created.json()["request"]["request_id"]
+    _set_request_lifecycle_fixture(request_id, "APPROVED")
+
+    response = client.post(
+        f"/api/requests/{request_id}/transition",
+        json={"target_state": "ERP_SYNCING", "reason": "manual bypass"},
+        headers={"X-User-Role": "admin"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "INTERNAL_TRANSITION_ONLY"
+
+
+@pytest.mark.parametrize("status", ["APPROVED", "INVOICE_DRAFTED"])
+def test_offer_selection_is_locked_outside_matching(status: str):
+    created = client.post("/api/requests", json={
+        "source": "TEST_MOCK", "text": "Нужны тормозные колодки BMW", "customer_name": "Offer Lock Test",
+    })
+    request_id = created.json()["request"]["request_id"]
+    _set_request_lifecycle_fixture(request_id, status)
+
+    response = client.post(f"/api/requests/{request_id}/actions/select_offer", json=_offer_payload())
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "OFFER_SELECTION_NOT_ALLOWED"
+
+
+def test_legacy_matches_respects_offer_lifecycle_lock():
+    created = client.post("/api/requests", json={
+        "source": "TEST_MOCK", "text": "Нужны тормозные колодки BMW", "customer_name": "Legacy Offer Lock Test",
+    })
+    request_id = created.json()["request"]["request_id"]
+    _set_request_lifecycle_fixture(request_id, "APPROVED")
+
+    response = client.post(f"/api/requests/{request_id}/matches", json=_offer_payload())
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "OFFER_SELECTION_NOT_ALLOWED"
+
+
+def test_sync_to_erp_is_a_command_and_is_idempotent():
+    created = client.post("/api/requests", json={
+        "source": "TEST_MOCK", "text": "Нужны тормозные колодки BMW", "customer_name": "ERP Command Test",
+    })
+    request_id = created.json()["request"]["request_id"]
+    _set_request_lifecycle_fixture(request_id, "INVOICE_DRAFTED")
+    with Session(engine) as session:
+        session.add(Invoice(
+            tenant_id="default", invoice_number="INV-ERP-COMMAND", request_id=request_id,
+            supplier_id="SUP-001", customer_name="ERP Command Test", items_json="[]", status="DRAFT",
+        ))
+        session.commit()
+
+    synced = client.post(
+        f"/api/erp/sync/{request_id}", json={},
+        headers={"X-User-Role": "admin", "X-Idempotency-Key": "sync-command-1"},
+    )
+    assert synced.status_code == 200
+    assert synced.json()["request_status"] == "ERP_SYNCED"
+
+    repeated = client.post(
+        f"/api/erp/sync/{request_id}", json={},
+        headers={"X-User-Role": "admin", "X-Idempotency-Key": "sync-command-1"},
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["sync"]["idempotent"] is True
+
+
+def test_workspace_exposes_erp_command_only_when_its_prerequisites_exist():
+    created = client.post("/api/requests", json={
+        "source": "TEST_MOCK", "text": "Нужны тормозные колодки BMW", "customer_name": "ERP Capability Test",
+    })
+    request_id = created.json()["request"]["request_id"]
+    _set_request_lifecycle_fixture(request_id, "INVOICE_DRAFTED")
+
+    before_invoice = client.get(
+        f"/api/requests/{request_id}/workspace",
+        headers={"X-User-Role": "admin"},
+    )
+    assert before_invoice.status_code == 200
+    assert "sync_to_erp" not in {action["id"] for action in before_invoice.json()["allowed_actions"]}
+
+    with Session(engine) as session:
+        session.add(Invoice(
+            tenant_id="default", invoice_number="INV-ERP-CAPABILITY", request_id=request_id,
+            supplier_id="SUP-001", customer_name="ERP Capability Test", items_json="[]", status="DRAFT",
+        ))
+        session.commit()
+
+    after_invoice = client.get(
+        f"/api/requests/{request_id}/workspace",
+        headers={"X-User-Role": "admin"},
+    )
+    assert after_invoice.status_code == 200
+    assert "sync_to_erp" in {action["id"] for action in after_invoice.json()["allowed_actions"]}
+
+
+def test_generate_invoice_has_no_direct_status_assignment():
+    tree = ast.parse(Path("services/request_service.py").read_text())
+    generate_invoice = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "generate_invoice"
+    )
+    direct_status_assignments = [
+        node for node in ast.walk(generate_invoice)
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        and any(
+            isinstance(target, ast.Attribute)
+            and isinstance(target.value, ast.Name)
+            and target.value.id == "req"
+            and target.attr == "status"
+            for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+        )
+    ]
+    assert direct_status_assignments == []
+
+
+def test_workspace_action_rejects_stale_request_version():
+    created = client.post("/api/requests", json={
+        "source": "TEST_MOCK", "text": "Нужны тормозные колодки BMW", "customer_name": "Version Test",
+    })
+    request_id = created.json()["request"]["request_id"]
+    _set_request_lifecycle_fixture(request_id, "MATCHING")
+
+    response = client.post(
+        f"/api/requests/{request_id}/actions/transition",
+        json={"target_state": "SUPPLIER_SEARCH", "reason": "stale client"},
+        headers={"X-Request-Version": "2000-01-01T00:00:00"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "REQUEST_VERSION_CONFLICT"
 
 
 def test_invoice_requires_approval():
@@ -461,7 +674,7 @@ def test_invoice_requires_approval():
     assert resp.status_code == 200
     request_id = resp.json()["request"]["request_id"]
 
-    resp2 = client.post(f"/api/erp/invoice/{request_id}")
+    resp2 = client.post(f"/api/erp/invoice/{request_id}", headers={"X-User-Role": "finance"})
     assert resp2.status_code == 422
 
 

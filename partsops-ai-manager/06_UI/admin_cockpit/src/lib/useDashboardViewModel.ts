@@ -94,6 +94,7 @@ export interface DashboardViewModel {
   pipelineRuns: PipelineRun[];
   loading: boolean;
   error: string | null;
+  partialErrors: string[];
   refetch: () => Promise<void>;
 }
 
@@ -103,10 +104,12 @@ export function useDashboardViewModel(fetchTrigger: number = 0): DashboardViewMo
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [partialErrors, setPartialErrors] = useState<string[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setPartialErrors([]);
     try {
       const [healthData, costsData, runsData] = await Promise.allSettled([
         apiJson<DataHealthResponse>('/api/admin/data-health'),
@@ -114,23 +117,29 @@ export function useDashboardViewModel(fetchTrigger: number = 0): DashboardViewMo
         apiJson<PipelineRun[]>('/api/admin/observability/pipeline-runs'),
       ]);
 
+      const failures: string[] = [];
       if (healthData.status === 'fulfilled') {
         setHealth(healthData.value);
       } else {
-        console.error('Failed to fetch data health:', healthData.reason);
+        setHealth(null);
+        failures.push('health системы');
       }
 
       if (costsData.status === 'fulfilled') {
         setLlmCosts(costsData.value);
       } else {
-        console.error('Failed to fetch LLM costs:', costsData.reason);
+        setLlmCosts(null);
+        failures.push('стоимость LLM');
       }
 
       if (runsData.status === 'fulfilled') {
         setPipelineRuns(Array.isArray(runsData.value) ? runsData.value : []);
       } else {
         setPipelineRuns([]);
+        failures.push('pipeline runs');
       }
+      setPartialErrors(failures);
+      if (failures.length === 3) setError('Не удалось загрузить данные dashboard');
     } catch (err: any) {
       setError(err?.message || 'Ошибка загрузки дашборда');
     } finally {
@@ -148,6 +157,7 @@ export function useDashboardViewModel(fetchTrigger: number = 0): DashboardViewMo
     pipelineRuns,
     loading,
     error,
+    partialErrors,
     refetch: fetchData,
   };
 }

@@ -76,7 +76,10 @@ def validate_transition(
         }
 
     violations = []
-    if request_data and strict_invariants:
+    # An empty snapshot is still a snapshot: it must fail any required
+    # invariant instead of silently bypassing validation by virtue of being
+    # falsy.
+    if request_data is not None and strict_invariants:
         violations = check_invariants(target_state, request_data)
         if violations:
             return {

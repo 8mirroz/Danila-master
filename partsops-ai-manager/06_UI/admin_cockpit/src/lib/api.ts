@@ -421,3 +421,16 @@ export function createEventSource(tenantId?: string): EventSource {
   const es = new EventSource(url);
   return es;
 }
+
+export type SupplierAuthStatusMap = Record<string, { site: string; auth_at: string | null; profile_exists: boolean }>;
+
+export async function fetchSuppliersAuthStatus(): Promise<SupplierAuthStatusMap> {
+  return apiJson<SupplierAuthStatusMap>('/api/suppliers/auth-status');
+}
+
+export async function validateContractData(requestId: string): Promise<any> {
+  return apiJson<any>(`/api/contracts/${requestId}/validate`, {
+    method: 'POST',
+  });
+}
+

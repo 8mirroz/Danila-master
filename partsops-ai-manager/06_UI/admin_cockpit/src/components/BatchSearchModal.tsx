@@ -59,7 +59,7 @@ export const BatchSearchModal: React.FC<BatchSearchModalProps> = ({
 
       if (res.ok) {
         const createdReq = await res.json();
-        notify.success(`Запрос ${createdReq.request_id || 'создан'} — пакетный поиск запущен`);
+        notify.success(`Запрос ${createdReq.request_id || 'создан'} — быстрый поиск запущен`);
         onSuccess(createdReq);
         onClose();
       } else {
@@ -78,8 +78,8 @@ export const BatchSearchModal: React.FC<BatchSearchModalProps> = ({
     <ModalShell
       open={isOpen}
       onClose={onClose}
-      title="Пакетный поиск по артикулам OEM"
-      subtitle="Введите артикулы списком для автоматического поиска и подбора цен"
+      title="Быстрый поиск по артикулу"
+      subtitle="Введите артикулы OEM списком для мгновенного поиска и автоматического подбора цен"
       widthClass="max-w-xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">

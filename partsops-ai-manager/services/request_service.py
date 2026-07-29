@@ -14,7 +14,16 @@ from database import engine
 from event_store import emit_event, emit_state_change, get_events, verify_event_chain
 from learning import save_manual_correction
 from pii import mask_email, mask_name, mask_phone, mask_vin, secure_pre_parse
-from models import EventType, PartRequest, RequestState
+from models import (
+    AnalogCandidate,
+    ContractPosition,
+    ERPSyncLog,
+    EventType,
+    OEMCandidate,
+    PartRequest,
+    PriceEvidence,
+    RequestState,
+)
 from suppliers import Invoice, SupplierCatalogItem
 from state_machine import validate_transition
 from policy_engine import EvidenceGates
@@ -40,18 +49,17 @@ def _find_request_by_tenant(session: Session, request_id: str, tenant_id: str) -
         )
     ).first()
 
-def _build_pricing_context(req: PartRequest, session: Session, body: Optional[dict[str, Any]] = None):
+def _build_pricing_context(req: PartRequest, session: Session):
     parts = _json_load(req.parts_json, [])
     selected_matches = _json_load(req.match_evidence_json, {})
     if not isinstance(selected_matches, dict):
         selected_matches = {}
-    body = body or {}
-
-    logistics_cost = float(body.get("logistics_cost", 0.0) or 0.0)
-    urgency_level = str(body.get("urgency_level", "normal") or "normal")
-    target_margin_override = body.get("target_margin_override")
-    if target_margin_override is None:
-        target_margin_override = body.get("margin_override")
+    # Pricing policy is server-owned. Operator supplied pricing knobs are not
+    # accepted here: a client must never be able to silently change margin or
+    # logistics evidence by changing a request body.
+    logistics_cost = 0.0
+    urgency_level = "normal"
+    target_margin_override = None
 
     line_items: list[dict[str, Any]] = []
     margin_violations: list[str] = []
@@ -146,6 +154,150 @@ def _build_pricing_context(req: PartRequest, session: Session, body: Optional[di
 
 
 class RequestService:
+    OFFER_SELECTION_ALLOWED_STATES = {
+        RequestState.MATCHING,
+        RequestState.SUPPLIER_SEARCH,
+        RequestState.OFFER_RANKING,
+        RequestState.PRICING_REVIEW,
+    }
+    INTERNAL_ONLY_STATES = {
+        RequestState.INVOICE_DRAFTED,
+        RequestState.ERP_SYNCING,
+        RequestState.ERP_SYNCED,
+        RequestState.ERP_SYNC_FAILED,
+    }
+
+    @staticmethod
+    def _role_permissions(role: str) -> dict[str, bool]:
+        return {
+            "can_manage_matching": role in {"manager", "admin"},
+            "can_approve_pricing": role in {"finance", "admin"},
+            "can_create_invoice": role in {"finance", "admin"},
+            "can_sync_erp": role == "admin",
+            "can_retry_pipeline": role == "admin",
+        }
+
+    @staticmethod
+    def _allowed_actions(req: PartRequest, role: str, session: Session) -> list[dict[str, Any]]:
+        permissions = RequestService._role_permissions(role)
+        actions: list[dict[str, Any]] = []
+        from state_machine import get_allowed_next
+        for target in get_allowed_next(req.status):
+            if target in RequestService.INTERNAL_ONLY_STATES:
+                continue
+            transition_check = validate_transition(req.status, target, req.model_dump(), strict_invariants=True)
+            if not transition_check["allowed"]:
+                continue
+            required = "can_manage_matching"
+            if target == RequestState.APPROVED:
+                required = "can_approve_pricing"
+            elif target == RequestState.ERP_SYNCING:
+                required = "can_sync_erp"
+            if permissions.get(required, False):
+                actions.append({"id": f"transition:{target}", "kind": "transition", "target_state": target})
+        if permissions["can_manage_matching"] and req.status in RequestService.OFFER_SELECTION_ALLOWED_STATES:
+            actions.append({"id": "select_offer", "kind": "select_offer"})
+        if (
+            req.status == RequestState.APPROVED
+            and permissions["can_create_invoice"]
+            and req.pricing_evidence_json
+            and req.margin_policy_passed is True
+            and req.erp_quotation_ref
+        ):
+            actions.append({"id": "create_invoice", "kind": "create_invoice"})
+        invoice = session.exec(
+            select(Invoice).where(
+                Invoice.request_id == req.request_id,
+                Invoice.tenant_id == req.tenant_id,
+            ).order_by(Invoice.created_at.desc())
+        ).first()
+        pricing_evidence = _json_load(req.pricing_evidence_json, {})
+        has_approved_offer_snapshot = isinstance(pricing_evidence, dict) and bool(
+            pricing_evidence.get("approved_offer_snapshot")
+        )
+        if (
+            req.status in {RequestState.INVOICE_DRAFTED, RequestState.ERP_SYNC_FAILED}
+            and permissions["can_sync_erp"]
+            and invoice
+            and has_approved_offer_snapshot
+        ):
+            actions.append({"id": "sync_to_erp", "kind": "sync_to_erp", "endpoint": f"/api/erp/sync/{req.request_id}"})
+        return actions
+
+    @staticmethod
+    def get_workspace(session: Session, request_id: str, tenant_id: str, role: str) -> dict[str, Any]:
+        req = _find_request_by_tenant(session, request_id, tenant_id)
+        if not req:
+            raise HTTPException(status_code=404, detail="Request not found")
+        parts = _json_load(req.parts_json, [])
+        selections = _json_load(req.match_evidence_json, {})
+        positions = session.exec(select(ContractPosition).where(
+            ContractPosition.request_id == request_id,
+            ContractPosition.tenant_id == tenant_id,
+        ).order_by(ContractPosition.line_no)).all()
+        evidence = session.exec(select(PriceEvidence).where(
+            PriceEvidence.request_id == request_id,
+            PriceEvidence.tenant_id == tenant_id,
+        )).all()
+        oem_candidates = session.exec(select(OEMCandidate).where(
+            OEMCandidate.request_id == request_id,
+            OEMCandidate.tenant_id == tenant_id,
+        )).all()
+        analog_candidates = session.exec(select(AnalogCandidate).where(
+            AnalogCandidate.request_id == request_id,
+            AnalogCandidate.tenant_id == tenant_id,
+        )).all()
+        invoice = session.exec(select(Invoice).where(
+            Invoice.request_id == request_id,
+            Invoice.tenant_id == tenant_id,
+        ).order_by(Invoice.created_at.desc())).first()
+        sync = session.exec(select(ERPSyncLog).where(
+            ERPSyncLog.request_id == request_id,
+            ERPSyncLog.tenant_id == tenant_id,
+        ).order_by(ERPSyncLog.created_at.desc())).first()
+        gates = RequestService.get_request_gates(session, request_id, tenant_id)["gates"]
+        blockers = [
+            {"code": name, "message": value.get("reason", name)}
+            for name, value in gates.items()
+            if isinstance(value, dict) and not value.get("passed", value.get("ok", False))
+        ]
+        return {
+            "request": {
+                "request_id": req.request_id, "status": req.status, "priority": req.priority,
+                "source": req.source, "customer_name": req.customer_name,
+                "parts": parts, "updated_at": req.updated_at.isoformat() if req.updated_at else None,
+            },
+            "positions": [
+                {"position_id": p.position_id, "part_number": p.part_number, "description": p.description,
+                 "quantity": p.quantity, "selected_evidence_id": p.selected_evidence_id,
+                 "review_status": p.review_status, "blocking_status": p.blocking_status,
+                 "blocking_error_code": p.blocking_error_code}
+                for p in positions
+            ],
+            "candidates": {
+                "selected_offers": selections if isinstance(selections, dict) else {},
+                "oem": [{"candidate_id": item.candidate_id, "position_id": item.position_id,
+                         "verification_status": item.verification_status} for item in oem_candidates],
+                "analogs": [{"candidate_id": item.candidate_id, "position_id": item.position_id,
+                             "verification_status": item.verification_status} for item in analog_candidates],
+            },
+            "pricing": {"evidence_available": bool(req.pricing_evidence_json),
+                        "evidence": _json_load(req.pricing_evidence_json, None),
+                        "margin_policy_passed": req.margin_policy_passed,
+                        "evidence_count": len(evidence)},
+            "approval": {"status": "approved" if req.status in {RequestState.APPROVED, RequestState.INVOICE_DRAFTED} else "pending"},
+            "invoice": {"status": (invoice.status.lower() if invoice else "missing"),
+                        "invoice_ref": req.erp_invoice_ref or (invoice.invoice_number if invoice else None)},
+            "erp": {"status": sync.status.lower() if sync else "not_synced",
+                    "sync_id": sync.sync_id if sync else None,
+                    "last_error": sync.last_error if sync else None},
+            "gates": gates,
+            "blockers": blockers,
+            "principal_permissions": RequestService._role_permissions(role),
+            "allowed_actions": RequestService._allowed_actions(req, role, session),
+            "updated_at": req.updated_at.isoformat() if req.updated_at else None,
+        }
+
     @staticmethod
     def get_selected_matches(session: Session, request_id: str, tenant_id: str) -> dict[str, Any]:
         req = _find_request_by_tenant(session, request_id, tenant_id)
@@ -169,7 +321,26 @@ class RequestService:
         req = _find_request_by_tenant(session, request_id, tenant_id)
         if not req:
             raise HTTPException(status_code=404, detail="Request not found")
+        if req.status not in RequestService.OFFER_SELECTION_ALLOWED_STATES:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "OFFER_SELECTION_NOT_ALLOWED",
+                    "request_status": req.status,
+                    "allowed_statuses": sorted(RequestService.OFFER_SELECTION_ALLOWED_STATES),
+                },
+            )
         normalized_part = part_name.strip()
+        request_part_names = {
+            str(part.get("name", "")).strip()
+            for part in _json_load(req.parts_json, [])
+            if isinstance(part, dict)
+        }
+        if normalized_part not in request_part_names:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "OFFER_DOES_NOT_BELONG_TO_REQUEST", "part_name": normalized_part},
+            )
         catalog_id = str((offer.get("item") or {}).get("catalog_id") or "").strip()
         if not normalized_part or not catalog_id:
             raise HTTPException(status_code=422, detail="part_name and offer.item.catalog_id are required")
@@ -214,7 +385,9 @@ class RequestService:
         if not req:
             raise HTTPException(status_code=404, detail="Request not found")
 
-        line_items, pricing_result, margin_violations = _build_pricing_context(req, session, body)
+        if body and any(key in body for key in ("logistics_cost", "urgency_level", "margin_override", "target_margin_override")):
+            raise HTTPException(status_code=422, detail="Pricing policy is managed by the backend and cannot be overridden by the client")
+        line_items, pricing_result, margin_violations = _build_pricing_context(req, session)
         return {
             "request_id": request_id,
             "request_status": req.status,
@@ -375,15 +548,40 @@ class RequestService:
         tenant_id: str,
         target_state: str,
         reason: str,
-        actor_id: str = "admin"
+        actor_id: str = "system"
     ) -> dict[str, Any]:
         req = _find_request_by_tenant(session, request_id, tenant_id)
         if not req:
             raise HTTPException(status_code=404, detail="Request not found")
 
+        return RequestService._apply_transition(
+            session=session,
+            req=req,
+            target_state=target_state,
+            actor_id=actor_id,
+            actor_type="user",
+            reason=reason,
+            commit=True,
+        )
+
+    @staticmethod
+    def _apply_transition(
+        session: Session,
+        req: PartRequest,
+        target_state: str,
+        actor_id: str,
+        actor_type: str,
+        reason: str,
+        commit: bool,
+    ) -> dict[str, Any]:
+        """The only lifecycle mutation path used by production commands."""
         result = validate_transition(req.status, target_state, req.model_dump(), strict_invariants=True)
         if not result["allowed"]:
-            raise HTTPException(status_code=422, detail={"reason": result["reason"], "violations": result.get("violations", [])})
+            raise HTTPException(status_code=409, detail={
+                "code": "INVALID_LIFECYCLE_TRANSITION",
+                "reason": result["reason"],
+                "violations": result.get("violations", []),
+            })
 
         old_state = req.status
         req.status = target_state
@@ -391,18 +589,19 @@ class RequestService:
         session.add(req)
         emit_state_change(
             session=session,
-            request_id=request_id,
+            request_id=req.request_id,
             from_state=old_state,
             to_state=target_state,
-            actor_type="user",
+            actor_type=actor_type,
             actor_id=actor_id,
             reason=reason,
-            tenant_id=tenant_id,
+            tenant_id=req.tenant_id,
             commit=False,
         )
-        session.commit()
-        session.refresh(req)
-        return {"request_id": request_id, "old_state": old_state, "new_state": target_state}
+        if commit:
+            session.commit()
+            session.refresh(req)
+        return {"request_id": req.request_id, "old_state": old_state, "new_state": target_state}
 
     @staticmethod
     def create_manual_correction(
@@ -515,7 +714,25 @@ class RequestService:
         if req.status != RequestState.APPROVED:
             raise HTTPException(status_code=422, detail="Invoice generation requires APPROVED request status")
 
-        line_items, pricing_result, margin_violations = _build_pricing_context(req, session, body)
+        if not req.pricing_evidence_json or req.margin_policy_passed is not True:
+            raise HTTPException(status_code=422, detail="Invoice generation requires approved pricing evidence")
+        if not req.erp_quotation_ref:
+            raise HTTPException(status_code=422, detail="Invoice generation requires an ERP quotation reference")
+
+        selected_offers = _json_load(req.match_evidence_json, {})
+        required_part_names = {
+            str(part.get("name", "")).strip()
+            for part in _json_load(req.parts_json, [])
+            if isinstance(part, dict) and str(part.get("name", "")).strip()
+        }
+        if not isinstance(selected_offers, dict) or not required_part_names.issubset(set(selected_offers)):
+            raise HTTPException(status_code=422, detail={"code": "INVOICE_SELECTED_OFFER_REQUIRED"})
+
+        if body and any(key in body for key in ("logistics_cost", "urgency_level", "margin_override", "target_margin_override")):
+            raise HTTPException(status_code=422, detail="Pricing policy is managed by the backend and cannot be overridden by the client")
+        line_items, pricing_result, margin_violations = _build_pricing_context(req, session)
+        if margin_violations or not pricing_result.margin_policy_passed:
+            raise HTTPException(status_code=422, detail="Invoice generation blocked by pricing policy")
         subtotal = round(sum(item["line_total"] for item in line_items), 2)
         invoice = Invoice(
             tenant_id=tenant_id,
@@ -530,9 +747,13 @@ class RequestService:
             status="DRAFT",
             created_at=_utcnow(),
         )
+        pricing_evidence = _json_load(req.pricing_evidence_json, {})
+        if not isinstance(pricing_evidence, dict):
+            pricing_evidence = {}
+        pricing_evidence["approved_offer_snapshot"] = selected_offers
+        pricing_evidence["approved_at"] = _utcnow().isoformat()
+        req.pricing_evidence_json = json.dumps(pricing_evidence, ensure_ascii=False, default=str)
         session.add(invoice)
-        req.status = RequestState.INVOICE_DRAFTED
-        req.updated_at = _utcnow()
         req.erp_invoice_ref = invoice.invoice_number
         session.add(req)
         emit_event(
@@ -545,15 +766,13 @@ class RequestService:
             tenant_id=tenant_id,
             commit=False,
         )
-        emit_state_change(
+        RequestService._apply_transition(
             session=session,
-            request_id=request_id,
-            from_state=RequestState.APPROVED,
-            to_state=RequestState.INVOICE_DRAFTED,
+            req=req,
+            target_state=RequestState.INVOICE_DRAFTED,
             actor_type="system",
             actor_id="pricing_engine",
             reason="Invoice draft created",
-            tenant_id=tenant_id,
             commit=False,
         )
         session.commit()

@@ -8,20 +8,17 @@ type Invoice = {
   total_price: number;
   created_at: string;
   status: string;
+  order_status?: string;
 };
 
-// Simulate parent order state for UI classification (open vs closed)
-// For mock/session purposes, we check request status if available, or infer
-const isOrderClosed = (requestId: string) => {
-  // If request ID has specific suffix or odd/even logic, or is CLOSED/FULFILLED/CANCELLED
-  return requestId.includes('4815') || requestId.includes('4810') || requestId.includes('LOCAL-2') || requestId.includes('LOCAL-4');
+const isOrderClosed = (status?: string) => {
+  return ['CLOSED', 'CANCELLED', 'EXPIRED', 'FAILED', 'CLIENT_REJECTED'].includes(status ?? '');
 };
 
-const getOrderStage = (requestId: string) => {
-  if (isOrderClosed(requestId)) return 'Закрыт';
-  if (requestId.includes('4821')) return 'Подбор предложений';
-  if (requestId.includes('4817')) return 'Согласование';
-  return 'Обработка деталей';
+const getOrderStage = (status?: string) => {
+  if (!status) return 'Статус заказа не получен';
+  if (isOrderClosed(status)) return 'Закрыт';
+  return status;
 };
 
 interface InvoicesRegistryProps {
@@ -57,7 +54,7 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
 
     const matchesStatus = filterStatus === 'all' || inv.status === filterStatus;
     
-    const isClosed = isOrderClosed(inv.request_id);
+    const isClosed = isOrderClosed(inv.order_status);
     const matchesOrderType =
       filterOrderType === 'all' ||
       (filterOrderType === 'open' && !isClosed) ||
@@ -311,8 +308,8 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
                   <td className="px-4 py-3 font-mono font-semibold">{inv.request_id}</td>
                   <td className="px-4 py-3 font-bold">{inv.customer_name}</td>
                   <td className="px-4 py-3 font-semibold text-[var(--text-secondary)]">
-                    <span className={`inline-block w-2 h-2 rounded-full mr-2 ${isOrderClosed(inv.request_id) ? 'bg-slate-400' : 'bg-green-500 animate-pulse'}`}></span>
-                    {getOrderStage(inv.request_id)}
+                    <span className={`inline-block w-2 h-2 rounded-full mr-2 ${isOrderClosed(inv.order_status) ? 'bg-slate-400' : inv.order_status ? 'bg-green-500' : 'bg-amber-400'}`}></span>
+                    {getOrderStage(inv.order_status)}
                   </td>
                   <td className="px-4 py-3 font-black">{inv.total_price.toLocaleString()} ₽</td>
                   <td className="px-4 py-3 text-[var(--text-muted)]">{new Date(inv.created_at).toLocaleString()}</td>
@@ -338,7 +335,7 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
           {viewMode === 'grid' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {sortedInvoices.map((inv) => {
-                const isClosed = isOrderClosed(inv.request_id);
+                const isClosed = isOrderClosed(inv.order_status);
                 return (
                   <div key={inv.invoice_id} className="border border-[var(--border-default)] rounded-lg p-3 bg-[var(--surface-1)] shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-3 h-52 relative group">
                     <div className="absolute top-2 right-2">
@@ -361,7 +358,7 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
                           Заказ: <span className="font-mono">{inv.request_id}</span>
                         </p>
                         <p className="text-[9px] text-[var(--text-muted)] font-semibold">
-                          Стадия: <span className={`font-bold ${isClosed ? 'text-slate-600' : 'text-green-600'}`}>{getOrderStage(inv.request_id)}</span>
+                          Стадия: <span className={`font-bold ${isClosed ? 'text-slate-600' : inv.order_status ? 'text-green-600' : 'text-amber-600'}`}>{getOrderStage(inv.order_status)}</span>
                         </p>
                       </div>
                     </div>

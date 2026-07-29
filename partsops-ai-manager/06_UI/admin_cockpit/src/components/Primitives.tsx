@@ -378,6 +378,9 @@ export const LeftNavRail: React.FC<LeftNavRailProps> = ({
       return (
         <button
           key={item.id}
+          type="button"
+          aria-label={item.label}
+          aria-current={isActive ? 'page' : undefined}
           onClick={() => { onChangeTab(item.id); if (inDrawer && onCloseDrawer) onCloseDrawer(); }}
           className={`relative group w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-xs font-semibold transition-all duration-200 text-left ${isActive ? 'sidebar-button-glass-active' : 'sidebar-button-glass-inactive'}`}
         >

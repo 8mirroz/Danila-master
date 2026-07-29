@@ -1,35 +1,3 @@
-export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  NEW: ['NORMALIZING', 'CANCELLED'],
-  NORMALIZING: ['PARSING', 'NEEDS_MANUAL_PARSE', 'FAILED'],
-  PARSING: ['VIN_CHECK', 'NEEDS_CLARIFICATION', 'FAILED'],
-  VIN_CHECK: ['PART_EXTRACTION', 'NEEDS_CLARIFICATION', 'MANUAL_REVIEW'],
-  PART_EXTRACTION: ['MATCHING', 'NEEDS_CLARIFICATION', 'MANUAL_REVIEW'],
-  MATCHING: ['SUPPLIER_SEARCH', 'MANUAL_REVIEW', 'NEEDS_CLARIFICATION'],
-  SUPPLIER_SEARCH: ['OFFER_RANKING', 'MANUAL_REVIEW', 'FAILED'],
-  OFFER_RANKING: ['PRICING_REVIEW', 'MANUAL_REVIEW'],
-  PRICING_REVIEW: ['READY_FOR_APPROVAL', 'FINANCE_REVIEW', 'MANUAL_REVIEW'],
-  READY_FOR_APPROVAL: ['APPROVED', 'CLIENT_REJECTED', 'REWORK'],
-  APPROVED: ['ERP_SYNCING', 'REWORK'],
-  ERP_SYNCING: ['INVOICE_DRAFTED', 'ERP_SYNC_FAILED'],
-  INVOICE_DRAFTED: ['SENT_TO_CLIENT', 'REWORK'],
-  SENT_TO_CLIENT: ['PAID', 'CLIENT_REJECTED', 'EXPIRED'],
-  PAID: ['PURCHASE_ORDERED', 'FULFILLED'],
-  PURCHASE_ORDERED: ['FULFILLED', 'SUPPLIER_ISSUE'],
-  FULFILLED: ['CLOSED', 'RETURN_CASE'],
-  CLOSED: [],
-  MANUAL_REVIEW: ['MATCHING', 'SUPPLIER_SEARCH', 'APPROVED', 'CANCELLED', 'REWORK'],
-  NEEDS_CLARIFICATION: ['PARSING', 'CANCELLED'],
-  FAILED: ['NORMALIZING', 'CANCELLED'],
-  REWORK: ['MATCHING', 'SUPPLIER_SEARCH', 'MANUAL_REVIEW'],
-  ERP_SYNC_FAILED: ['ERP_SYNCING', 'MANUAL_REVIEW'],
-  RETURN_CASE: ['CLOSED'],
-  SUPPLIER_ISSUE: ['PURCHASE_ORDERED', 'MANUAL_REVIEW'],
-  NEEDS_MANUAL_PARSE: ['PARSING', 'CANCELLED'],
-  FINANCE_REVIEW: ['READY_FOR_APPROVAL', 'REWORK', 'CANCELLED'],
-  CLIENT_REJECTED: ['CANCELLED', 'REWORK'],
-  EXPIRED: ['CANCELLED'],
-};
-
 export type TransitionVariant = 'primary' | 'warning' | 'danger' | 'secondary';
 
 export const TRANSITION_META: Record<string, { label: string; variant: TransitionVariant; icon: string }> = {
@@ -56,10 +24,4 @@ export const TRANSITION_META: Record<string, { label: string; variant: Transitio
   FULFILLED:          { label: 'Выполнено',           variant: 'primary',   icon: 'fa-box-check' },
   CLOSED:             { label: 'Закрыть',             variant: 'secondary', icon: 'fa-lock' },
 };
-
-export const getAllowedNext = (status: string): string[] => ALLOWED_TRANSITIONS[status] ?? [];
-export const isTerminal = (status: string): boolean => getAllowedNext(status).length === 0;
-export const isBlocked = (status: string): boolean =>
-  ['FAILED', 'ERP_SYNC_FAILED', 'SUPPLIER_ISSUE', 'NEEDS_CLARIFICATION',
-   'NEEDS_MANUAL_PARSE', 'CLIENT_REJECTED', 'EXPIRED'].includes(status);
 

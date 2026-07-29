@@ -69,6 +69,10 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
       : null;
 
   const handleDownloadExcel = () => {
+    if (!partsList.length) {
+      notify.error('Экспорт заблокирован: в заявке нет подтверждённых позиций');
+      return;
+    }
     const downloadUrl = `/api/requests/${request.request_id}/export-excel`;
     const anchor = document.createElement('a');
     anchor.href = downloadUrl;
@@ -224,16 +228,17 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-sans">
-              {partsList.map((item: any, idx: number) => {
-                const name = item.name || item.part_name || 'Автозапчасть';
-                const oem = item.oem || item.oem_number || item.article || '—';
-                const qty = Number(item.quantity || 1);
-                const supplier = item.supplier_name || 'Autodoc Direct (OEM)';
-                const days = item.delivery_days || 1;
-                const buyPrice = Number(item.price || 3500);
-                const clientPrice = buyPrice * (1 + marginFactor);
-                const rowTotal = clientPrice * qty;
-                const score = item.score || '98%';
+              {partsList.length ? partsList.map((item: any, idx: number) => {
+                const name = item.name || item.part_name || '';
+                const oem = item.oem || item.oem_number || item.article || '';
+                const qty = Number(item.quantity || 0);
+                const supplier = item.supplier_name || '';
+                const days = item.delivery_days;
+                const buyPrice = Number(item.price ?? item.purchase_price);
+                const hasBuyPrice = Number.isFinite(buyPrice);
+                const clientPrice = Number(item.client_price ?? (hasBuyPrice ? buyPrice * (1 + marginFactor) : NaN));
+                const rowTotal = Number(item.line_total ?? (Number.isFinite(clientPrice) ? clientPrice * qty : NaN));
+                const score = item.score ?? item.match_score;
 
                 return (
                   <tr key={idx} className="hover:bg-slate-900/80 transition-colors">
@@ -241,19 +246,21 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
                     <td className="px-4 py-3 font-mono font-bold text-emerald-400">{oem}</td>
                     <td className="px-4 py-3 font-medium text-slate-200">{name}</td>
                     <td className="px-4 py-3 text-slate-300">{supplier}</td>
-                    <td className="px-4 py-3 text-center font-mono font-bold text-slate-300">{qty} шт</td>
-                    <td className="px-4 py-3 text-center font-mono text-slate-400">{days} дн</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-400">{buyPrice.toLocaleString()} ₽</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-200">{Math.round(clientPrice).toLocaleString()} ₽</td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400">{Math.round(rowTotal).toLocaleString()} ₽</td>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-slate-300">{qty ? `${qty} шт` : '—'}</td>
+                    <td className="px-4 py-3 text-center font-mono text-slate-400">{days ? `${days} дн` : '—'}</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-400">{hasBuyPrice ? `${buyPrice.toLocaleString()} ₽` : '—'}</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-200">{Number.isFinite(clientPrice) ? `${Math.round(clientPrice).toLocaleString()} ₽` : '—'}</td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400">{Number.isFinite(rowTotal) ? `${Math.round(rowTotal).toLocaleString()} ₽` : '—'}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
-                        {score}
+                        {score ?? 'нет evidence'}
                       </span>
                     </td>
                   </tr>
                 );
-              })}
+              }) : (
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-500">Нет подтверждённых позиций — данные не подставляются.</td></tr>
+              )}
             </tbody>
           </table>
         </div>

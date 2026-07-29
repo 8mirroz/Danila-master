@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
-import { getAllowedNext, TRANSITION_META } from '../lib/stateMachine';
+import { TRANSITION_META } from '../lib/stateMachine';
 import { ActionButton } from './Primitives';
 import { ConfirmModal } from './ConfirmModal';
 import { notify } from '../lib/notify';
-
-import type { RBACMatrix } from '../lib/rbac';
 
 interface TransitionActionsProps {
   status: string;
   requestId: string;
   onTransition: (targetState: string, reason: string) => Promise<void>;
   compact?: boolean;
-  permissions?: RBACMatrix;
+  allowedTargets?: string[];
 }
 
 export const TransitionActions: React.FC<TransitionActionsProps> = ({
@@ -19,24 +17,16 @@ export const TransitionActions: React.FC<TransitionActionsProps> = ({
   requestId: _requestId,
   onTransition,
   compact = false,
-  permissions,
+  allowedTargets = [],
 }) => {
-  const allowed = getAllowedNext(status);
+  const allowed = allowedTargets;
   const [activeTarget, setActiveTarget] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const canTransition = (target: string) => {
-    if (!permissions) return true;
-    if (target === 'APPROVED') return permissions.canApprove;
-    if (target === 'CANCELLED' || target === 'REWORK') return permissions.canReject;
-    if (target === 'ERP_SYNC') return permissions.canTriggerSync;
-    return permissions.canEdit;
-  };
 
   if (allowed.length === 0) {
     return (
       <span className="text-[11px] text-[var(--text-muted)] italic">
-        Терминальный статус ({status})
+        Нет подтверждённых действий ({status})
       </span>
     );
   }
@@ -76,9 +66,8 @@ export const TransitionActions: React.FC<TransitionActionsProps> = ({
             <ActionButton
               key={target}
               variant={meta.variant}
-              disabled={loading || !canTransition(target)}
+              disabled={loading}
               onClick={() => setActiveTarget(target)}
-              title={!canTransition(target) ? 'Нет прав на это действие' : undefined}
             >
               <i className={`fas ${meta.icon} text-[10px]`} />
               <span>{meta.label}</span>

@@ -35,8 +35,6 @@ import { TransitionActions } from './components/TransitionActions';
 import { notify } from './lib/notify';
 import { JobReportView } from './components/JobReportView';
 import { HermesChatDrawer } from './components/HermesChatDrawer';
-import { getPermissions } from './lib/rbac';
-import type { Role } from './lib/rbac';
 import { BatchSearchModal } from './components/BatchSearchModal';
 import { getWorkflowStepIndex } from './lib/workflow';
 
@@ -56,6 +54,19 @@ type Request = {
   vehicle_model?: string;
   erp_quotation_ref?: string | null;
   erp_invoice_ref?: string | null;
+  allowed_targets?: string[];
+  allowed_actions?: Array<{ id: string; kind: string; target_state?: string }>;
+  recommended_action?: { id: string; kind: string; target_state?: string } | null;
+  is_blocked?: boolean;
+  version?: string | null;
+};
+
+type Workspace = {
+  request: { request_id: string; status: string; parts: Array<{ name: string; quantity: number }> };
+  candidates: { selected_offers: Record<string, any> };
+  principal_permissions: { can_create_invoice: boolean; can_sync_erp: boolean };
+  allowed_actions: Array<{ id: string; kind: string; target_state?: string }>;
+  updated_at?: string | null;
 };
 
 function App() {
@@ -68,18 +79,38 @@ function App() {
   const [activeStep, setActiveStep] = useState<number>(2);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [searchGlobalQuery, setSearchGlobalQuery] = useState('');
-  const [currentRole] = useState<Role>('ADMIN');
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   const [requests, setRequests] = useState<Request[]>([]);
   const [normalizedParts, setNormalizedParts] = useState<Array<{ name: string; quantity: number }>>([]);
   const [selectedOffers, setSelectedOffers] = useState<Record<string, any>>({});
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [orderIntakeKey, setOrderIntakeKey] = useState(0);
+  const [isErpSyncing, setIsErpSyncing] = useState(false);
   const [suppliersForPalette, setSuppliersForPalette] = useState<any[]>([]);
+
+  const handleOpenNewOrder = () => {
+    setOrderIntakeKey((prev) => prev + 1);
+    setActiveNav('orders');
+  };
   const [lastErpSync, setLastErpSync] = useState<Date | null>(null);
   const [erpSyncText, setErpSyncText] = useState<string>('загрузка...');
 
   const dashboardVm = useDashboardViewModel(fetchTrigger);
+
+  useEffect(() => {
+    void apiFetch('/api/session')
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Session HTTP ${res.status}`);
+        return res.json();
+      })
+      .catch((error) => {
+        console.error('Session identity unavailable', error);
+        setWorkspaceError('Не удалось подтвердить роль пользователя. Действия заблокированы до восстановления соединения.');
+      });
+  }, []);
 
   const fetchDataHealth = async () => {
     try {
@@ -279,25 +310,27 @@ function App() {
 
   useEffect(() => {
     if (selectedReq) {
-      try {
-        const parsed = JSON.parse(selectedReq.parts_json || '[]');
-        setNormalizedParts(parsed);
-      } catch {
-        setNormalizedParts([]);
-      }
+      setWorkspace(null);
+      setWorkspaceError(null);
       setSelectedOffers({});
-      void apiFetch(`/api/requests/${selectedReq.request_id}/matches`)
+      void apiFetch(`/api/requests/${selectedReq.request_id}/workspace`)
         .then(async (res) => {
-          if (!res.ok) return;
-          const data = await res.json();
-          if (data && typeof data.selections === 'object' && data.selections !== null) {
-            setSelectedOffers(data.selections);
-          }
+          if (!res.ok) throw new Error(`Workspace HTTP ${res.status}`);
+          return res.json() as Promise<Workspace>;
         })
-        .catch((error) => {
-          console.warn('Selected live matches unavailable', error);
+        .then((data) => {
+          setWorkspace(data);
+          setNormalizedParts(data.request.parts ?? []);
+          setSelectedOffers(data.candidates.selected_offers ?? {});
+          setSelectedReq((previous) => previous && previous.status !== data.request.status
+            ? { ...previous, status: data.request.status }
+            : previous);
+          setActiveStep(getRequestWorkspaceStep(data.request.status));
+        })
+        .catch((error: unknown) => {
+          setNormalizedParts([]);
+          setWorkspaceError(error instanceof Error ? error.message : 'Не удалось загрузить подтверждённое состояние заявки');
         });
-      setActiveStep(getRequestWorkspaceStep(selectedReq.status));
     }
   }, [selectedReq]);
 
@@ -307,21 +340,24 @@ function App() {
     setActiveStep(getRequestWorkspaceStep(req.status));
   };
 
-  const handleStateTransition = async (targetState: string, reason: string, reqId?: string) => {
+  const handleStateTransition = async (targetState: string, reason: string, reqId?: string, version?: string | null) => {
     const idToTransition = reqId || selectedReq?.request_id;
     if (!idToTransition) return;
     try {
       const res = await apiFetch(`/api/requests/${idToTransition}/transition`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_state: targetState, reason, actor_id: 'admin' }),
+        headers: { 'Content-Type': 'application/json', ...(version ? { 'X-Request-Version': version } : {}) },
+        body: JSON.stringify({ target_state: targetState, reason }),
       });
       if (res.ok) {
         const updated = await res.json();
-        notify.transition(selectedReq?.status || 'CURRENT', updated.new_state);
+        const updatedStatus = updated.workspace?.request?.status ?? updated.transition?.new_state;
+        if (!updatedStatus) throw new Error('Backend не вернул каноническое состояние заявки');
+        notify.transition(selectedReq?.status || 'CURRENT', updatedStatus);
         setFetchTrigger((prev) => prev + 1);
         if (selectedReq && selectedReq.request_id === idToTransition) {
-          setSelectedReq((prev) => (prev ? { ...prev, status: updated.new_state } : null));
+          setSelectedReq((prev) => (prev ? { ...prev, status: updatedStatus } : null));
+          if (updated.workspace) setWorkspace(updated.workspace);
           if (targetState === 'APPROVED') setActiveStep(5);
         }
       } else {
@@ -402,21 +438,6 @@ function App() {
     }
   };
 
-  const formattedPartsWithBestMatch = normalizedParts.map((part) => {
-    const chosenOffer = selectedOffers[part.name];
-    return {
-      name: part.name,
-      quantity: part.quantity,
-      best_match: chosenOffer
-        ? {
-            name: chosenOffer.item.name,
-            price: chosenOffer.item.price,
-            price_deviation_from_median: chosenOffer.price_deviation_from_median,
-          }
-        : undefined,
-    };
-  });
-
   const activeQueueCount =
     dashboardVm.health?.entity_counts?.requests?.active_queue_total ??
     requests.filter((r) => !['CLOSED', 'CANCELLED', 'FAILED', 'EXPIRED', 'CLIENT_REJECTED'].includes(r.status)).length;
@@ -451,6 +472,19 @@ function App() {
         <main className="flex-1 h-full overflow-y-auto bg-[var(--bg-app)]">
           {selectedReq && ['matching', 'pricing'].includes(activeNav) ? (
             <div className="p-4 max-w-6xl mx-auto space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-sm text-xs font-semibold border border-indigo-900/40">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Режим контекста заявки: <strong className="font-mono text-blue-300">{selectedReq.request_id}</strong> ({selectedReq.customer_name || 'Без имени'})</span>
+                </div>
+                <button
+                  onClick={() => setSelectedReq(null)}
+                  className="px-3 py-1 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-[11px] font-bold text-white transition-all active:scale-95 flex items-center gap-1.5"
+                  title="Перейти в автономный глобальный инструмент подбора/расчета без привязки к заявке"
+                >
+                  <Icon name="rotate" size={12} /> 🔓 Открепить заявку (Автономный режим)
+                </button>
+              </div>
               <WorkspaceHeader
                 title={selectedReq.customer_name ? `${selectedReq.customer_name} - План закупки запчастей` : `${selectedReq.request_id} - План закупки запчастей`}
                 requestId={selectedReq.request_id}
@@ -473,6 +507,8 @@ function App() {
                 canOpenStep={canOpenWorkspaceStep}
                 onStepClick={openWorkspaceStep}
               />
+              {workspaceError && <InlineAlert type="danger" message={`${workspaceError} Повторите открытие заявки после восстановления соединения.`} />}
+              {!workspace && !workspaceError && <InlineAlert type="info" message="Загружаем подтверждённое состояние заявки и разрешённые действия…" />}
               <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50/55 px-4 py-3 text-xs">
                 <div className="min-w-0">
                   <p className="font-bold text-slate-900">{activeStep === 2 ? 'Проверьте распознанные позиции' : activeStep === 3 ? 'Выберите лучший оффер для каждой позиции' : activeStep === 4 ? 'Проверьте доказательства и согласуйте цену' : 'Подготовьте и отправьте счёт'}</p>
@@ -508,10 +544,10 @@ function App() {
                       selectedOffers={selectedOffers}
                       requestId={selectedReq.request_id}
                       onSelectOffer={(partName, offer) => {
-                        void apiFetch(`/api/requests/${selectedReq.request_id}/matches`, {
+                        void apiFetch(`/api/requests/${selectedReq.request_id}/actions/select_offer`, {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ part_name: partName, offer, actor_id: 'admin' }),
+                          headers: { 'Content-Type': 'application/json', ...(workspace?.updated_at ? { 'X-Request-Version': workspace.updated_at } : {}) },
+                          body: JSON.stringify({ part_name: partName, offer }),
                         })
                           .then(async (res) => {
                             if (!res.ok) {
@@ -520,8 +556,9 @@ function App() {
                             }
                             return res.json();
                           })
-                          .then((data) => {
-                            setSelectedOffers(data.selections ?? {});
+                          .then((data: Workspace) => {
+                            setWorkspace(data);
+                            setSelectedOffers(data.candidates?.selected_offers ?? {});
                             notify.success(`Оффер для «${partName}» сохранён`);
                           })
                           .catch((error) => {
@@ -557,7 +594,9 @@ function App() {
                         status={selectedReq.status}
                         requestId={selectedReq.request_id}
                         onTransition={handleStateTransition}
-                        permissions={getPermissions(currentRole)}
+                        allowedTargets={(workspace?.allowed_actions ?? [])
+                          .filter((action) => action.kind === 'transition')
+                          .flatMap((action) => action.target_state ? [action.target_state] : [])}
                       />
                     </div>
                   </SectionCard>
@@ -568,15 +607,23 @@ function App() {
                       <Button variant="secondary" icon="arrow-left" onClick={() => setActiveStep(4)}>Назад к согласованию</Button>
                     </div>
                     <PricingCalculator
-                      parts={formattedPartsWithBestMatch}
                       requestId={selectedReq.request_id}
+                      version={workspace?.updated_at}
                       isApproved={selectedReq.status === 'APPROVED'}
+                      canCreateInvoice={Boolean(workspace?.principal_permissions.can_create_invoice)}
+                      canSyncErp={Boolean((workspace?.allowed_actions ?? []).some((action) => action.id === 'sync_to_erp'))}
                       erpQuotationRef={selectedReq.erp_quotation_ref}
                       onDraftInvoice={(data) => {
                         const invoice = data.invoice ?? data;
-                        notify.invoiceDrafted(invoice.invoice_number);
+                        const invoiceRef = invoice.invoice_ref ?? invoice.invoice_number;
+                        if (!invoiceRef || !data.request?.status) {
+                          notify.error('Backend не вернул канонический invoice workspace');
+                          return;
+                        }
+                        notify.invoiceDrafted(invoiceRef);
+                        setWorkspace(data as Workspace);
                         setSelectedReq((prev) => prev
-                          ? { ...prev, status: 'INVOICE_DRAFTED', erp_invoice_ref: invoice.invoice_number }
+                          ? { ...prev, status: data.request.status, erp_invoice_ref: invoiceRef }
                           : prev);
                         setFetchTrigger((prev) => prev + 1);
                       }}
@@ -616,7 +663,7 @@ function App() {
                         <div className="flex items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                            Система активна
+                            {dashboardVm.loading ? 'Проверка системы' : dashboardVm.health?.status === 'healthy' ? 'Данные подтверждены' : 'Статус недоступен'}
                           </span>
                           {dashboardVm.health?.tenant_id && (
                             <span className="text-[10px] font-mono text-slate-400">
@@ -625,7 +672,7 @@ function App() {
                           )}
                         </div>
                         <h2 className="text-xl font-black tracking-tight text-white">
-                          Операционный пульт закупок PartsOps AI
+                          Рабочая очередь PartsOps
                         </h2>
                         <p className="text-xs text-slate-300 font-medium">
                           Мониторинг единой очереди запросов, ИИ-агентов LangGraph и синхронизации с ERP
@@ -635,27 +682,31 @@ function App() {
                       <div className="flex flex-wrap items-center gap-2.5">
                         <button
                           onClick={() => setIsBatchModalOpen(true)}
-                          className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/20 shadow-xs flex items-center gap-2"
+                          className="rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20 px-4 py-2.5 text-xs font-bold text-white transition-all duration-200 backdrop-blur-md shadow-xs flex items-center gap-2 active:scale-95"
+                          title="Быстрый пакетный поиск по списку артикулов OEM"
                         >
-                          <Icon name="search" size={14} />
-                          Пакетный поиск OEM
+                          <Icon name="search" size={14} className="text-blue-300" />
+                          Быстрый поиск по артикулу
                         </button>
                         <button
                           onClick={() => {
+                            setIsErpSyncing(true);
                             setFetchTrigger((prev) => prev + 1);
                             void notify.erpSync();
+                            setTimeout(() => setIsErpSyncing(false), 800);
                           }}
-                          className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/20 shadow-xs flex items-center gap-2"
-                          title="Обновить статус ERP (не запускает full push)"
+                          className="rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20 px-4 py-2.5 text-xs font-bold text-white transition-all duration-200 backdrop-blur-md shadow-xs flex items-center gap-2 active:scale-95"
+                          title="Обновить статус ERP (синхронизация состояния)"
                         >
-                          <Icon name="rotate" size={14} />
+                          <Icon name="rotate" size={14} className={`text-slate-300 ${isErpSyncing ? 'animate-spin text-blue-400' : ''}`} />
                           Статус ERP
                         </button>
                         <button
-                          onClick={() => setActiveNav('orders')}
-                          className="rounded-2xl bg-blue-600 hover:bg-blue-500 px-5 py-2.5 text-xs font-black text-white transition shadow-md flex items-center gap-2"
+                          onClick={handleOpenNewOrder}
+                          className="rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-5 py-2.5 text-xs font-black text-white transition-all duration-200 shadow-md hover:shadow-blue-500/25 flex items-center gap-2 active:scale-95"
+                          title="Создать и настроить новый кастомный запрос"
                         >
-                          <Icon name="plus" size={14} />
+                          <Icon name="plus" size={14} className="text-white" />
                           Новый запрос (Кастом)
                         </button>
                       </div>
@@ -720,6 +771,10 @@ function App() {
                   </div>
 
                   {/* Real Backend Alerts list */}
+                  {dashboardVm.error && <InlineAlert type="danger" message={`${dashboardVm.error}. Повторите обновление очереди.`} />}
+                  {dashboardVm.partialErrors.length > 0 && !dashboardVm.error && (
+                    <InlineAlert type="warning" message={`Частично недоступны: ${dashboardVm.partialErrors.join(', ')}. Показаны только подтверждённые данные.`} />
+                  )}
                   {dashboardVm.health?.alerts && dashboardVm.health.alerts.length > 0 && (
                     <div className="space-y-2">
                       {dashboardVm.health.alerts.map((alert, idx) => (
@@ -734,7 +789,9 @@ function App() {
                   <BlockedQueue
                     requests={requests}
                     onSelectRequest={handleSelectRequest}
-                    onTransitionRequest={handleStateTransition}
+                    onTransitionRequest={(requestId, targetState, reason, version) =>
+                      handleStateTransition(targetState, reason, requestId, version)
+                    }
                   />
 
                   <div className="grid grid-cols-1 gap-4">
@@ -795,6 +852,7 @@ function App() {
               {activeNav === 'orders' && (
                 <div className="mx-auto max-w-5xl space-y-4">
                   <CrawlerIntakePanel
+                    key={orderIntakeKey}
                     onCreated={() => {
                       setFetchTrigger((prev) => prev + 1);
                     }}
@@ -808,23 +866,20 @@ function App() {
                 </div>
               )}
 
-              {['matching', 'pricing'].includes(activeNav) && (
-                <div className="max-w-md mx-auto py-10">
-                  <EmptyState
-                    title="Запрос не выбран"
-                    description="Пожалуйста, выберите активный запрос из очереди сортировки справа."
-                    icon={activeNav === 'matching' ? 'rotate' : 'pencil'}
-                    actionNode={
-                      <Button
-                        variant="primary"
-                        icon="chevron-right"
-                        onClick={() => setRightCollapsed(false)}
-                      >
-                        Открыть очередь
-                      </Button>
-                    }
-                  />
-                </div>
+              {activeNav === 'matching' && !selectedReq && (
+                <EmptyState
+                  title="Выберите заявку для подбора"
+                  description="Матрица офферов доступна только в подтверждённом workspace заявки."
+                  icon="fa-list-check"
+                />
+              )}
+
+              {activeNav === 'pricing' && !selectedReq && (
+                <EmptyState
+                  title="Выберите согласованную заявку"
+                  description="Pricing и ERP-команды доступны только из подтверждённого lifecycle workspace."
+                  icon="fa-calculator"
+                />
               )}
 
               {activeNav === 'audit' && selectedReq && (
