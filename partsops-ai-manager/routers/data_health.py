@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlmodel import Session, select, func, desc
+from sqlmodel import Session, select, func, desc, col
 
 from database import get_session
 from models import (
@@ -66,7 +66,7 @@ def get_data_health(
 
     # Requests by status
     request_rows = session.exec(
-        select(PartRequest.status, func.count(PartRequest.id))
+        select(PartRequest.status, func.count(col(PartRequest.id)))
         .where(PartRequest.tenant_id == tenant_id)
         .group_by(PartRequest.status)
     ).all()
@@ -78,17 +78,17 @@ def get_data_health(
 
     # Suppliers
     supplier_total = session.exec(
-        select(func.count(Supplier.id))
+        select(func.count(col(Supplier.id)))
         .where(Supplier.tenant_id == tenant_id)
-    ).scalar() or 0
+    ).first() or 0
     supplier_active = session.exec(
-        select(func.count(Supplier.id))
+        select(func.count(col(Supplier.id)))
         .where(Supplier.tenant_id == tenant_id, Supplier.is_active == True)
-    ).scalar() or 0
+    ).first() or 0
 
     # Invoices by status
     invoice_rows = session.exec(
-        select(Invoice.status, func.count(Invoice.id))
+        select(Invoice.status, func.count(col(Invoice.id)))
         .where(Invoice.tenant_id == tenant_id)
         .group_by(Invoice.status)
     ).all()
@@ -96,7 +96,7 @@ def get_data_health(
 
     # Approval tickets by status
     ticket_rows = session.exec(
-        select(ApprovalTicket.status, func.count(ApprovalTicket.id))
+        select(ApprovalTicket.status, func.count(col(ApprovalTicket.id)))
         .where(ApprovalTicket.tenant_id == tenant_id)
         .group_by(ApprovalTicket.status)
     ).all()
@@ -104,7 +104,7 @@ def get_data_health(
 
     # ERP sync logs by status
     erp_rows = session.exec(
-        select(ERPSyncLog.status, func.count(ERPSyncLog.id))
+        select(ERPSyncLog.status, func.count(col(ERPSyncLog.id)))
         .where(ERPSyncLog.tenant_id == tenant_id)
         .group_by(ERPSyncLog.status)
     ).all()
@@ -112,46 +112,46 @@ def get_data_health(
 
     # Total events & LLM calls
     events_total = session.exec(
-        select(func.count(RequestEvent.id))
+        select(func.count(col(RequestEvent.id)))
         .where(RequestEvent.tenant_id == tenant_id)
-    ).scalar() or 0
+    ).first() or 0
 
     llm_total = session.exec(
-        select(func.count(LLMUsageLog.id))
+        select(func.count(col(LLMUsageLog.id)))
         .where(LLMUsageLog.tenant_id == tenant_id)
-    ).scalar() or 0
+    ).first() or 0
 
     # ── 2. Freshness metrics ────────────────────────────────────
 
     last_request_created = session.exec(
         select(func.max(PartRequest.created_at))
         .where(PartRequest.tenant_id == tenant_id)
-    ).scalar()
+    ).first()
 
     last_request_updated = session.exec(
         select(func.max(PartRequest.updated_at))
         .where(PartRequest.tenant_id == tenant_id)
-    ).scalar()
+    ).first()
 
     last_event = session.exec(
         select(func.max(RequestEvent.occurred_at))
         .where(RequestEvent.tenant_id == tenant_id)
-    ).scalar()
+    ).first()
 
     last_llm = session.exec(
         select(func.max(LLMUsageLog.created_at))
         .where(LLMUsageLog.tenant_id == tenant_id)
-    ).scalar()
+    ).first()
 
     last_supplier_feed = session.exec(
         select(func.max(Supplier.last_feed_at))
         .where(Supplier.tenant_id == tenant_id)
-    ).scalar()
+    ).first()
 
     last_erp_sync = session.exec(
         select(func.max(ERPSyncLog.last_attempt_at))
         .where(ERPSyncLog.tenant_id == tenant_id)
-    ).scalar()
+    ).first()
 
     # ── 3. Health indicators ────────────────────────────────────
 
@@ -188,33 +188,33 @@ def get_data_health(
     # Agent (LLM) health: error rate in last hour
     one_hour_ago_dt = now - timedelta(hours=1)
     llm_last_hour = session.exec(
-        select(func.count(LLMUsageLog.id))
+        select(func.count(col(LLMUsageLog.id)))
         .where(LLMUsageLog.tenant_id == tenant_id)
-        .where(LLMUsageLog.created_at >= one_hour_ago_dt)
-    ).scalar() or 0
+        .where(col(LLMUsageLog.created_at) >= one_hour_ago_dt)
+    ).first() or 0
 
     llm_errors_last_hour = session.exec(
-        select(func.count(LLMUsageLog.id))
+        select(func.count(col(LLMUsageLog.id)))
         .where(LLMUsageLog.tenant_id == tenant_id)
-        .where(LLMUsageLog.created_at >= one_hour_ago_dt)
+        .where(col(LLMUsageLog.created_at) >= one_hour_ago_dt)
         .where(LLMUsageLog.status == "error")
-    ).scalar() or 0
+    ).first() or 0
 
     llm_error_rate = round(llm_errors_last_hour / llm_last_hour, 4) if llm_last_hour else 0.0
 
     # Supplier feed freshness
     feed_cutoff_dt = now - timedelta(days=_STALE_FEED_DAYS)
     stale_feed_suppliers = session.exec(
-        select(func.count(Supplier.id))
+        select(func.count(col(Supplier.id)))
         .where(Supplier.tenant_id == tenant_id)
-        .where(Supplier.last_feed_at < feed_cutoff_dt)
-    ).scalar() or 0
+        .where(col(Supplier.last_feed_at) < feed_cutoff_dt)
+    ).first() or 0
 
     no_feed_suppliers = session.exec(
-        select(func.count(Supplier.id))
+        select(func.count(col(Supplier.id)))
         .where(Supplier.tenant_id == tenant_id)
-        .where(Supplier.last_feed_at.is_(None))
-    ).scalar() or 0
+        .where(col(Supplier.last_feed_at).is_(None))
+    ).first() or 0
 
     # ── 4. Alerts ───────────────────────────────────────────────
 

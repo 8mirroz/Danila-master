@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "built_at": "2026-07-29T09:59:30+00:00",
+  "baseline_sha256": "a3f1d2e4b8c9071f2a5d6e7b3c4f9012a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+  "approved_decisions": [],
+  "tokens": {
+    "colors": {
+      "bg-app":                 { "value": "#070A0F",                         "role": "Root application background" },
+      "bg-canvas":              { "value": "#0B1018",                         "role": "Canvas / page background" },
+      "bg-shell":               { "value": "#070A0F",                         "role": "Shell frame background" },
+      "nav-rail":               { "value": "#0B1018",                         "role": "Navigation rail background" },
+      "nav-rail-2":             { "value": "#0E1520",                         "role": "Navigation rail secondary surface" },
+      "nav-border":             { "value": "rgba(255, 255, 255, 0.08)",        "role": "Navigation rail border" },
+      "nav-text":               { "value": "#F4F7FB",                         "role": "Navigation primary text" },
+      "nav-muted":              { "value": "#9AA6B2",                         "role": "Navigation muted / secondary text" },
+      "text-primary":           { "value": "#F4F7FB",                         "role": "Primary body text" },
+      "text-secondary":         { "value": "#9AA6B2",                         "role": "Secondary / helper text" },
+      "text-muted":             { "value": "#5F6B78",                         "role": "Muted / disabled text" },
+      "border-subtle":          { "value": "rgba(255, 255, 255, 0.04)",        "role": "Subtle separator" },
+      "border-default":         { "value": "rgba(255, 255, 255, 0.08)",        "role": "Default border" },
+      "border-strong":          { "value": "rgba(255, 255, 255, 0.16)",        "role": "Strong / focused border" },
+      "accent-primary":         { "value": "#2EE6D6",                         "role": "Primary brand accent (neon cyan)" },
+      "accent-primary-strong":  { "value": "#00B49D",                         "role": "Strong primary accent" },
+      "accent-success":         { "value": "#3EE985",                         "role": "Success state" },
+      "accent-warning":         { "value": "#F5C84C",                         "role": "Warning state" },
+      "accent-danger":          { "value": "#FF5C7A",                         "role": "Danger / error state" },
+      "accent-info":            { "value": "#53B6FF",                         "role": "Informational accent" },
+      "state-focus-visible":    { "value": "#2EE6D6",                         "role": "Keyboard focus indicator color" }
+    },
+    "surfaces": {
+      "surface-1": { "value": "#0D131E", "role": "Elevation 1 — base surface" },
+      "surface-2": { "value": "#121A28", "role": "Elevation 2 — raised card" },
+      "surface-3": { "value": "#182335", "role": "Elevation 3 — floating panel" },
+      "surface-4": { "value": "#1F2D44", "role": "Elevation 4 — overlay" },
+      "surface-5": { "value": "#2B3D5B", "role": "Elevation 5 — modal / tooltip" }
+    },
+    "radii": {
+      "radius-panel":   "20px",
+      "radius-card":    "20px",
+      "radius-modal":   "28px",
+      "radius-control": "12px"
+    },
+    "shadows": {
+      "shadow-sm":    "0 4px 16px rgba(0, 0, 0, 0.4)",
+      "shadow-md":    "0 8px 30px rgba(0, 0, 0, 0.6)",
+      "shadow-lg":    "0 16px 45px rgba(0, 0, 0, 0.8)",
+      "shadow-modal": "0 24px 64px rgba(0, 0, 0, 0.9)"
+    },
+    "spacing": {
+      "space-1": "4px",
+      "space-2": "8px",
+      "space-3": "12px",
+      "space-4": "16px",
+      "space-5": "20px",
+      "space-6": "24px",
+      "space-7": "32px"
+    },
+    "typography": {
+      "font_family_primary": "Plus Jakarta Sans Variable, Plus Jakarta Sans, Inter, sans-serif",
+      "font_family_mono": "Fira Code, ui-monospace, monospace"
+    }
+  },
+  "visual_language": {
+    "theme": "dark",
+    "color_scheme": "dark",
+    "vibe": "Operational control plane. Dark mode, neon cyan accent (#2EE6D6), glassmorphism elevated surfaces, high-contrast legibility.",
+    "motion": "220ms cubic-bezier(0.16, 1, 0.3, 1) — snappy easing with intentional deceleration"
+  },
+  "effects": {
+    "state-hover":          "rgba(46, 230, 214, 0.08)",
+    "state-selected":       "rgba(46, 230, 214, 0.14)",
+    "state-active":         "rgba(46, 230, 214, 0.22)",
+    "state-disabled":       "#121A28",
+    "focus-ring":           "0 0 0 2px #070A0F, 0 0 0 4px rgba(46, 230, 214, 0.55)",
+    "transition-base":      "220ms cubic-bezier(0.16, 1, 0.3, 1)",
+    "sidebar-bg":           "linear-gradient(180deg, #0B1018 0%, #0E1520 100%)",
+    "sidebar-text":         "rgba(244, 247, 251, 0.75)",
+    "sidebar-text-strong":  "#F4F7FB",
+    "sidebar-muted":        "rgba(244, 247, 251, 0.45)",
+    "sidebar-pill":         "rgba(46, 230, 214, 0.12)",
+    "sidebar-pill-border":  "rgba(46, 230, 214, 0.25)",
+    "sidebar-hover":        "rgba(255, 255, 255, 0.05)"
+  },
+  "components": {
+    "nav_rail": {
+      "bg": "var(--nav-rail)",
+      "text": "var(--nav-text)",
+      "border": "var(--nav-border)"
+    },
+    "panel": {
+      "bg": "var(--surface-1)",
+      "radius": "var(--radius-panel)",
+      "shadow": "var(--shadow-sm)"
+    },
+    "card": {
+      "bg": "var(--surface-2)",
+      "radius": "var(--radius-card)",
+      "shadow": "var(--shadow-sm)"
+    },
+    "modal": {
+      "bg": "var(--surface-2)",
+      "radius": "var(--radius-modal)",
+      "shadow": "var(--shadow-modal)"
+    },
+    "control": {
+      "radius": "var(--radius-control)",
+      "focus_ring": "var(--focus-ring)"
+    }
+  }
+}

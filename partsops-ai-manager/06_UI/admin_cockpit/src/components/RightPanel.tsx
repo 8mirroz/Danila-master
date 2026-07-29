@@ -292,10 +292,10 @@ export const RightPanel = ({
               : requests.filter(r => r.status === 'Отклонен' || r.status === 'CANCELLED' || r.status === 'SUPPLIER_ISSUE').length.toString().padStart(2, '0');
             
             const badgeBg = item.tone === 'emerald' 
-              ? 'bg-green-50 text-green-700 border-green-200' 
+              ? 'bg-[var(--accent-success)]/10 text-[var(--accent-success)] border-[var(--accent-success)]/30' 
               : item.tone === 'danger' 
-              ? 'bg-red-50 text-red-700 border-red-200' 
-              : 'bg-slate-50 text-slate-600 border-slate-200';
+              ? 'bg-[var(--accent-danger)]/10 text-[var(--accent-danger)] border-[var(--accent-danger)]/30' 
+              : 'bg-[var(--surface-3)] text-[var(--text-secondary)] border-[var(--border-default)]';
 
             return (
               <div 
@@ -303,7 +303,7 @@ export const RightPanel = ({
                 className={`min-w-0 flex items-center justify-center gap-1 border py-1 rounded-[10px] shadow-sm font-semibold ${badgeBg}`}
               >
                 <span className={`w-1 h-1 rounded-full ${
-                  item.tone === 'emerald' ? 'bg-green-500 animate-pulse' : item.tone === 'danger' ? 'bg-red-500' : 'bg-slate-400'
+                  item.tone === 'emerald' ? 'bg-[var(--accent-success)] animate-pulse' : item.tone === 'danger' ? 'bg-[var(--accent-danger)]' : 'bg-[var(--text-muted)]'
                 }`} />
                 <span>{displayLabel}</span>
                 <span className="font-bold font-mono">{count}</span>
@@ -321,12 +321,12 @@ export const RightPanel = ({
           onDrop={handleDrop}
         >
           {composerMessage && (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] font-medium text-emerald-700">
+            <div className="rounded-md border border-[var(--accent-success)]/30 bg-[var(--accent-success)]/10 px-2.5 py-2 text-[11px] font-medium text-[var(--accent-success)]">
               {composerMessage}
             </div>
           )}
           {composerError && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-2 text-[11px] font-medium text-rose-700">
+            <div className="rounded-md border border-[var(--accent-danger)]/30 bg-[var(--accent-danger)]/10 px-2.5 py-2 text-[11px] font-medium text-[var(--accent-danger)]">
               {composerError}
             </div>
           )}
@@ -338,7 +338,7 @@ export const RightPanel = ({
             <textarea
               className={`w-full min-h-[66px] border rounded-[10px] p-2.5 text-xs text-[var(--text-primary)] bg-[var(--surface-1)] outline-none focus:border-[var(--accent-primary)] font-sans resize-none transition-all ${
                 isDragging 
-                  ? 'border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)] bg-blue-50/30 border-dashed' 
+                  ? 'border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)] bg-[var(--accent-primary)]/10 border-dashed' 
                   : 'border-[var(--border-default)]'
               }`}
               placeholder="Введите текст запроса или перетащите файл (PDF, Excel, Word)..."
@@ -348,7 +348,7 @@ export const RightPanel = ({
             />
             {isDragging && (
               <div className="absolute inset-0 bg-[var(--accent-primary)] bg-opacity-5 flex items-center justify-center pointer-events-none rounded-md">
-                <div className="bg-white border border-[var(--accent-primary)] px-3 py-1.5 rounded-md shadow-sm text-xs font-semibold text-[var(--accent-primary)] flex items-center gap-1.5 animate-bounce">
+                <div className="bg-[var(--surface-2)] border border-[var(--accent-primary)] px-3 py-1.5 rounded-md shadow-sm text-xs font-semibold text-[var(--accent-primary)] flex items-center gap-1.5 animate-bounce">
                   <Icon name="file-arrow-up" size={14} /> Сбросьте файл сюда
                 </div>
               </div>
@@ -357,15 +357,15 @@ export const RightPanel = ({
 
           {/* Attachment Badge */}
           {attachedFile && (
-            <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded px-2.5 py-1 text-[11px] font-medium text-blue-800">
+            <div className="flex items-center justify-between bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/30 rounded px-2.5 py-1 text-[11px] font-medium text-[var(--accent-primary)]">
               <span className="flex items-center gap-1.5 truncate">
                 <Icon name="file-arrow-up" size={13} className="text-[var(--accent-primary)]" />
                 <span className="truncate">{attachedFile.name}</span>
-                <span className="text-[9px] text-blue-600">({(attachedFile.size / 1024).toFixed(1)} КБ)</span>
+                <span className="text-[9px] opacity-80">({(attachedFile.size / 1024).toFixed(1)} КБ)</span>
               </span>
               <button 
                 onClick={() => { setAttachedFile(null); setNewRequestText(''); }}
-                className="text-blue-500 hover:text-red-500 font-bold ml-2 text-[10px]"
+                className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] font-bold ml-2 text-[10px]"
                 type="button"
                 title="Удалить файл"
               >
@@ -439,8 +439,8 @@ export const RightPanel = ({
                 onClick={() => onSelectRequest(req)}
                 className={`queue-order-card group relative overflow-hidden rounded-xl p-3.5 cursor-pointer transition-all duration-300 flex justify-between items-start gap-3 ${
                   isSelected 
-                    ? 'bg-white shadow-[0_8px_24px_-8px_rgba(0,0,0,0.12)] border-[var(--accent-primary)] ring-1 ring-[var(--accent-primary)]'
-                    : 'bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-slate-300 hover:shadow-md'
+                    ? 'bg-[var(--surface-2)] shadow-md border-[var(--accent-primary)] ring-1 ring-[var(--accent-primary)]'
+                    : 'bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]'
                 }`}
               >
                 {isSelected && (
@@ -451,7 +451,7 @@ export const RightPanel = ({
                 <div className="queue-order-main flex flex-col gap-1.5 flex-1 min-w-0">
                   <div className="queue-order-meta flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1" data-testid="queue-order-meta">
                     <StatusBadge status={req.status} />
-                    <span className="whitespace-nowrap pt-1 text-[10px] font-medium text-slate-400 font-mono">
+                    <span className="whitespace-nowrap pt-1 text-[10px] font-medium text-[var(--text-muted)] font-mono">
                       {new Date(req.created_at).toLocaleString('ru-RU', {
                         day: '2-digit', month: '2-digit',
                         hour: '2-digit', minute: '2-digit',
@@ -459,11 +459,11 @@ export const RightPanel = ({
                     </span>
                   </div>
 
-                  <h3 className="mt-1 break-words text-sm font-semibold tracking-tight text-slate-800">
+                  <h3 className="mt-1 break-words text-sm font-semibold tracking-tight text-[var(--text-primary)]">
                     {req.customer_name || 'Без имени'}
                   </h3>
 
-                  <span className="truncate text-[10px] font-mono font-bold tracking-wider text-slate-400">
+                  <span className="truncate text-[10px] font-mono font-bold tracking-wider text-[var(--text-muted)]">
                     {req.request_id}
                   </span>
                 </div>
@@ -471,18 +471,18 @@ export const RightPanel = ({
                 {/* Правая часть: 2 иконкообразных элемента (объем и стоимость) */}
                 <div className="queue-order-controls flex w-14 shrink-0 flex-col gap-2" data-testid="queue-order-controls">
                   <div
-                    className="flex h-7 w-full items-center justify-center gap-1 rounded-[8px] border border-slate-100 bg-slate-50 px-1.5 py-1 text-[10px] font-medium text-slate-600"
+                    className="flex h-7 w-full items-center justify-center gap-1 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-2)] px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]"
                     title="Примерный объем (позиций)"
                   >
-                    <Icon name="folder-open" size={12} className="text-slate-400" />
+                    <Icon name="folder-open" size={12} className="text-[var(--text-muted)]" />
                     <span>{parts.length > 0 ? parts.length : '~'}</span>
                   </div>
 
                   <div
-                    className="flex h-7 w-full items-center justify-center gap-1 rounded-[8px] border border-slate-100 bg-slate-50 px-1.5 py-1 text-[10px] font-medium text-slate-600"
+                    className="flex h-7 w-full items-center justify-center gap-1 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-2)] px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]"
                     title="Примерная стоимость"
                   >
-                    <Icon name="circle-info" size={12} className="text-slate-400" />
+                    <Icon name="circle-info" size={12} className="text-[var(--text-muted)]" />
                     <span>—</span>
                   </div>
                 </div>

@@ -44,6 +44,24 @@ npm run lint
 npm run build
 ```
 
+## Lottie motion
+
+The cockpit uses only @lottiefiles/dotlottie-react. Motion is disabled by
+default and renders only when both build-time settings are provided:
+
+    VITE_LOTTIE_ENABLED=true
+    VITE_LOTTIE_SRC=/assets/lottie/partsops-status.lottie
+
+The source must be a local .lottie asset under /assets/lottie/; remote URLs
+are rejected. The player respects reduced-motion, freezes offscreen, caps
+device pixel ratio at 2, and rejects all state-machine URL actions until a
+reviewed allowlist is introduced.
+
+Use the shared toolkit through the lottie:inspect, lottie:validate,
+lottie:validate-tree, lottie:normalize, and lottie:pack scripts. Set
+LOTTIE_TOOLKIT_ROOT first; controlled writes stay inside the cockpit workspace
+through LOTTIE_WORKSPACE_ROOT.
+
 ## Durable pipeline runs
 
 Kanban запускает pipeline через DB-backed очередь. Для выполнения queued runs

@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session, select, func, desc
+from sqlmodel import Session, select, func, desc, col
 
 from database import get_session, engine
 from rbac import get_privileged_tenant, CurrentPrincipal, _get_api_token, _parse_bearer_token, verify_signed_token, _normalize_role, DEFAULT_TENANT
@@ -33,7 +33,7 @@ def get_observability_traces(
     tenant_id: str = Depends(get_privileged_tenant),
 ):
     logs = session.exec(
-        select(LLMUsageLog).where(LLMUsageLog.tenant_id == tenant_id).order_by(LLMUsageLog.id.desc())
+        select(LLMUsageLog).where(LLMUsageLog.tenant_id == tenant_id).order_by(col(LLMUsageLog.id).desc())
     ).all()
     return [
         {
@@ -117,7 +117,7 @@ def get_pipeline_runs(
             select(LLMUsageLog)
             .where(LLMUsageLog.tenant_id == tenant_id)
             .where(LLMUsageLog.correlation_id == corr_id)
-            .order_by(LLMUsageLog.created_at)
+            .order_by(col(LLMUsageLog.created_at))
         ).all()
         
         if not phase_logs:
@@ -160,7 +160,7 @@ def get_pipeline_run_detail(
         select(LLMUsageLog)
         .where(LLMUsageLog.tenant_id == tenant_id)
         .where(LLMUsageLog.correlation_id == correlation_id)
-        .order_by(LLMUsageLog.created_at)
+        .order_by(col(LLMUsageLog.created_at))
     ).all()
     
     if not logs:
@@ -205,14 +205,14 @@ def trigger_vault_sync(
 ):
     """Trigger vault sync for a specific pipeline run."""
     from vault_sync import sync_pipeline_run
-    from sqlmodel import func, desc
+    from sqlmodel import func, desc, col
     
     # Get all logs for this correlation_id
     phase_logs = session.exec(
         select(LLMUsageLog)
         .where(LLMUsageLog.tenant_id == tenant_id)
         .where(LLMUsageLog.correlation_id == correlation_id)
-        .order_by(LLMUsageLog.created_at)
+        .order_by(col(LLMUsageLog.created_at))
     ).all()
     
     if not phase_logs:
@@ -303,110 +303,106 @@ async def sse_stream(request: Request, tenant_id: Optional[str] = None):
                 auth_mode="token",
             )
 
-        if principal.auth_mode == "token" and not principal.authenticated:
+        if not principal or not principal.authenticated:
             from fastapi import HTTPException
             raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
 
-        if principal.auth_mode != "token" and not principal.authenticated:
-          from fastapi import HTTPException
-          raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
+        stream_tenant = principal.tenant_id
+    else:
+        stream_tenant = resolved_tenant or DEFAULT_TENANT
 
-          stream_tenant = principal.tenant_id
-        else:
-          stream_tenant = resolved_tenant or DEFAULT_TENANT
+    visited_corr_cache: set[str] = set()
 
-        visited_corr_cache: set[str] = set()
+    async def event_generator():
+        last_request_count = -1
+        last_status_counts = None
+        last_llm_cost = -1.0
+        last_llm_count = -1
+        visited_corr_cache.clear()
 
-        async def event_generator():
-          last_request_count = -1
-          last_status_counts = None
-          last_llm_cost = -1.0
-          last_llm_count = -1
-          visited_corr_cache.clear()
-
-          while True:
+        while True:
             if await request.is_disconnected():
-              break
+                break
 
             with Session(engine) as session:
-              # Get current request count
-              requests = session.exec(select(PartRequest).where(PartRequest.tenant_id == stream_tenant)).all()
-              request_count = len(requests)
+                # Get current request count
+                requests = session.exec(select(PartRequest).where(PartRequest.tenant_id == stream_tenant)).all()
+                request_count = len(requests)
 
-              # Get LLM costs
-              logs = session.exec(select(LLMUsageLog).where(LLMUsageLog.tenant_id == stream_tenant)).all()
-              llm_cost = round(sum(log.cost_usd for log in logs), 10)
-              llm_count = len(logs)
+                # Get LLM costs
+                logs = session.exec(select(LLMUsageLog).where(LLMUsageLog.tenant_id == stream_tenant)).all()
+                llm_cost = round(sum(log.cost_usd for log in logs), 10)
+                llm_count = len(logs)
 
-              # Send events only when data changes
-              events = []
+                # Send events only when data changes
+                events = []
 
-              status_counts = {status: sum(1 for r in requests if r.status == status) for status in ["NEW", "PART_EXTRACTION", "OFFER_MATCHING", "APPROVAL_GATE", "APPROVED", "INVOICE_DRAFTED", "ERP_SYNC", "CLOSED", "CANCELLED"]}
-              
-              if request_count != last_request_count or status_counts != last_status_counts:
+                status_counts = {status: sum(1 for r in requests if r.status == status) for status in ["NEW", "PART_EXTRACTION", "OFFER_MATCHING", "APPROVAL_GATE", "APPROVED", "INVOICE_DRAFTED", "ERP_SYNC", "CLOSED", "CANCELLED"]}
+                
+                if request_count != last_request_count or status_counts != last_status_counts:
+                    events.append({
+                        "type": "requests_updated",
+                        "data": {
+                            "total": request_count,
+                            "by_status": status_counts,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    })
+                    last_request_count = request_count
+                    last_status_counts = status_counts
+
+                if llm_cost != last_llm_cost or llm_count != last_llm_count:
+                    events.append({
+                        "type": "llm_cost_updated",
+                        "data": {
+                            "total_cost_usd": llm_cost,
+                            "total_requests": llm_count
+                        }
+                    })
+                    last_llm_cost = llm_cost
+                    last_llm_count = llm_count
+
+                # Pipeline runs: new correlation_id or status change
+                recent_corrs: dict[str, dict] = {}
+                for log in logs:
+                    if log.correlation_id:
+                        corr_key = f"{log.correlation_id}:{log.status}"
+                        if corr_key not in visited_corr_cache:
+                            visited_corr_cache.add(corr_key)
+                            recent_corrs[log.correlation_id] = {
+                                "status": log.status,
+                                "provider": log.provider,
+                                "model": log.model,
+                                "latency_ms": log.latency_ms,
+                                "cost_usd": log.cost_usd,
+                                "created_at": log.created_at.isoformat() if log.created_at else None,
+                            }
+
+                # Keep cache bounded
+                if len(visited_corr_cache) > 200:
+                    visited_corr_cache.clear()
+
+                if recent_corrs:
+                    events.append({
+                        "type": "pipeline_runs_updated",
+                        "data": {
+                            "delta": recent_corrs,
+                            "count": len(recent_corrs),
+                        }
+                    })
+
+                # System metrics
                 events.append({
-                  "type": "requests_updated",
-                  "data": {
-                    "total": request_count,
-                    "by_status": status_counts,
-                    "timestamp": datetime.now().isoformat()
-                  }
-                })
-                last_request_count = request_count
-                last_status_counts = status_counts
-
-              if llm_cost != last_llm_cost or llm_count != last_llm_count:
-                events.append({
-                  "type": "llm_cost_updated",
-                  "data": {
-                    "total_cost_usd": llm_cost,
-                    "total_requests": llm_count
-                  }
-                })
-                last_llm_cost = llm_cost
-                last_llm_count = llm_count
-
-              # Pipeline runs: new correlation_id or status change
-              recent_corrs: dict[str, dict] = {}
-              for log in logs:
-                if log.correlation_id:
-                  corr_key = f"{log.correlation_id}:{log.status}"
-                  if corr_key not in visited_corr_cache:
-                    visited_corr_cache.add(corr_key)
-                    recent_corrs[log.correlation_id] = {
-                      "status": log.status,
-                      "provider": log.provider,
-                      "model": log.model,
-                      "latency_ms": log.latency_ms,
-                      "cost_usd": log.cost_usd,
-                      "created_at": log.created_at.isoformat() if log.created_at else None,
+                    "type": "metrics_updated",
+                    "data": {
+                        "uptime_percent": 99.98,
+                        "active_requests": request_count,
+                        "llm_cost_usd": llm_cost
                     }
-
-              # Keep cache bounded
-              if len(visited_corr_cache) > 200:
-                visited_corr_cache.clear()
-
-              if recent_corrs:
-                events.append({
-                  "type": "pipeline_runs_updated",
-                  "data": {
-                    "delta": recent_corrs,
-                    "count": len(recent_corrs),
-                  }
                 })
 
-              # System metrics
-              events.append({
-                "type": "metrics_updated",
-                "data": {
-                  "uptime_percent": 99.98,
-                  "active_requests": request_count,
-                  "llm_cost_usd": llm_cost
-                }
-              })
-
-              for event in events:
-                yield f"data: {json.dumps(event)}\n\n"
+                for event in events:
+                    yield f"data: {json.dumps(event)}\n\n"
 
             await asyncio.sleep(3)
 

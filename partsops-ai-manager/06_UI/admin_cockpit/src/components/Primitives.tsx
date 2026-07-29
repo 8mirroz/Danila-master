@@ -37,6 +37,7 @@ import {
 } from '@phosphor-icons/react';
 import { getStatusBadgeClasses, getStatusLabel } from '../lib/workflow';
 import { useFocusTrap, useKeydown } from '../lib/focus';
+import { LottieMotion } from './LottieMotion';
 
 // =========================================
 // 0. Icon system (typed, Phosphor)
@@ -282,6 +283,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
         <div className="w-9 h-9 rounded-[14px] bg-[linear-gradient(135deg,#1d4ed8,#3b82f6)] text-white flex items-center justify-center shadow-[0_10px_24px_-10px_rgba(37,99,235,0.7)] shrink-0">
           <Icon name="wave-square" size={18} weight="bold" />
         </div>
+        <LottieMotion />
         <div className="min-w-0">
           <h1 className="text-sm font-bold tracking-tight text-[var(--text-primary)] truncate">PartsOps AI Manager</h1>
           <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">Операционный пульт закупок</span>

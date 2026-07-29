@@ -7,12 +7,13 @@ import {
   SectionCard,
   Button,
   ReviewPanel,
-  EmptyState,
   InlineAlert,
   Icon,
 } from './components/Primitives';
 import { SupplierMatrix } from './components/SupplierMatrix';
 import { PricingCalculator } from './components/PricingCalculator';
+import { GlobalMatchingHub } from './components/GlobalMatchingHub';
+import { GlobalPricingSimulator } from './components/GlobalPricingSimulator';
 import { AuditTimeline } from './components/AuditTimeline';
 import { CompletedOrdersHistory } from './components/CompletedOrdersHistory';
 import { RightPanel } from './components/RightPanel';
@@ -37,6 +38,7 @@ import { JobReportView } from './components/JobReportView';
 import { HermesChatDrawer } from './components/HermesChatDrawer';
 import { BatchSearchModal } from './components/BatchSearchModal';
 import { getWorkflowStepIndex } from './lib/workflow';
+import { type RequestItem } from './lib/types';
 
 type Request = {
   id: number;
@@ -77,6 +79,8 @@ function App() {
   const [navDrawerOpen, setNavDrawerOpen] = useState(false);
   const [queueDrawerOpen, setQueueDrawerOpen] = useState(false);
   const [activeStep, setActiveStep] = useState<number>(2);
+  const [standaloneTab, setStandaloneTab] = useState<'matching' | 'pricing'>('matching');
+  const [simulatorBaseCost, setSimulatorBaseCost] = useState<number | undefined>(undefined);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [searchGlobalQuery, setSearchGlobalQuery] = useState('');
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -215,7 +219,7 @@ function App() {
       s: 'suppliers',
       o: 'orders',
       m: 'matching',
-      p: 'pricing',
+      p: 'matching',
       a: 'audit',
     };
 
@@ -334,8 +338,9 @@ function App() {
     }
   }, [selectedReq]);
 
-  const handleSelectRequest = (req: Request) => {
-    setSelectedReq(req);
+  const handleSelectRequest = (req: Request | RequestItem) => {
+    const fullReq = requests.find((r) => r.request_id === req.request_id) || (req as Request);
+    setSelectedReq(fullReq);
     setActiveNav('matching');
     setActiveStep(getRequestWorkspaceStep(req.status));
   };
@@ -418,8 +423,7 @@ function App() {
     { id: 'kanban', label: 'Канбан-доска', icon: 'list', group: 'main' as const },
     { id: 'suppliers', label: 'Каталог поставщиков', icon: 'car', group: 'main' as const },
     { id: 'orders', label: 'Загрузка заказа', icon: 'cloud-arrow-up', group: 'main' as const },
-    { id: 'matching', label: 'Матрица подбора', icon: 'rotate', group: 'main' as const },
-    { id: 'pricing', label: 'Калькулятор цен', icon: 'pencil', group: 'main' as const },
+    { id: 'matching', label: 'Матрица подбора и цен', icon: 'rotate', group: 'main' as const },
     { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'robot', group: 'admin' as const },
     { id: 'orchestra', label: 'Мультиагентный оркестр', icon: 'wave-square', group: 'admin' as const },
     { id: 'agent_os', label: 'Консоль ИИ-агента', icon: 'robot', group: 'admin' as const },
@@ -428,13 +432,16 @@ function App() {
   ];
 
   const handleNavChange = (navId: string) => {
-    setActiveNav(navId);
+    const targetNav = navId === 'pricing' ? 'matching' : navId;
+    setActiveNav(targetNav);
     if (selectedReq) {
       if (navId === 'suppliers') setActiveStep(0);
       else if (navId === 'orders') setActiveStep(1);
       else if (navId === 'matching') {
-        if (activeStep < 2 || activeStep > 4) setActiveStep(3);
-      } else if (navId === 'pricing') setActiveStep(5);
+        if (activeStep < 2 || activeStep > 5) setActiveStep(getRequestWorkspaceStep(selectedReq.status));
+      } else if (navId === 'pricing') {
+        setActiveStep(5);
+      }
     }
   };
 
@@ -470,7 +477,7 @@ function App() {
           onCloseDrawer={() => setNavDrawerOpen(false)}
         />
         <main className="flex-1 h-full overflow-y-auto bg-[var(--bg-app)]">
-          {selectedReq && ['matching', 'pricing'].includes(activeNav) ? (
+          {selectedReq && activeNav === 'matching' ? (
             <div className="p-4 max-w-6xl mx-auto space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-sm text-xs font-semibold border border-indigo-900/40">
                 <div className="flex items-center gap-2">
@@ -867,19 +874,59 @@ function App() {
               )}
 
               {activeNav === 'matching' && !selectedReq && (
-                <EmptyState
-                  title="Выберите заявку для подбора"
-                  description="Матрица офферов доступна только в подтверждённом workspace заявки."
-                  icon="fa-list-check"
-                />
-              )}
+                <div className="mx-auto max-w-6xl space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--surface-1)] border border-[var(--border-default)] p-3.5 rounded-[var(--radius-card)] shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
+                        <Icon name="rotate" size={16} />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold text-[var(--text-primary)]">Автономный хаб подбора и цен</h3>
+                        <p className="text-[11px] text-[var(--text-secondary)]">Переключайтесь между поиском запчастей по OEM и автономным симулятором калькуляции цен</p>
+                      </div>
+                    </div>
 
-              {activeNav === 'pricing' && !selectedReq && (
-                <EmptyState
-                  title="Выберите согласованную заявку"
-                  description="Pricing и ERP-команды доступны только из подтверждённого lifecycle workspace."
-                  icon="fa-calculator"
-                />
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                      <button
+                        onClick={() => setStandaloneTab('matching')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                          standaloneTab === 'matching'
+                            ? 'bg-white text-indigo-700 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Icon name="rotate" size={13} /> 🔍 OEM Поиск и Метчинг
+                      </button>
+                      <button
+                        onClick={() => setStandaloneTab('pricing')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                          standaloneTab === 'pricing'
+                            ? 'bg-white text-indigo-700 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Icon name="pencil" size={13} /> 🧮 Симулятор цен
+                      </button>
+                    </div>
+                  </div>
+
+                  {standaloneTab === 'matching' ? (
+                    <GlobalMatchingHub
+                      requests={requests}
+                      onSelectRequest={handleSelectRequest}
+                      onSimulatePrice={(price) => {
+                        setSimulatorBaseCost(price);
+                        setStandaloneTab('pricing');
+                      }}
+                    />
+                  ) : (
+                    <GlobalPricingSimulator
+                      requests={requests}
+                      onSelectRequest={handleSelectRequest}
+                      initialBaseCost={simulatorBaseCost}
+                    />
+                  )}
+                </div>
               )}
 
               {activeNav === 'audit' && selectedReq && (

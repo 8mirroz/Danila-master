@@ -1,15 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { SectionCard, Icon } from './Primitives';
 import { type RequestItem } from '../lib/types';
 
 type GlobalPricingSimulatorProps = {
   requests: RequestItem[];
   onSelectRequest: (req: RequestItem) => void;
+  initialBaseCost?: number;
 };
 
 export const GlobalPricingSimulator: React.FC<GlobalPricingSimulatorProps> = ({
   requests,
   onSelectRequest,
+  initialBaseCost,
 }) => {
   const [baseCost, setBaseCost] = useState<number>(45000);
   const [marginPct, setMarginPct] = useState<number>(25);
@@ -17,6 +19,12 @@ export const GlobalPricingSimulator: React.FC<GlobalPricingSimulatorProps> = ({
   const [riskBufferPct, setRiskBufferPct] = useState<number>(5);
   const [vatRate, setVatRate] = useState<number>(20);
   const [selectedReqId, setSelectedReqId] = useState<string>('');
+
+  useEffect(() => {
+    if (initialBaseCost !== undefined) {
+      setBaseCost(initialBaseCost);
+    }
+  }, [initialBaseCost]);
 
   const activeRequests = useMemo(() => {
     return requests.filter((r) => !['CLOSED', 'CANCELLED', 'FAILED'].includes(r.status));

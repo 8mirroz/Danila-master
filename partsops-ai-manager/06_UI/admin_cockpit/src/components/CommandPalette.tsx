@@ -74,20 +74,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
       {
         id: 'nav-matching',
-        label: 'Матрица подбора',
-        description: 'Сравнение предложений поставщиков',
+        label: 'Матрица подбора и цен',
+        description: 'Сравнение офферов поставщиков, расчет маржи и калькуляция',
         icon: 'fa-arrows-split-up-and-left',
         shortcut: 'G M',
         action: () => onNavigate('matching'),
-        category: 'Навигация',
-      },
-      {
-        id: 'nav-pricing',
-        label: 'Калькулятор цен',
-        description: 'Расчёт маржи и формирование коммерческих предложений',
-        icon: 'fa-calculator',
-        shortcut: 'G P',
-        action: () => onNavigate('pricing'),
         category: 'Навигация',
       },
       {
@@ -187,8 +178,7 @@ G D — Панель управления
 G K — Канбан-доска
 G S — Поставщики
 G O — Импорт заказов
-G M — Матрица подбора
-G P — Калькулятор цен
+G M / G P — Матрица подбора и цен
 G A — Аудит
 ⌘ N — Новый запрос
 ⌘ R — Обновить

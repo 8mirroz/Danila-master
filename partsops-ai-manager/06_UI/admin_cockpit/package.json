@@ -7,11 +7,17 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lottie:inspect": "node \"$LOTTIE_TOOLKIT_ROOT/scripts/lottie-inspect.mjs\"",
+    "lottie:validate": "node \"$LOTTIE_TOOLKIT_ROOT/scripts/lottie-validate.mjs\"",
+    "lottie:validate-tree": "node \"$LOTTIE_TOOLKIT_ROOT/scripts/lottie-validate-tree.mjs\" public/assets/lottie",
+    "lottie:normalize": "LOTTIE_WORKSPACE_ROOT=\"$PWD\" node \"$LOTTIE_TOOLKIT_ROOT/scripts/lottie-normalize.mjs\"",
+    "lottie:pack": "LOTTIE_WORKSPACE_ROOT=\"$PWD\" node \"$LOTTIE_TOOLKIT_ROOT/scripts/lottie-pack.mjs\""
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@fortawesome/fontawesome-free": "^7.3.0",
+    "@lottiefiles/dotlottie-react": "^0.19.12",
     "@phosphor-icons/react": "^2.1.10",
     "gsap": "^3.15.0",
     "react": "^19.2.7",
