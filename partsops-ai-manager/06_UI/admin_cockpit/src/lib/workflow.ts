@@ -68,18 +68,18 @@ export const getStatusBadgeClasses = (status: string) => {
   const normalized = status.toUpperCase();
 
   if (DONE_STATUSES.has(normalized) || normalized === 'APPROVED' || normalized === 'VALIDATED') {
-    return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   }
 
   if (BLOCKED_STATUSES.has(normalized)) {
-    return 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+    return 'bg-rose-50 text-rose-700 border-rose-200';
   }
 
   if (APPROVAL_STATUSES.has(normalized) || normalized === 'PART_EXTRACTION' || normalized === 'VIN_CHECK') {
-    return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+    return 'bg-amber-50 text-amber-800 border-amber-200';
   }
 
-  return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+  return 'bg-cyan-50 text-cyan-700 border-cyan-200';
 };
 
 export const isActiveRequestStatus = (status: string) => {

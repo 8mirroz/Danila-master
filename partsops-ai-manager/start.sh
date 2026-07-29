@@ -8,6 +8,10 @@ echo "======================================================="
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
+source "${SCRIPT_DIR}/scripts/runtime_guard.sh"
+runtime_guard_acquire
+trap runtime_guard_release EXIT INT TERM
+
 # Run one-time hermes setup
 if [ -f "scripts/setup_hermes.sh" ]; then
   bash scripts/setup_hermes.sh || true
@@ -52,6 +56,7 @@ cleanup() {
     echo "Stopping Frontend (PID ${FRONTEND_PID})..."
     kill "${FRONTEND_PID}" 2>/dev/null || true
   fi
+  runtime_guard_release
   exit 0
 }
 trap cleanup SIGINT SIGTERM EXIT
@@ -98,7 +103,11 @@ fi
 export PARTSOPS_CORS_ORIGINS=${PARTSOPS_CORS_ORIGINS:-"http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:3000,http://127.0.0.1:3000"}
 export PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+:$PYTHONPATH}"
 
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+UVICORN_ARGS=(--host 0.0.0.0 --port 8000)
+if [ "${PARTSOPS_UVICORN_RELOAD:-0}" = "1" ]; then
+  UVICORN_ARGS+=(--reload)
+fi
+uvicorn main:app "${UVICORN_ARGS[@]}" &
 BACKEND_PID=$!
 
 # 2b. Optional durable pipeline worker (Kanban queue consumers)

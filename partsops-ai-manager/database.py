@@ -17,9 +17,11 @@ if db_url.startswith("postgresql://"):
         echo=False
     )
 else:
+    from sqlalchemy.pool import NullPool
     engine = create_engine(
         db_url,
         connect_args={"check_same_thread": False} if "sqlite" in db_url else {},
+        poolclass=NullPool,
         echo=False
     )
 

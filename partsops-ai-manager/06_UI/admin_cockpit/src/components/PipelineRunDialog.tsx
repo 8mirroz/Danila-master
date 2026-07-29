@@ -72,13 +72,6 @@ export function PipelineRunDialog({
 
   useEffect(() => () => readerRef.current?.abort(), []);
 
-  // Auto-trigger pipeline execution on drop/open
-  useEffect(() => {
-    if (!open || !request || !targetLane || run || starting || restoreRunId) return;
-    void startRun();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, request?.request_id, targetLane, run, starting, restoreRunId]);
-
   // Trigger completion callback on completed status to refresh Kanban board
   useEffect(() => {
     if (run?.status === 'completed') {
