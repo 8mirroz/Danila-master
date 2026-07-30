@@ -211,10 +211,10 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
           </span>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border-default)] bg-[var(--surface-1)]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/80 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+              <tr className="border-b border-[var(--border-default)] bg-[var(--surface-2)] text-[var(--text-muted)] font-semibold uppercase text-[10px] tracking-wider">
                 <th className="px-4 py-3">№</th>
                 <th className="px-4 py-3">Артикул OEM</th>
                 <th className="px-4 py-3">Наименование</th>
@@ -227,7 +227,7 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
                 <th className="px-4 py-3 text-center">Match</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-sans">
+            <tbody className="divide-y divide-[var(--border-default)] font-sans">
               {partsList.length ? partsList.map((item: any, idx: number) => {
                 const name = item.name || item.part_name || '';
                 const oem = item.oem || item.oem_number || item.article || '';
@@ -241,16 +241,16 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
                 const score = item.score ?? item.match_score;
 
                 return (
-                  <tr key={idx} className="hover:bg-slate-900/80 transition-colors">
+                  <tr key={idx} className="transition-colors hover:bg-[var(--state-hover)]">
                     <td className="px-4 py-3 font-mono text-slate-500">{idx + 1}</td>
-                    <td className="px-4 py-3 font-mono font-bold text-emerald-400">{oem}</td>
-                    <td className="px-4 py-3 font-medium text-slate-200">{name}</td>
-                    <td className="px-4 py-3 text-slate-300">{supplier}</td>
-                    <td className="px-4 py-3 text-center font-mono font-bold text-slate-300">{qty ? `${qty} шт` : '—'}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-emerald-700">{oem}</td>
+                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{name}</td>
+                    <td className="px-4 py-3 text-[var(--text-secondary)]">{supplier}</td>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-[var(--text-secondary)]">{qty ? `${qty} шт` : '—'}</td>
                     <td className="px-4 py-3 text-center font-mono text-slate-400">{days ? `${days} дн` : '—'}</td>
                     <td className="px-4 py-3 text-right font-mono text-slate-400">{hasBuyPrice ? `${buyPrice.toLocaleString()} ₽` : '—'}</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-200">{Number.isFinite(clientPrice) ? `${Math.round(clientPrice).toLocaleString()} ₽` : '—'}</td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400">{Number.isFinite(rowTotal) ? `${Math.round(rowTotal).toLocaleString()} ₽` : '—'}</td>
+                    <td className="px-4 py-3 text-right font-mono text-[var(--text-primary)]">{Number.isFinite(clientPrice) ? `${Math.round(clientPrice).toLocaleString()} ₽` : '—'}</td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">{Number.isFinite(rowTotal) ? `${Math.round(rowTotal).toLocaleString()} ₽` : '—'}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
                         {score ?? 'нет evidence'}

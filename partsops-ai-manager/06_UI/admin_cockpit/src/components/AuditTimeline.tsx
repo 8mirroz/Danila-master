@@ -145,7 +145,7 @@ export const AuditTimeline = ({ requestId }: AuditTimelineProps) => {
 
       {/* Toolbar filters */}
       {events.length > 0 && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 space-y-2 text-xs">
+        <div className="space-y-2 rounded-xl border border-[var(--border-default)] bg-[var(--surface-2)] p-3 text-xs">
           <div className="flex flex-wrap gap-3 items-center justify-between">
             <div className="flex-1 min-w-[180px] relative">
               <i className="fas fa-search absolute left-3 top-2.5 text-slate-500 text-[10px]" />
@@ -154,16 +154,16 @@ export const AuditTimeline = ({ requestId }: AuditTimelineProps) => {
                 placeholder="Поиск по событиям / хешам..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-white outline-none focus:border-emerald-400"
+                className="w-full rounded-lg border border-[var(--border-default)] bg-white py-1.5 pl-8 pr-2.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
               />
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 font-bold uppercase">Инициатор:</span>
+              <span className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">Инициатор:</span>
               <select
                 value={actorFilter}
                 onChange={(e) => setActorFilter(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-emerald-400"
+                className="rounded-lg border border-[var(--border-default)] bg-white px-2.5 py-1 text-xs text-[var(--text-secondary)] outline-none focus:border-[var(--accent-primary)]"
               >
                 <option value="ALL">Все</option>
                 <option value="AI">System AI</option>
@@ -173,11 +173,11 @@ export const AuditTimeline = ({ requestId }: AuditTimelineProps) => {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 font-bold uppercase">Порядок:</span>
+              <span className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">Порядок:</span>
               <select
                 value={sortOrder}
                 onChange={(e: any) => setSortOrder(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-emerald-400"
+                className="rounded-lg border border-[var(--border-default)] bg-white px-2.5 py-1 text-xs text-[var(--text-secondary)] outline-none focus:border-[var(--accent-primary)]"
               >
                 <option value="NEWEST">Сначала новые</option>
                 <option value="OLDEST">Сначала старые</option>
@@ -198,10 +198,10 @@ export const AuditTimeline = ({ requestId }: AuditTimelineProps) => {
           Событий аудита с выбранными фильтрами не найдено.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border-default)] bg-[var(--surface-1)]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/80 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+              <tr className="border-b border-[var(--border-default)] bg-[var(--surface-2)] text-[var(--text-muted)] font-semibold uppercase text-[10px] tracking-wider">
                 <th className="px-4 py-3">Timestamp (UTC)</th>
                 <th className="px-4 py-3">Actor</th>
                 <th className="px-4 py-3">Event Type</th>
@@ -209,25 +209,25 @@ export const AuditTimeline = ({ requestId }: AuditTimelineProps) => {
                 <th className="px-4 py-3 text-right">Verified</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+            <tbody className="divide-y divide-[var(--border-default)] font-mono text-[11px]">
               {filteredEvents.map((event) => (
-                <tr key={event.event_id} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                <tr key={event.event_id} className="transition-colors hover:bg-[var(--state-hover)]">
+                  <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">
                     {new Date(event.occurred_at).toISOString().replace('T', ' ').slice(0, 19)}
                   </td>
-                  <td className="px-4 py-3 text-slate-200 font-sans font-medium">
+                  <td className="px-4 py-3 font-sans font-medium text-[var(--text-primary)]">
                     {event.actor_type === 'agent' ? 'System AI' : event.actor_id || 'OP-4819 Admin'}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 font-bold">
+                    <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">
                       {event.event_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-400 truncate max-w-[180px]">
+                  <td className="max-w-[180px] truncate px-4 py-3 text-[var(--text-muted)]">
                     {event.event_hash ? `${event.event_hash.slice(0, 12)}...${event.event_hash.slice(-8)}` : '7f8a9b...c1d2'}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold text-emerald-400 border border-emerald-500/30">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
                       <i className="fas fa-check-circle" /> Valid
                     </span>
                   </td>
@@ -239,15 +239,15 @@ export const AuditTimeline = ({ requestId }: AuditTimelineProps) => {
       )}
 
       {/* Footer System Status Bar */}
-      <div className="flex flex-wrap justify-between items-center pt-3 border-t border-slate-800 text-[10px] text-slate-400 font-mono">
+      <div className="flex flex-wrap items-center justify-between border-t border-[var(--border-default)] pt-3 font-mono text-[10px] text-[var(--text-muted)]">
         <div>
-          System Version: <strong className="text-slate-200">v6.0.4</strong>
+          System Version: <strong className="text-[var(--text-primary)]">v6.0.4</strong>
         </div>
         <div>
-          Tenant Isolation: <strong className="text-emerald-400">ACTIVE</strong>
+          Tenant Isolation: <strong className="text-emerald-700">ACTIVE</strong>
         </div>
         <div>
-          Obsidian Vault Sync Status: <strong className="text-emerald-400">SYNCHRONIZED</strong>
+          Obsidian Vault Sync Status: <strong className="text-emerald-700">SYNCHRONIZED</strong>
         </div>
       </div>
     </div>

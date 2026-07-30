@@ -164,9 +164,25 @@ test.describe('PartsOps Admin Cockpit - Refactored Soft UI & View Model', () => 
     await page.waitForLoadState('networkidle');
 
     await expect(page.locator('h2:has-text("Рабочая очередь PartsOps")').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.dashboard-overview__title')).toBeVisible();
     await expect(page.locator('button:has-text("Новый запрос")')).toBeVisible();
     await expect(page.locator('text=Активная очередь').first()).toBeVisible();
     await expect(page.locator('text=Нагрузка согласования')).toBeVisible();
+    await expect(page.locator('.ui-metric-card--queue')).toBeVisible();
+    await expect(page.locator('button.hermes-nav-button[aria-label="Открыть AI агент"]')).toBeVisible();
+  });
+
+  test('Dashboard marks health metrics unavailable instead of showing zero after a health failure', async ({ page }) => {
+    await page.route('**/api/admin/data-health', async (route) => {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Service unavailable' }) });
+    });
+
+    await page.goto('http://localhost:5176');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByText('Данные dashboard недоступны.', { exact: false })).toBeVisible();
+    await expect(page.getByTestId('dashboard-active-queue')).toHaveText('—');
+    await expect(page.getByRole('button', { name: 'Повторить загрузку dashboard' })).toBeVisible();
   });
 
   test('Drawer behavior and responsive layout at 390px mobile viewport', async ({ page }) => {

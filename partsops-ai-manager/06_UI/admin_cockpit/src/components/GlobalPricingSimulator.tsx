@@ -70,34 +70,33 @@ export const GlobalPricingSimulator: React.FC<GlobalPricingSimulatorProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Top Banner */}
-      <div className="rounded-3xl border border-slate-700/50 bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 p-6 text-white shadow-xl">
+      <div className="panel-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
                 <Icon name="pencil" size={12} /> Автономный симулятор
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">Margin & Price Engine v3.1</span>
+              <span className="font-mono text-[10px] text-[var(--text-muted)]">Margin & Price Engine v3.1</span>
             </div>
-            <h2 className="text-xl font-black tracking-tight">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
               Калькулятор цен, маржи и коммерческих предложений
             </h2>
-            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--text-secondary)]">
               Гибкое моделирование себестоимости, логистических расходов, риск-буфера и итоговой розничной стоимости. Рассчитывайте параметры автономно или загрузите данные активного заказа.
             </p>
           </div>
 
           {/* Quick Request Selector */}
-          <div className="flex items-center gap-3 bg-white/10 p-3 rounded-2xl border border-white/15 backdrop-blur-md">
+          <div className="flex items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-[var(--surface-2)] p-3">
             <div className="text-right shrink-0 hidden sm:block">
-              <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300">Контекст заявки</div>
-              <div className="text-xs font-bold text-white">Загрузить расчет в заявку</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Контекст заявки</div>
+              <div className="text-xs font-semibold text-[var(--text-primary)]">Загрузить расчет в заявку</div>
             </div>
             <select
               value={selectedReqId}
               onChange={handleSelectReqChange}
-              className="bg-slate-800 text-white text-xs font-semibold rounded-xl border border-slate-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+              className="cursor-pointer rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
             >
               <option value="">-- Выберите запрос из очереди --</option>
               {activeRequests.map((r) => (
@@ -207,7 +206,7 @@ export const GlobalPricingSimulator: React.FC<GlobalPricingSimulatorProps> = ({
                         onClick={() => setVatRate(v.rate)}
                         className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
                           isSelected
-                            ? 'bg-[#0F172A] text-white border-[#0F172A] shadow-md scale-[1.02]'
+                            ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)] text-white shadow-md scale-[1.02]'
                             : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                         }`}
                       >
@@ -259,7 +258,7 @@ export const GlobalPricingSimulator: React.FC<GlobalPricingSimulatorProps> = ({
                 {riskPct > 0 && <div style={{ width: `${riskPct}%` }} className="bg-amber-400 transition-all duration-300" title="Риск-буфер"></div>}
                 {logPct > 0 && <div style={{ width: `${logPct}%` }} className="bg-blue-400 transition-all duration-300" title="Логистика"></div>}
                 {margPct > 0 && <div style={{ width: `${margPct}%` }} className="bg-purple-500 transition-all duration-300" title="Наценка"></div>}
-                {vatPct > 0 && <div style={{ width: `${vatPct}%` }} className="bg-slate-800 transition-all duration-300" title="НДС"></div>}
+                {vatPct > 0 && <div style={{ width: `${vatPct}%` }} className="bg-slate-600 transition-all duration-300" title="НДС"></div>}
               </div>
             </div>
 
@@ -291,7 +290,7 @@ export const GlobalPricingSimulator: React.FC<GlobalPricingSimulatorProps> = ({
               </div>
               <div className="flex justify-between py-1.5">
                 <span className="text-slate-500 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-slate-800"></span> НДС ({vatRate}%):
+                  <span className="w-2 h-2 rounded-full bg-slate-600"></span> НДС ({vatRate}%):
                 </span>
                 <span className="font-mono text-slate-700">+{calculation.vatAmount.toLocaleString('ru-RU')} ₽</span>
               </div>

@@ -443,9 +443,11 @@ def process_payment_webhook(
             new_state = sm_transition(old_state, RequestState.PAID, request.model_dump())
             request.status = new_state
         elif old_state == RequestState.INVOICE_DRAFTED:
-            # Must go through SENT_TO_CLIENT first
-            intermediate = sm_transition(old_state, RequestState.SENT_TO_CLIENT, request.model_dump())
-            request.status = intermediate
+            # A payment can arrive after ERP confirms and delivers a draft. Preserve
+            # the canonical workflow instead of attempting an invalid shortcut.
+            intermediate = sm_transition(old_state, RequestState.ERP_SYNCING, request.model_dump())
+            intermediate = sm_transition(intermediate, RequestState.ERP_SYNCED, request.model_dump())
+            intermediate = sm_transition(intermediate, RequestState.SENT_TO_CLIENT, request.model_dump())
             new_state = sm_transition(intermediate, RequestState.PAID, request.model_dump())
             request.status = new_state
         else:

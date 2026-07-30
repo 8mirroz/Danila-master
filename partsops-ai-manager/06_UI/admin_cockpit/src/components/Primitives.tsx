@@ -448,19 +448,22 @@ export const LeftNavRail: React.FC<LeftNavRailProps> = ({
                   key={item.id}
                   onClick={() => { onChangeTab(item.id); if (inDrawer && onCloseDrawer) onCloseDrawer(); }}
                   aria-current={isActive ? 'page' : undefined}
-                  aria-label={collapsedView ? item.label : undefined}
-                  className={`contract-control-nav group relative flex items-center gap-3 rounded-2xl border text-left transition-all duration-300 ${collapsedView ? 'h-11 w-11 justify-center px-0' : 'w-full px-3 py-3'} ${isActive ? 'contract-control-nav-active' : ''}`}
+                  aria-label={`Открыть ${item.label}`}
+                  title={item.label}
+                  className={`hermes-nav-button group relative flex items-center gap-3 rounded-2xl border text-left transition-all duration-300 ${collapsedView ? 'h-11 w-11 justify-center px-0' : 'w-full px-3 py-3'} ${isActive ? 'hermes-nav-button--active' : ''}`}
                 >
-                  <span className="contract-control-nav-glow" aria-hidden="true" />
-                  <Icon name={item.icon} size={17} weight={isActive ? 'fill' : 'regular'} className="relative z-10 shrink-0 text-emerald-300 transition-transform duration-300 group-hover:scale-110" />
+                  <span className="hermes-nav-button__glow" aria-hidden="true" />
+                  <span className="hermes-nav-button__icon" aria-hidden="true">
+                    <Icon name={item.icon} size={18} weight={isActive ? 'fill' : 'regular'} />
+                  </span>
                   {!collapsedView && (
-                    <span className="relative z-10 min-w-0 animate-fadeIn">
-                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200/90">Hermes command layer</span>
-                      <span className="mt-0.5 block truncate text-xs font-bold text-white">{item.label}</span>
+                    <span className="hermes-nav-button__copy min-w-0 animate-fadeIn">
+                      <span className="hermes-nav-button__eyebrow">AI assistant</span>
+                      <span className="hermes-nav-button__label">{item.label}</span>
                     </span>
                   )}
                   {collapsedView && (
-                    <span className="pointer-events-none absolute left-14 z-50 whitespace-nowrap rounded-xl border border-emerald-300/20 bg-[#071a2b]/95 px-3 py-2 text-[11px] font-bold text-white opacity-0 shadow-xl transition-all duration-200 group-hover:translate-x-1 group-hover:opacity-100">
+                    <span className="hermes-nav-button__tooltip pointer-events-none absolute left-14 z-50 whitespace-nowrap rounded-xl px-3 py-2 text-[11px] font-bold opacity-0 shadow-xl transition-all duration-200 group-hover:translate-x-1 group-hover:opacity-100">
                       {item.label}
                     </span>
                   )}
@@ -612,24 +615,24 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
     : `${requestId} · План закупки запчастей`;
 
   return (
-    <div className="mb-4 rounded-3xl border border-slate-700/40 bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] p-5 text-white shadow-md">
+    <div className="mb-4 rounded-[var(--radius-panel)] border border-[var(--border-default)] bg-[var(--surface-1)] p-5 text-[var(--text-primary)] shadow-[var(--shadow-md)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="rounded-full border border-blue-400/30 bg-blue-500/15 px-3 py-1 font-mono text-xs font-bold text-blue-300 shrink-0">
+          <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 font-mono text-xs font-bold text-[var(--accent-primary)]">
             {requestId}
           </span>
-          <h2 className="text-base font-black text-white truncate max-w-[280px] md:max-w-[500px]">
+          <h2 className="max-w-[280px] truncate text-base font-bold text-[var(--text-primary)] md:max-w-[500px]">
             {cleanTitle}
           </h2>
           <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider shrink-0 border ${
             isUrgent
-              ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-              : 'bg-slate-700/60 text-slate-300 border-slate-600/50'
+              ? 'border-rose-200 bg-rose-50 text-rose-700'
+              : 'border-slate-200 bg-slate-100 text-slate-700'
           }`}>
             {isUrgent ? (priority.toLowerCase() === 'urgent' || priority === 'Срочный' ? 'Срочный' : 'Высокий') : 'Обычный'}
           </span>
           {vehicleMake && (
-            <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2.5 py-0.5 rounded-full font-bold shrink-0">
+            <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-blue-700">
               {vehicleMake} {vehicleModel || ''}
             </span>
           )}
@@ -639,7 +642,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
           {onBack && (
             <button
               onClick={onBack}
-              className="rounded-2xl border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-bold text-white/90 hover:bg-white/20 transition flex items-center gap-1.5"
+              className="flex items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-1.5 text-xs font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text-primary)]"
             >
               <Icon name="arrow-left" size={12} />
               Закрыть
@@ -649,11 +652,11 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
       </div>
 
       {(customerEmail || customerPhone || vin) && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-3 border-t border-white/10 text-xs text-slate-300 font-medium">
-          {customerEmail && <span>📧 {customerEmail}</span>}
-          {customerPhone && <span>📞 {customerPhone}</span>}
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-[var(--border-default)] pt-3 text-xs font-medium text-[var(--text-secondary)]">
+          {customerEmail && <span className="flex items-center gap-1.5"><Icon name="envelope" size={13} className="text-[var(--text-muted)]" />{customerEmail}</span>}
+          {customerPhone && <span className="flex items-center gap-1.5"><Icon name="phone" size={13} className="text-[var(--text-muted)]" />{customerPhone}</span>}
           {vin && (
-            <span className="font-mono text-[11px] bg-white/10 px-2 py-0.5 rounded-lg border border-white/15 text-blue-200 font-bold">
+            <span className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-2)] px-2 py-0.5 font-mono text-[11px] font-bold text-[var(--text-secondary)]">
               VIN: {vin}
             </span>
           )}

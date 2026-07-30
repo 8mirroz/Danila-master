@@ -136,34 +136,33 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Top Banner Header */}
-      <div className="rounded-3xl border border-slate-700/50 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl">
+      <div className="panel-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
                 <Icon name="rotate" size={12} /> Автономный режим поиска
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">Global OEM Cross-Matching Engine v2.4</span>
+              <span className="font-mono text-[10px] text-[var(--text-muted)]">Global OEM Cross-Matching Engine v2.4</span>
             </div>
-            <h2 className="text-xl font-black tracking-tight">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
               Матрица подбора аналогов и кросс-кодов
             </h2>
-            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--text-secondary)]">
               Мгновенный подбор кросс-номеров, сравнение цен поставщиков и оценка рисков качества. Вы можете искать детали напрямую по артикулу OEM или выбрать запрос из рабочей очереди.
             </p>
           </div>
 
           {/* Quick Request Selector */}
-          <div className="flex items-center gap-3 bg-white/10 p-3 rounded-2xl border border-white/15 backdrop-blur-md">
+          <div className="flex items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-[var(--surface-2)] p-3">
             <div className="text-right shrink-0 hidden sm:block">
-              <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300">Контекст заявки</div>
-              <div className="text-xs font-bold text-white">Открыть в степпере</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Контекст заявки</div>
+              <div className="text-xs font-semibold text-[var(--text-primary)]">Открыть в степпере</div>
             </div>
             <select
               value={selectedReqId}
               onChange={handleSelectReqChange}
-              className="bg-slate-800 text-white text-xs font-semibold rounded-xl border border-slate-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="cursor-pointer rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
             >
               <option value="">-- Выберите запрос из очереди --</option>
               {activeRequests.map((r) => (
@@ -194,7 +193,7 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
             <div className="absolute right-2 top-1.5 flex items-center gap-1">
               <button
                 onClick={() => performSearch(searchOem)}
-                className="px-3 py-1 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-[10px] font-bold shadow-xs transition"
+                className="rounded-lg bg-[var(--accent-primary)] px-3 py-1 text-[10px] font-semibold text-white shadow-xs transition hover:bg-[var(--accent-primary-strong)]"
               >
                 Найти
               </button>

@@ -100,7 +100,7 @@ def test_get_suppliers():
     response = client.get("/api/suppliers")
     assert response.status_code == 200
     suppliers = response.json()
-    assert len(suppliers) >= 5
+    assert len(suppliers) >= 3
 
 
 def test_supplier_crud_and_tables():

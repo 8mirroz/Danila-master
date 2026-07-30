@@ -22,6 +22,9 @@ export type SupplierRecord = {
   table_count: number;
   active_table_count: number;
   last_activity_at: string | null;
+  scraper_source?: string;
+  search_url_template?: string;
+  has_scraper_config?: boolean;
 };
 
 export type SupplierTableRecord = {

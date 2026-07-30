@@ -3,7 +3,6 @@ import { ApiError, apiJson } from '../lib/api';
 import { ConfirmModal } from './ConfirmModal';
 import {
   Button,
-  DataTable,
   EmptyState,
   ErrorState,
   Icon,
@@ -25,12 +24,14 @@ import {
   type SortKey,
   type StatusFilterKey,
   type ViewMode,
+  getScraperBrandMeta,
   getSupplierStatusMeta,
   getSyncStatusMeta,
   loadSuppliersPrefs,
   matchesRiskFilter,
   matchesSlaFilter,
   saveSuppliersPrefs,
+  supplierInitials,
 } from './supplierConfig';
 import type { SupplierRecord } from './supplierTypes';
 
@@ -289,44 +290,54 @@ export function SuppliersPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <div
-              className="inline-flex rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] p-1"
+              className="inline-flex rounded-xl border border-[var(--border-default)] bg-[var(--surface-2)] p-1 shadow-xs"
               role="group"
               aria-label="Режим отображения"
             >
               <button
                 type="button"
                 onClick={() => setViewMode('cards')}
-                className={`rounded-[10px] px-3 py-2 text-xs font-semibold transition-all ${
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                   viewMode === 'cards'
-                    ? 'border border-[rgba(37,99,235,0.25)] bg-[var(--state-selected)] text-[var(--accent-primary)] shadow-sm'
-                    : 'border border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)]'
+                    ? 'bg-[var(--surface-1)] text-[var(--accent-primary)] shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Карточки
+                <Icon name="grid-2" size={13} />
+                <span>Карточки</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('table')}
-                className={`rounded-[10px] px-3 py-2 text-xs font-semibold transition-all ${
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                   viewMode === 'table'
-                    ? 'border border-[rgba(37,99,235,0.25)] bg-[var(--state-selected)] text-[var(--accent-primary)] shadow-sm'
-                    : 'border border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)]'
+                    ? 'bg-[var(--surface-1)] text-[var(--accent-primary)] shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Таблица
+                <Icon name="table" size={13} />
+                <span>Таблица</span>
               </button>
             </div>
-            <Button
-              variant="secondary"
-              icon="arrow-rotate-right"
+
+            <button
+              type="button"
               onClick={() => void fetchSuppliers()}
-              loading={loading}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-primary)] hover:bg-[var(--surface-2)] transition shadow-xs disabled:opacity-50"
             >
-              Обновить
-            </Button>
-            <Button variant="primary" icon="plus" onClick={handleOpenCreate}>
-              Добавить поставщика
-            </Button>
+              <Icon name="arrow-rotate-right" size={13} className={loading ? 'animate-spin' : ''} />
+              <span>Обновить</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-xs hover:shadow-md transition-all active:scale-[0.98]"
+            >
+              <Icon name="plus" size={13} />
+              <span>Добавить поставщика</span>
+            </button>
           </div>
         </div>
       </header>
@@ -405,7 +416,7 @@ export function SuppliersPage() {
               onClick={() => setIsFiltersOpen(!isFiltersOpen)}
               className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border ${
                 isFiltersOpen || activeFilterChips.length > 0
-                  ? 'bg-slate-900 text-white border-slate-900'
+                  ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)]'
                   : 'bg-[var(--surface-2)] text-[var(--text-primary)] border-[var(--border-default)] hover:bg-[var(--surface-1)]'
               }`}
             >
@@ -607,11 +618,11 @@ function KpiButton({
 }) {
   const toneDot =
     tone === 'emerald'
-      ? 'bg-emerald-500'
+      ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
       : tone === 'amber'
-        ? 'bg-amber-500'
+        ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
         : tone === 'danger'
-          ? 'bg-rose-500'
+          ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
           : 'bg-slate-400';
 
   return (
@@ -619,24 +630,31 @@ function KpiButton({
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className={`panel-card-tight min-h-[96px] w-full overflow-hidden p-4 text-left transition-all duration-[var(--transition-base)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] ${
+      className={`group relative overflow-hidden rounded-2xl border p-3.5 md:p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
         selected
-          ? 'border-[rgba(37,99,235,0.35)] ring-2 ring-[rgba(37,99,235,0.18)]'
-          : ''
+          ? 'border-blue-500/40 bg-blue-50/20 ring-2 ring-blue-500/20 dark:bg-blue-950/20'
+          : 'border-[var(--border-default)] bg-[var(--surface-1)] hover:border-slate-300 dark:hover:border-slate-700'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
           {label}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className={`h-1.5 w-1.5 rounded-full ${toneDot}`} />
-          <Icon name={icon} size={16} className="text-[var(--accent-primary)]" />
+          <span className={`h-2 w-2 rounded-full ${toneDot}`} />
+          <Icon name={icon} size={15} className="text-[var(--accent-primary)] opacity-80 group-hover:opacity-100 transition-opacity" />
         </span>
       </div>
-      <strong className="mt-3 block text-[32px] font-bold tracking-[-0.04em] tabular-nums text-[var(--text-primary)]">
-        {value}
-      </strong>
+      <div className="mt-2 flex items-baseline justify-between">
+        <strong className="text-2xl md:text-3xl font-extrabold tracking-tight tabular-nums text-[var(--text-primary)]">
+          {value}
+        </strong>
+        {selected && (
+          <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded-full">
+            Фильтр вкл.
+          </span>
+        )}
+      </div>
     </button>
   );
 }
@@ -684,80 +702,165 @@ function SupplierTableMode({
   onArchive: (supplier: SupplierRecord) => void;
 }) {
   return (
-    <DataTable
-      columns={[
-        { key: 'name', label: 'Поставщик' },
-        { key: 'status', label: 'Статус' },
-        { key: 'categories', label: 'Категории' },
-        { key: 'sla', label: 'SLA', numeric: true },
-        { key: 'feeds', label: 'Фиды' },
-        { key: 'rating', label: 'Рейтинг', numeric: true },
-        { key: 'actions', label: 'Действия' },
-      ]}
-    >
-      {suppliers.map((supplier) => {
-        const statusMeta = getSupplierStatusMeta(supplier.status);
-        const syncMeta = getSyncStatusMeta(supplier.last_sync_status);
-        const categories = (supplier.categories.length
-          ? supplier.categories
-          : supplier.specialization.split(',')
-        )
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-          .slice(0, 2)
-          .join(', ');
+    <div className="overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--surface-1)] shadow-xs">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr className="border-b border-[var(--border-default)] bg-[var(--surface-2)]/60 text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+              <th scope="col" className="px-4 py-3 min-w-[220px]">Поставщик</th>
+              <th scope="col" className="px-3 py-3 min-w-[130px]">Статус & Скрапер</th>
+              <th scope="col" className="px-3 py-3 min-w-[160px]">Специализация</th>
+              <th scope="col" className="px-3 py-3 min-w-[90px] text-center">SLA</th>
+              <th scope="col" className="px-3 py-3 min-w-[130px]">Фиды & Таблицы</th>
+              <th scope="col" className="px-3 py-3 min-w-[110px] text-right">Надёжность</th>
+              <th scope="col" className="px-4 py-3 min-w-[150px] text-right">Действия</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border-subtle)]">
+            {suppliers.map((supplier) => {
+              const statusMeta = getSupplierStatusMeta(supplier.status);
+              const syncMeta = getSyncStatusMeta(supplier.last_sync_status);
+              const brandMeta = getScraperBrandMeta(supplier.supplier_id, supplier.name);
+              const scraperConfigured = Boolean(supplier.scraper_source);
+              const categories = (supplier.categories.length
+                ? supplier.categories
+                : supplier.specialization.split(',')
+              )
+                .map((entry) => entry.trim())
+                .filter(Boolean);
+              const initials = supplierInitials(supplier.name) || 'П';
 
-        return (
-          <tr
-            key={supplier.supplier_id}
-            className="cursor-pointer transition-colors hover:bg-[var(--state-hover)]"
-            onClick={() => onOpen(supplier)}
-          >
-            <td className="px-4 py-3">
-              <div className="font-bold text-[var(--text-primary)]">{supplier.name}</div>
-              <div className="text-xs text-[var(--text-muted)]">
-                {supplier.city || '—'} · {supplier.contact_person || 'нет контакта'}
-              </div>
-            </td>
-            <td className="px-4 py-3">
-              <span
-                className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${statusMeta.pillClass}`}
-              >
-                {statusMeta.label}
-              </span>
-            </td>
-            <td className="px-4 py-3 text-[var(--text-secondary)]">{categories || '—'}</td>
-            <td className="cell-num px-4 py-3 font-semibold tabular-nums text-[var(--text-secondary)]">
-              {supplier.avg_delivery_days} дн.
-            </td>
-            <td className="px-4 py-3">
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${syncMeta.pillClass}`}>
-                {supplier.active_table_count}/{supplier.table_count} · {syncMeta.shortLabel}
-              </span>
-            </td>
-            <td className="cell-num px-4 py-3 font-semibold tabular-nums text-[var(--text-secondary)]">
-              {Math.round(supplier.reliability_score * 100)}%
-              {supplier.rating_manual != null ? ` / ${supplier.rating_manual.toFixed(1)}` : ''}
-            </td>
-            <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
-              <div className="flex justify-end gap-1.5">
-                <Button size="sm" variant="secondary" onClick={() => onOpen(supplier)}>
-                  Открыть
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => onOpenTables(supplier)}>
-                  Таблицы
-                </Button>
-                <Button size="sm" variant="secondary" icon="pencil" onClick={() => onEdit(supplier)}>
-                  Изменить
-                </Button>
-                <Button size="sm" variant="danger" onClick={() => onArchive(supplier)}>
-                  Архив
-                </Button>
-              </div>
-            </td>
-          </tr>
-        );
-      })}
-    </DataTable>
+              return (
+                <tr
+                  key={supplier.supplier_id}
+                  className="group cursor-pointer transition-colors hover:bg-blue-50/30 dark:hover:bg-blue-950/20"
+                  onClick={() => onOpen(supplier)}
+                >
+                  {/* Поставщик */}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-xl text-xs font-black ${brandMeta.avatarBg} shadow-xs`}
+                      >
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-[var(--text-primary)] group-hover:text-blue-600 transition-colors truncate max-w-[200px]" title={supplier.name}>
+                          {supplier.name}
+                        </div>
+                        <div className="text-[11px] text-[var(--text-muted)] truncate max-w-[200px]">
+                          {supplier.city || '—'} · {supplier.contact_person || 'нет контакта'}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Статус & Скрапер */}
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <div className="flex flex-col gap-1 items-start">
+                      <span
+                        className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusMeta.pillClass}`}
+                      >
+                        {statusMeta.label}
+                      </span>
+                      {scraperConfigured && (
+                        <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700">
+                          Scraper настроен
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Специализация & Категории */}
+                  <td className="px-3 py-3">
+                    <div className="flex flex-wrap gap-1 max-w-[180px]">
+                      {categories.slice(0, 2).map((cat) => (
+                        <span
+                          key={cat}
+                          className="rounded-md border border-[var(--border-default)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)] truncate max-w-[110px]"
+                        >
+                          {cat}
+                        </span>
+                      ))}
+                      {categories.length > 2 && (
+                        <span className="text-[10px] font-bold text-[var(--text-muted)] self-center">
+                          +{categories.length - 2}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* SLA */}
+                  <td className="px-3 py-3 text-center whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[11px] font-bold tabular-nums text-blue-700 dark:text-blue-300">
+                      ⚡ {supplier.avg_delivery_days} дн.
+                    </span>
+                  </td>
+
+                  {/* Фиды */}
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-bold ${syncMeta.pillClass}`}>
+                      {supplier.active_table_count}/{supplier.table_count} · {syncMeta.shortLabel}
+                    </span>
+                  </td>
+
+                  {/* Рейтинг */}
+                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                    <div className="font-extrabold text-sm tabular-nums text-[var(--text-primary)]">
+                      {Math.round(supplier.reliability_score * 100)}%
+                    </div>
+                    {supplier.rating_manual != null && (
+                      <div className="text-[10px] font-semibold text-amber-500">
+                        ★ {supplier.rating_manual.toFixed(1)} / 5.0
+                      </div>
+                    )}
+                  </td>
+
+                  {/* Действия */}
+                  <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(event) => event.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => onOpen(supplier)}
+                      >
+                        Открыть
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => onOpenTables(supplier)}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)] text-[var(--text-secondary)] transition hover:text-blue-600"
+                        title="Таблицы прайсов"
+                        aria-label="Таблицы прайсов"
+                      >
+                        <Icon name="table" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onEdit(supplier)}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)] text-[var(--text-secondary)] transition hover:text-blue-600"
+                        title="Изменить"
+                        aria-label="Изменить"
+                      >
+                        <Icon name="pencil" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onArchive(supplier)}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50/60 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 transition"
+                        title="В архив"
+                        aria-label="В архив"
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

@@ -60,6 +60,8 @@ Thumbs.db
 uploads/
 *.sqlite
 *.db
+*.db-shm
+*.db-wal
 
 # ─── Alembic runtime ──────────────────────────────────────────────────────────
 # alembic.ini is committed, but generated migrations can be large – keep them

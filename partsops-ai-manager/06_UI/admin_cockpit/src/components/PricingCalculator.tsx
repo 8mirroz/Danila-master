@@ -109,14 +109,14 @@ export const PricingCalculator = ({ requestId, version, isApproved, canCreateInv
         <Metric label="НДС" value={preview.tax_amount} />
         <Metric label="Итого" value={preview.client_price} emphasis />
       </div>
-      <div className={`rounded-xl border p-3 text-xs ${policyPassed ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-200' : 'border-rose-500/30 bg-rose-950/30 text-rose-200'}`}>
+      <div className={`rounded-xl border p-3 text-xs ${policyPassed ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
         {policyPassed ? 'Pricing policy пройдена.' : (preview.margin_violations ?? preview.warnings ?? ['Pricing policy блокирует создание счета.']).join(' ')}
       </div>
     </> : <InlineAlert type="warning" message="Pricing evidence отсутствует или недоступен. Создание счета заблокировано." />}
-    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs">
-      <div className="flex justify-between gap-3"><span className="text-slate-400">ERP status</span><span className={syncFailed ? 'text-rose-300' : 'text-slate-100'}>{erpStatus?.sync_status ?? 'недоступен'}</span></div>
-      {erpStatus?.invoice_ref && <div className="mt-1 flex justify-between gap-3"><span className="text-slate-400">Invoice</span><span className="font-mono text-emerald-300">{erpStatus.invoice_ref}</span></div>}
-      {erpStatus?.last_error && <p className="mt-2 text-rose-300">{erpStatus.last_error}</p>}
+    <div className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-2)] p-3 text-xs">
+      <div className="flex justify-between gap-3"><span className="text-[var(--text-muted)]">ERP status</span><span className={syncFailed ? 'text-rose-700' : 'text-[var(--text-primary)]'}>{erpStatus?.sync_status ?? 'недоступен'}</span></div>
+      {erpStatus?.invoice_ref && <div className="mt-1 flex justify-between gap-3"><span className="text-[var(--text-muted)]">Invoice</span><span className="font-mono text-emerald-700">{erpStatus.invoice_ref}</span></div>}
+      {erpStatus?.last_error && <p className="mt-2 text-rose-700">{erpStatus.last_error}</p>}
     </div>
     <div className="flex flex-wrap gap-2">
       <ActionButton variant="primary" icon="fa-file-invoice-dollar" loading={drafting} disabled={!isApproved || !canCreateInvoice || !policyPassed} onClick={() => void createDraft()}>
@@ -126,13 +126,13 @@ export const PricingCalculator = ({ requestId, version, isApproved, canCreateInv
         {syncFailed ? 'Повторить ERP sync' : 'Синхронизировать ERP'}
       </ActionButton>}
     </div>
-    {!isApproved && <p className="text-[11px] text-amber-300">Черновик доступен только после finance approval.</p>}
+    {!isApproved && <p className="text-[11px] text-amber-700">Черновик доступен только после finance approval.</p>}
   </section>;
 };
 
 function Metric({ label, value, emphasis = false }: { label: string; value?: number; emphasis?: boolean }) {
-  return <div className={`rounded-lg border border-slate-800 p-2 ${emphasis ? 'bg-emerald-950/40 text-emerald-300' : 'bg-slate-950/60 text-slate-200'}`}>
-    <span className="block text-[9px] font-bold uppercase text-slate-400">{label}</span>
+  return <div className={`rounded-lg border border-[var(--border-default)] p-2 ${emphasis ? 'bg-emerald-50 text-emerald-700' : 'bg-[var(--surface-2)] text-[var(--text-primary)]'}`}>
+    <span className="block text-[9px] font-bold uppercase text-[var(--text-muted)]">{label}</span>
     <span className="font-mono text-xs font-bold">{typeof value === 'number' ? `${Math.round(value).toLocaleString()} ₽` : '—'}</span>
   </div>;
 }

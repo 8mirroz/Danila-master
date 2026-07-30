@@ -445,11 +445,10 @@ function App() {
     }
   };
 
-  const activeQueueCount =
-    dashboardVm.health?.entity_counts?.requests?.active_queue_total ??
-    requests.filter((r) => !['CLOSED', 'CANCELLED', 'FAILED', 'EXPIRED', 'CLIENT_REJECTED'].includes(r.status)).length;
-  const pendingApprovalsCount = dashboardVm.health?.health_indicators?.approval_pressure?.pending_approvals ?? 0;
-  const staleSuppliersCount = dashboardVm.health?.health_indicators?.supplier_feed_freshness?.feed_stale_suppliers ?? 0;
+  const hasConfirmedHealth = dashboardVm.health !== null;
+  const activeQueueCount = dashboardVm.health?.entity_counts?.requests?.active_queue_total ?? null;
+  const pendingApprovalsCount = dashboardVm.health?.health_indicators?.approval_pressure?.pending_approvals ?? null;
+  const staleSuppliersCount = dashboardVm.health?.health_indicators?.supplier_feed_freshness?.feed_stale_suppliers ?? null;
   const hasErpHealth = dashboardVm.health?.health_indicators?.erp_health != null;
   const isErpFailing = Boolean(dashboardVm.health?.health_indicators?.erp_health?.currently_failing);
 
@@ -479,17 +478,17 @@ function App() {
         <main className="flex-1 h-full overflow-y-auto bg-[var(--bg-app)]">
           {selectedReq && activeNav === 'matching' ? (
             <div className="p-4 max-w-6xl mx-auto space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-sm text-xs font-semibold border border-indigo-900/40">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)]">
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>Режим контекста заявки: <strong className="font-mono text-blue-300">{selectedReq.request_id}</strong> ({selectedReq.customer_name || 'Без имени'})</span>
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Режим контекста заявки: <strong className="font-mono text-[var(--accent-primary)]">{selectedReq.request_id}</strong> ({selectedReq.customer_name || 'Без имени'})</span>
                 </div>
                 <button
                   onClick={() => setSelectedReq(null)}
-                  className="px-3 py-1 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-[11px] font-bold text-white transition-all active:scale-95 flex items-center gap-1.5"
+                  className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 py-1 text-[11px] font-bold text-[var(--accent-primary)] transition-all hover:bg-blue-50 active:scale-95"
                   title="Перейти в автономный глобальный инструмент подбора/расчета без привязки к заявке"
                 >
-                  <Icon name="rotate" size={12} /> 🔓 Открепить заявку (Автономный режим)
+                  <Icon name="rotate" size={12} /> Открепить заявку
                 </button>
               </div>
               <WorkspaceHeader
@@ -663,54 +662,53 @@ function App() {
             <div className={activeNav === 'suppliers' ? "h-full" : "p-4 max-w-6xl mx-auto space-y-4"}>
               {activeNav === 'dashboard' && (
                 <>
-                  {/* Premium Hero Banner inspired by reference design */}
-                  <div className="rounded-3xl border border-slate-700/40 bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] p-6 text-white shadow-lg space-y-5">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                            {dashboardVm.loading ? 'Проверка системы' : dashboardVm.health?.status === 'healthy' ? 'Данные подтверждены' : 'Статус недоступен'}
+                  <section className="dashboard-overview panel-card p-6">
+                    <button
+                      onClick={() => {
+                        setIsErpSyncing(true);
+                        setFetchTrigger((prev) => prev + 1);
+                        void notify.erpSync();
+                        setTimeout(() => setIsErpSyncing(false), 800);
+                      }}
+                      className="dashboard-overview__refresh p-2 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] text-[var(--text-secondary)] transition-all duration-200 hover:bg-[var(--surface-3)] hover:text-[var(--text-primary)] active:scale-95 flex items-center justify-center"
+                      title="Обновить статус ERP (синхронизация состояния)"
+                      aria-label="Обновить статус ERP"
+                    >
+                      <Icon name="rotate" size={14} className={`text-[var(--accent-primary)] ${isErpSyncing ? 'animate-spin' : ''}`} />
+                    </button>
+                    <div className="dashboard-overview__header">
+                      <div className="dashboard-overview__intro">
+                        <div className="dashboard-overview__meta">
+                          <span className={`dashboard-overview__status ${hasConfirmedHealth ? 'dashboard-overview__status--healthy' : 'dashboard-overview__status--pending'}`}>
+                            <span className={`h-2 w-2 rounded-full ${hasConfirmedHealth ? 'bg-emerald-500' : 'bg-amber-500'} ${dashboardVm.loading ? 'animate-pulse' : ''}`} />
+                            {dashboardVm.loading && !hasConfirmedHealth ? 'Проверка системы' : (dashboardVm.health?.status === 'healthy' || dashboardVm.health?.status === 'ok') ? 'Данные подтверждены' : 'Статус недоступен'}
                           </span>
                           {dashboardVm.health?.tenant_id && (
-                            <span className="text-[10px] font-mono text-slate-400">
+                            <span className="font-mono text-[10px] text-[var(--text-muted)]">
                               Tenant: {dashboardVm.health.tenant_id}
                             </span>
                           )}
                         </div>
-                        <h2 className="text-xl font-black tracking-tight text-white">
+                        <h2 className="dashboard-overview__title">
                           Рабочая очередь PartsOps
                         </h2>
-                        <p className="text-xs text-slate-300 font-medium">
+                        <p className="dashboard-overview__description">
                           Мониторинг единой очереди запросов, ИИ-агентов LangGraph и синхронизации с ERP
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2.5">
+                      <div className="dashboard-overview__actions">
                         <button
                           onClick={() => setIsBatchModalOpen(true)}
-                          className="rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20 px-4 py-2.5 text-xs font-bold text-white transition-all duration-200 backdrop-blur-md shadow-xs flex items-center gap-2 active:scale-95"
+                          className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-2.5 text-xs font-semibold text-[var(--text-secondary)] transition-all duration-200 hover:bg-[var(--surface-3)] hover:text-[var(--text-primary)] active:scale-95"
                           title="Быстрый пакетный поиск по списку артикулов OEM"
                         >
-                          <Icon name="search" size={14} className="text-blue-300" />
+                          <Icon name="search" size={14} className="text-[var(--accent-primary)]" />
                           Быстрый поиск по артикулу
                         </button>
                         <button
-                          onClick={() => {
-                            setIsErpSyncing(true);
-                            setFetchTrigger((prev) => prev + 1);
-                            void notify.erpSync();
-                            setTimeout(() => setIsErpSyncing(false), 800);
-                          }}
-                          className="rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20 px-4 py-2.5 text-xs font-bold text-white transition-all duration-200 backdrop-blur-md shadow-xs flex items-center gap-2 active:scale-95"
-                          title="Обновить статус ERP (синхронизация состояния)"
-                        >
-                          <Icon name="rotate" size={14} className={`text-slate-300 ${isErpSyncing ? 'animate-spin text-blue-400' : ''}`} />
-                          Статус ERP
-                        </button>
-                        <button
                           onClick={handleOpenNewOrder}
-                          className="rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-5 py-2.5 text-xs font-black text-white transition-all duration-200 shadow-md hover:shadow-blue-500/25 flex items-center gap-2 active:scale-95"
+                          className="flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--accent-primary)] px-5 py-2.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-[var(--accent-primary-strong)] active:scale-95"
                           title="Создать и настроить новый кастомный запрос"
                         >
                           <Icon name="plus" size={14} className="text-white" />
@@ -719,52 +717,55 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Integrated Glassmorphism KPI Grid */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-                      <div className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md">
-                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 mb-1">
-                          Активная очередь
+                    <div className="dashboard-metrics">
+                      <div className="ui-metric-card ui-metric-card--queue">
+                        <div className="ui-metric-card__label">
+                          <Icon name="list" size={13} />
+                          <span>Активная очередь</span>
                         </div>
-                        <div className="text-2xl font-black text-white">
-                          {dashboardVm.loading ? '...' : activeQueueCount}
+                        <div data-testid="dashboard-active-queue" data-numeric className="ui-metric-card__value">
+                          {dashboardVm.loading ? '...' : activeQueueCount ?? '—'}
                         </div>
-                        <div className="text-[10px] text-blue-200 mt-1 font-semibold">
-                          запросов в обработке
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md">
-                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 mb-1">
-                          Нагрузка согласования
-                        </div>
-                        <div className="text-2xl font-black text-white">
-                          {dashboardVm.loading ? '...' : pendingApprovalsCount}
-                        </div>
-                        <div className="text-[10px] text-violet-200 mt-1 font-semibold">
-                          ожидают подписи
+                        <div className="ui-metric-card__detail">
+                          {hasConfirmedHealth ? 'запросов в обработке' : 'данные недоступны'}
                         </div>
                       </div>
 
-                      <div className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md">
-                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 mb-1">
-                          Устаревшие фиды
+                      <div className="ui-metric-card ui-metric-card--approvals">
+                        <div className="ui-metric-card__label">
+                          <Icon name="square-check" size={13} />
+                          <span>Нагрузка согласования</span>
                         </div>
-                        <div className="text-2xl font-black text-white">
-                          {dashboardVm.loading ? '...' : staleSuppliersCount}
+                        <div data-numeric className="ui-metric-card__value">
+                          {dashboardVm.loading ? '...' : pendingApprovalsCount ?? '—'}
                         </div>
-                        <div className="text-[10px] text-amber-200 mt-1 font-semibold">
-                          поставщиков
+                        <div className="ui-metric-card__detail">
+                          {hasConfirmedHealth ? 'ожидают подписи' : 'данные недоступны'}
                         </div>
                       </div>
 
-                      <div className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-md">
-                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 mb-1">
-                          Статус ERP
+                      <div className="ui-metric-card ui-metric-card--suppliers">
+                        <div className="ui-metric-card__label">
+                          <Icon name="wave-square" size={13} />
+                          <span>Устаревшие фиды</span>
                         </div>
-                        <div className="text-2xl font-black text-white">
+                        <div data-numeric className="ui-metric-card__value">
+                          {dashboardVm.loading ? '...' : staleSuppliersCount ?? '—'}
+                        </div>
+                        <div className="ui-metric-card__detail">
+                          {hasConfirmedHealth ? 'поставщиков' : 'данные недоступны'}
+                        </div>
+                      </div>
+
+                      <div className="ui-metric-card ui-metric-card--erp">
+                        <div className="ui-metric-card__label">
+                          <Icon name="rotate" size={13} />
+                          <span>Статус ERP</span>
+                        </div>
+                        <div className="ui-metric-card__value">
                           {dashboardVm.loading ? '...' : !hasErpHealth ? 'н/д' : isErpFailing ? 'Сбой' : 'OK'}
                         </div>
-                        <div className="text-[10px] text-emerald-200 mt-1 font-semibold">
+                        <div className="ui-metric-card__detail">
                           {dashboardVm.loading
                             ? 'загрузка'
                             : !hasErpHealth
@@ -775,11 +776,17 @@ function App() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </section>
 
-                  {/* Real Backend Alerts list */}
-                  {dashboardVm.error && <InlineAlert type="danger" message={`${dashboardVm.error}. Повторите обновление очереди.`} />}
-                  {dashboardVm.partialErrors.length > 0 && !dashboardVm.error && (
+                  {!dashboardVm.loading && !hasConfirmedHealth && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900">
+                      <span><strong>Данные dashboard недоступны.</strong> Повторите загрузку после восстановления соединения.</span>
+                      <Button size="sm" variant="secondary" icon="rotate" onClick={() => void dashboardVm.refetch()} aria-label="Повторить загрузку dashboard">
+                        Повторить
+                      </Button>
+                    </div>
+                  )}
+                  {dashboardVm.partialErrors.length > 0 && hasConfirmedHealth && (
                     <InlineAlert type="warning" message={`Частично недоступны: ${dashboardVm.partialErrors.join(', ')}. Показаны только подтверждённые данные.`} />
                   )}
                   {dashboardVm.health?.alerts && dashboardVm.health.alerts.length > 0 && (

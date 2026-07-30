@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import HTTPException
-from sqlmodel import Session, select, delete
+from sqlmodel import Session, select, delete, col
 
 from database import engine
 from models import PriceHistoryLedger, SupplierReliabilityLog, UploadArtifact
@@ -66,8 +66,21 @@ def _serialize_supplier(session: Session, supplier: Supplier) -> dict[str, Any]:
         select(SupplierActivityLog).where(
             SupplierActivityLog.supplier_id == supplier.supplier_id,
             SupplierActivityLog.tenant_id == supplier.tenant_id,
-        ).order_by(SupplierActivityLog.created_at.desc())
+        ).order_by(col(SupplierActivityLog.created_at).desc())
     ).first()
+    from services.live_scraper_service import SCRAPER_REGISTRY
+
+    scraper_source = None
+    search_url_template = None
+    has_scraper_config = False
+
+    for source_key, sc_info in SCRAPER_REGISTRY.items():
+        if sc_info.get("supplier_id") == supplier.supplier_id or source_key in supplier.supplier_id:
+            scraper_source = source_key
+            search_url_template = sc_info.get("search_url_template")
+            has_scraper_config = True
+            break
+
     return {
         "supplier_id": supplier.supplier_id,
         "name": supplier.name,
@@ -94,6 +107,9 @@ def _serialize_supplier(session: Session, supplier: Supplier) -> dict[str, Any]:
         "table_count": len(tables),
         "active_table_count": len([table for table in tables if table.is_active]),
         "last_activity_at": last_log.created_at.isoformat() if last_log else None,
+        "scraper_source": scraper_source,
+        "search_url_template": search_url_template,
+        "has_scraper_config": has_scraper_config,
     }
 
 def _serialize_table(table: SupplierTable) -> dict[str, Any]:
@@ -482,7 +498,7 @@ class SupplierService:
         statement = select(Supplier).where(Supplier.tenant_id == tenant_id)
         if status:
             statement = statement.where(Supplier.status == status)
-        suppliers = session.exec(statement.order_by(Supplier.name.asc())).all()
+        suppliers = session.exec(statement.order_by(col(Supplier.name).asc())).all()
         query_text = q.strip().lower()
 
         results = []
@@ -520,7 +536,7 @@ class SupplierService:
             is_active=payload_data.get("status", "active") == "active",
             status=payload_data.get("status", "active"),
             rating_manual=payload_data.get("rating_manual"),
-            rating_auto=None,
+            rating_auto=0.0,
             account_owner=payload_data.get("account_owner", ""),
             payment_terms=payload_data.get("payment_terms", ""),
             delivery_terms=payload_data.get("delivery_terms", ""),
@@ -607,12 +623,12 @@ class SupplierService:
             select(SupplierCatalogItem).where(
                 SupplierCatalogItem.supplier_id == supplier_id,
                 SupplierCatalogItem.tenant_id == tenant_id,
-            ).order_by(SupplierCatalogItem.name.asc())
+            ).order_by(col(SupplierCatalogItem.part_name).asc())
         ).all()
         return [
             {
-                "item_id": item.item_id,
-                "part_name": item.name,
+                "item_id": item.catalog_id,
+                "part_name": item.part_name,
                 "oem_number": item.oem_number,
                 "brand": item.brand,
                 "price": item.price,
@@ -633,7 +649,7 @@ class SupplierService:
             select(SupplierTable).where(
                 SupplierTable.supplier_id == supplier_id,
                 SupplierTable.tenant_id == tenant_id,
-            ).order_by(SupplierTable.uploaded_at.desc())
+            ).order_by(col(SupplierTable.uploaded_at).desc())
         ).all()
         return [_serialize_table(t) for t in tables]
 
@@ -698,6 +714,7 @@ class SupplierService:
                 raise HTTPException(status_code=404, detail="Table not found")
 
         artifact_id = f"art_{uuid.uuid4().hex[:12]}"
+        stored_path: str | None = None
         try:
             stored_path, safe_filename, size_bytes = storage.save_file(
                 tenant_id=tenant_id,
@@ -783,12 +800,12 @@ class SupplierService:
             }
         except HTTPException:
             session.rollback()
-            if "stored_path" in locals():
+            if stored_path:
                 storage.delete_file(stored_path)
             raise
         except Exception as exc:
             session.rollback()
-            if "stored_path" in locals():
+            if stored_path:
                 storage.delete_file(stored_path)
             raise HTTPException(status_code=500, detail=f"Supplier table import failed: {exc}") from exc
 
@@ -922,8 +939,8 @@ class SupplierService:
 
         session.exec(
             delete(SupplierCatalogItem).where(
-                SupplierCatalogItem.supplier_id == supplier_id,
-                SupplierCatalogItem.tenant_id == tenant_id,
+                col(SupplierCatalogItem.supplier_id) == supplier_id,
+                col(SupplierCatalogItem.tenant_id) == tenant_id,
             )
         )
 
@@ -1002,16 +1019,16 @@ class SupplierService:
         query_text = q.strip().lower()
         if query_text:
             statement = statement.where(
-                (SupplierTableRow.part_name.like(f"%{query_text}%"))
-                | (SupplierTableRow.oem_number.like(f"%{query_text}%"))
-                | (SupplierTableRow.brand.like(f"%{query_text}%"))
+                col(SupplierTableRow.part_name).like(f"%{query_text}%")
+                | col(SupplierTableRow.oem_number).like(f"%{query_text}%")
+                | col(SupplierTableRow.brand).like(f"%{query_text}%")
             )
         # Fetch total count matching the statement before limit/offset
         from sqlmodel import func
         # Count using a query over statement
         total = len(session.exec(statement).all()) # simple for sqlite, or we can use select(func.count()).select_from(statement)
         
-        rows = session.exec(statement.order_by(SupplierTableRow.row_key.asc()).limit(limit).offset(offset)).all()
+        rows = session.exec(statement.order_by(col(SupplierTableRow.row_key).asc()).limit(limit).offset(offset)).all()
         return {
             "total": total,
             "rows": [_serialize_row(row) for row in rows]
@@ -1163,7 +1180,7 @@ class SupplierService:
             select(SupplierActivityLog).where(
                 SupplierActivityLog.supplier_id == supplier_id,
                 SupplierActivityLog.tenant_id == tenant_id,
-            ).order_by(SupplierActivityLog.created_at.desc())
+            ).order_by(col(SupplierActivityLog.created_at).desc())
         ).all()
         serialized = [_serialize_log(l) for l in logs]
         return {
@@ -1178,17 +1195,17 @@ class SupplierService:
             raise HTTPException(status_code=404, detail="Supplier not found")
         logs = session.exec(
             select(SupplierReliabilityLog).where(
-                SupplierReliabilityLog.supplier_id == supplier_id,
-                SupplierReliabilityLog.tenant_id == tenant_id,
-            ).order_by(SupplierReliabilityLog.logged_at.desc())
+                col(SupplierReliabilityLog.supplier_id) == supplier_id,
+                col(SupplierReliabilityLog.tenant_id) == tenant_id,
+            ).order_by(col(SupplierReliabilityLog.logged_at).desc())
         ).all()
         return [
             {
-                "log_id": log.log_id,
-                "old_score": log.old_score,
-                "new_score": log.new_score,
+                "log_id": f"rel_{log.id}",
+                "reliability_score": log.reliability_score,
+                "event_type": log.event_type,
                 "reason": log.reason,
-                "logged_at": log.logged_at.isoformat(),
+                "logged_at": log.logged_at.isoformat() if isinstance(log.logged_at, datetime) else str(log.logged_at),
             }
             for log in logs
         ]
@@ -1198,23 +1215,27 @@ class SupplierService:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
+        catalog_item_ids = session.exec(
+            select(SupplierCatalogItem.catalog_id).where(
+                col(SupplierCatalogItem.supplier_id) == supplier_id,
+                col(SupplierCatalogItem.tenant_id) == tenant_id,
+            )
+        ).all()
+        if not catalog_item_ids:
+            return []
         logs = session.exec(
             select(PriceHistoryLedger).where(
-                PriceHistoryLedger.supplier_id == supplier_id,
-                PriceHistoryLedger.tenant_id == tenant_id,
-            ).order_by(PriceHistoryLedger.logged_at.desc())
+                col(PriceHistoryLedger.catalog_id).in_(catalog_item_ids),
+                col(PriceHistoryLedger.tenant_id) == tenant_id,
+            ).order_by(col(PriceHistoryLedger.recorded_at).desc())
         ).all()
         return [
             {
-                "ledger_id": log.ledger_id,
-                "item_id": log.item_id,
-                "oem_number": log.oem_number,
-                "brand": log.brand,
-                "old_price": log.old_price,
-                "new_price": log.new_price,
+                "ledger_id": f"led_{log.id}",
+                "catalog_id": log.catalog_id,
+                "price": log.price,
                 "currency": log.currency,
-                "reason": log.reason,
-                "logged_at": log.logged_at.isoformat(),
+                "recorded_at": log.recorded_at.isoformat() if isinstance(log.recorded_at, datetime) else str(log.recorded_at),
             }
             for log in logs
         ]

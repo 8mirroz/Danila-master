@@ -279,3 +279,15 @@ Connected real ping-all endpoint and localized UI states to Russian
 ## ⚖️ Decision | 2026-07-29T11:49:58+03:00
 
 Консолидация интерфейса матрицы подбора и калькулятора цен в единый инструмент
+
+## ⚖️ Decision | 2026-07-30T02:46:27+03:00
+
+Подключение NullPool для SQLite в database.py для предотвращения QueuePool TimeoutError
+
+## ⚖️ Decision | 2026-07-30T02:55:53+03:00
+
+PartsOps runtime guard: предотвратить 502 от дублирующего запуска через общий atomic lock и проверку портов в start.sh; pipeline_worker защищён отдельным interprocess lock. После инцидента обязательна live-проверка /health с HTTP 200.
+
+## ⚖️ Decision | 2026-07-30T14:56:27+03:00
+
+Редизайн каталога поставщиков и отображение настроенных scraper-коннекторов (Exist.ru, Autodoc.ru, Rossko.ru) без заявления об их live-доступности

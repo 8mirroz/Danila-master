@@ -76,24 +76,23 @@ export const AgentOSPanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Top Real Status Control Banner */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 text-white border border-slate-800 shadow-xl">
+      <section className="panel-card relative overflow-hidden p-6">
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 relative z-10 w-full">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[9px] text-emerald-300 font-extrabold uppercase tracking-widest bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 rounded-full backdrop-blur-md">
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-emerald-700">
                 HERMES AGENT OS
               </span>
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
                   hermesHealth.status === 'online'
-                    ? 'bg-emerald-400 animate-pulse'
+                    ? 'bg-emerald-500 animate-pulse'
                     : hermesHealth.status === 'degraded'
                     ? 'bg-amber-400'
                     : 'bg-rose-500'
                 }`}
               />
-              <span className="text-xs text-slate-200 font-bold">
+              <span className="text-xs font-semibold text-[var(--text-secondary)]">
                 {hermesHealth.status === 'online'
                   ? 'Hermes API Server готов (Online)'
                   : hermesHealth.status === 'degraded'
@@ -101,10 +100,10 @@ export const AgentOSPanel: React.FC = () => {
                   : 'Сервис оффлайн (Offline)'}
               </span>
             </div>
-            <h2 className="text-xl font-extrabold text-white tracking-tight sm:text-2xl font-sans">
+            <h2 className="font-sans text-xl font-bold tracking-tight text-[var(--text-primary)] sm:text-2xl">
               Операторская консоль и трассировка Hermes
             </h2>
-            <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+            <p className="max-w-xl text-xs leading-relaxed text-[var(--text-secondary)]">
               Реальный мониторинг состояния изолированного профиля Hermes (`partsops`), доступных навыков, трассировки LLM вызовов и бюджета.
             </p>
           </div>

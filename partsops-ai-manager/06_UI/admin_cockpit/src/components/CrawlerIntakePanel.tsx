@@ -604,7 +604,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   </button>
                   <button
                     onClick={handleOpenCreateSupplier}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F172A] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#1E293B] transition shadow-xs"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent-primary)] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[var(--accent-primary-strong)]"
                   >
                     <Icon name="plus" size={12} />
                     Новый поставщик
@@ -635,7 +635,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                     onClick={() => setCityFilter(city)}
                     className={`px-3 py-1 rounded-xl text-xs font-extrabold transition ${
                       cityFilter === city
-                        ? 'bg-[#0F172A] text-white shadow-xs'
+                        ? 'bg-[var(--accent-primary)] text-white shadow-xs'
                         : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -705,7 +705,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                         </span>
                         <button
                           onClick={(e) => handleOpenEditSupplier(supplier, e)}
-                          className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-[#0F172A] hover:text-white text-slate-600 flex items-center justify-center transition-colors"
+                          className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-colors hover:bg-[var(--accent-primary)] hover:text-white"
                           title="Редактировать карточку поставщика"
                         >
                           <Icon name="pencil" size={13} />
@@ -719,7 +719,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
               <div className="flex justify-end pt-3">
                 <button
                   onClick={() => setActiveStep(2)}
-                  className="rounded-2xl bg-[#0F172A] px-6 py-2.5 text-xs font-black text-white transition hover:bg-[#1E293B] shadow-md flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-2xl bg-[var(--accent-primary)] px-6 py-2.5 text-xs font-semibold text-white shadow-md transition hover:bg-[var(--accent-primary-strong)]"
                 >
                   Перейти к валидации позиций
                   <Icon name="chevron-right" size={12} />
@@ -818,7 +818,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   <button
                     disabled={busy}
                     onClick={() => void createPackage()}
-                    className="rounded-2xl bg-[#0F172A] px-7 py-3 text-xs font-black text-white transition-all hover:bg-[#1E293B] active:scale-[0.98] disabled:opacity-50 flex items-center gap-2 shadow-md"
+                    className="flex items-center gap-2 rounded-2xl bg-[var(--accent-primary)] px-7 py-3 text-xs font-semibold text-white shadow-md transition-all hover:bg-[var(--accent-primary-strong)] active:scale-[0.98] disabled:opacity-50"
                   >
                     {busy && <Icon name="spinner" size={14} className="animate-spin" />}
                     {busy ? 'Создаём пакет…' : 'Сформировать пакет и запустить ИИ-сбор'}
@@ -849,7 +849,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   type="button"
                   onClick={() => createdRequestId && void runValidation(createdRequestId)}
                   disabled={validating || !createdRequestId}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F172A] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#1E293B] transition shadow-xs disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent-primary)] px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-[var(--accent-primary-strong)] disabled:opacity-50"
                 >
                   <Icon name="shield" size={13} className={validating ? 'animate-spin' : ''} />
                   {validating ? 'Аудит...' : 'Запустить Quality Gates'}
@@ -912,7 +912,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                     onClick={() => setExportMode('light')}
                     className={`flex-1 py-2 px-4 rounded-xl text-xs font-extrabold transition ${
                       exportMode === 'light'
-                        ? 'bg-[#0F172A] text-white shadow-xs'
+                        ? 'bg-[var(--accent-primary)] text-white shadow-xs'
                         : 'text-slate-700 hover:text-slate-900'
                     }`}
                   >
@@ -944,7 +944,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                           window.open(`/api/contracts/${createdRequestId}/export-custom-excel?suppliers=${suppliersParam}&mode=simple`, '_blank');
                         }}
                         disabled={!createdRequestId}
-                        className="rounded-2xl bg-[#0F172A] px-7 py-3 text-xs font-black text-white hover:bg-[#1E293B] transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                        className="flex items-center gap-2 rounded-2xl bg-[var(--accent-primary)] px-7 py-3 text-xs font-semibold text-white shadow-md transition hover:bg-[var(--accent-primary-strong)] disabled:opacity-50"
                       >
                         <Icon name="file-export" size={14} className="text-white" />
                         Скачать спецификацию для клиента (.xlsx)

@@ -66,7 +66,7 @@ export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status, activeIn
               onClick={() => onStepClick?.(idx)}
               className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-2xl text-[10px] font-extrabold uppercase tracking-wider transition-all ${
                 isCurrent
-                  ? 'bg-[#0F172A] text-white shadow-sm scale-[1.02]'
+                  ? 'bg-[var(--accent-primary)] text-white shadow-sm scale-[1.02]'
                   : isCompleted
                   ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/80'
                   : isStepError

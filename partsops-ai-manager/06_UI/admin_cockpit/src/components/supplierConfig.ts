@@ -216,3 +216,51 @@ export function supplierInitials(name: string): string {
     .slice(0, 2)
     .toUpperCase();
 }
+
+export function getScraperBrandMeta(supplierId: string, name: string) {
+  const idLower = (supplierId || '').toLowerCase();
+  const nameLower = (name || '').toLowerCase();
+
+  if (idLower.includes('exist') || nameLower.includes('exist')) {
+    return {
+      brandName: 'Exist.ru',
+      badgeClass: 'bg-blue-600 text-white shadow-xs',
+      avatarBg: 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-black',
+      borderClass: 'border-blue-500/30',
+      accentColor: '#2563eb',
+      searchUrl: 'https://exist.ru/Price/Search?article={oem}',
+      isConfiguredScraper: true,
+    };
+  }
+  if (idLower.includes('autodoc') || nameLower.includes('autodoc')) {
+    return {
+      brandName: 'Autodoc.ru',
+      badgeClass: 'bg-rose-600 text-white shadow-xs',
+      avatarBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white font-black',
+      borderClass: 'border-rose-500/30',
+      accentColor: '#e11d48',
+      searchUrl: 'https://www.autodoc.ru/search?query={oem}',
+      isConfiguredScraper: true,
+    };
+  }
+  if (idLower.includes('rossko') || nameLower.includes('rossko')) {
+    return {
+      brandName: 'Rossko.ru',
+      badgeClass: 'bg-amber-600 text-white shadow-xs',
+      avatarBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white font-black',
+      borderClass: 'border-amber-500/30',
+      accentColor: '#d97706',
+      searchUrl: 'https://rossko.ru/search?query={oem}',
+      isConfiguredScraper: true,
+    };
+  }
+  return {
+    brandName: null,
+    badgeClass: 'bg-slate-700 text-white',
+    avatarBg: 'bg-[var(--surface-2)] text-[var(--text-secondary)] font-bold',
+    borderClass: 'border-[var(--border-default)]',
+    accentColor: '#64748b',
+    searchUrl: null,
+    isConfiguredScraper: false,
+  };
+}

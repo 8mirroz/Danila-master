@@ -135,19 +135,19 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
           onSelectRequest(request);
         }
       }}
-      className={`kanban-card group relative rounded-[20px] border p-4 backdrop-blur-md transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#2EE6D6]/50 ${getPriorityStripe(
+      className={`kanban-card group relative cursor-pointer rounded-[20px] border p-4 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/50 ${getPriorityStripe(
         request.priority
       )} ${
         isDragging
-          ? 'opacity-30 border-dashed border-[#2EE6D6] bg-[#2EE6D6]/10 shadow-none'
+          ? 'border-dashed border-[var(--accent-primary)] bg-blue-50 opacity-30 shadow-none'
           : isHighlighted
-            ? 'bg-[#2EE6D6]/10 border-[#2EE6D6]'
-            : 'bg-[#0D131E] border-white/10'
+            ? 'border-[var(--accent-primary)] bg-blue-50'
+            : 'border-[var(--border-default)] bg-[var(--surface-1)]'
       }`}
     >
       {/* Top row: Client Name & Status Badge */}
       <div className="flex items-start justify-between gap-3">
-        <div className="font-extrabold text-[13px] text-[#F4F7FB] leading-snug truncate flex-1 tracking-tight">
+        <div className="flex-1 truncate text-[13px] font-bold leading-snug tracking-tight text-[var(--text-primary)]">
           {request.customer_name || 'Заказчик не указан'}
         </div>
         <div className="shrink-0 scale-90 origin-right">
@@ -158,8 +158,8 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
       {/* Info fields */}
       <div className="space-y-1.5 pt-1.5">
         {/* Request ID */}
-        <div className="flex items-center gap-1.5 text-[11px] text-[#2EE6D6] font-semibold">
-          <i className="fas fa-hashtag text-[9px] text-[#2EE6D6]/60" />
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--accent-primary)]">
+          <i className="fas fa-hashtag text-[9px] text-blue-400" />
           <span className="font-mono">{request.request_id}</span>
         </div>
 
