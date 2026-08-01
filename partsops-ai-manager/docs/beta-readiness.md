@@ -86,8 +86,14 @@ captured as part of the worker-restart release gate below.
   also restored a custom logical dump into a separate clean PostgreSQL
   container and matched the schema revision and control data before deleting
   the temporary container and volume.
-- [ ] Execute cross-tenant, signed-upload and audit-immutability security tests
-  in the staging deployment.
+- [x] Execute cross-tenant, signed-upload and audit-immutability security tests
+  in the staging deployment. On 2026-08-01
+  `bash scripts/verify_staging_security.sh` used real temporary Keycloak JWTs
+  for two organizations: cross-tenant request access and artifact import were
+  rejected, a valid CSV upload was stored tenant-scoped, and a controlled
+  database tamper was detected by the event hash-chain. The script removes its
+  IdP users, database records and S3 object, and restores direct password
+  grants to disabled.
 
 ## Release decision inputs
 
