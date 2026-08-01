@@ -6,7 +6,7 @@ PartsOps AI Manager v3 — Supervisor Agent
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
 from base_agent import Agent, AgentContext, register_agent
