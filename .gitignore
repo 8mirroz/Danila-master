@@ -41,6 +41,7 @@ partsops-ai-manager/database.db
 .env
 .env.*
 !.env.example
+!partsops-ai-manager/06_UI/admin_cockpit/.env.staging.example
 *.pem
 *.key
 
@@ -105,4 +106,3 @@ DM obs/obsidian_sync.log
 .hermes/
 partsops-ai-manager/.hermes/
 .kilo/
-

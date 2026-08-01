@@ -42,6 +42,12 @@ deployment platform. The script rejects local storage, legacy auth and SQLite
 before applying migrations; `PARTSOPS_STAGING_HEALTH_URL` additionally proves
 the deployed health endpoint.
 
+For a local cockpit against the Docker OIDC stack, copy
+`06_UI/admin_cockpit/.env.staging.example` to `.env.staging` in that frontend
+directory and run `npm run dev -- --mode staging`. These are public browser
+settings only; never place Keycloak, MinIO, database or ERP secrets in a
+`VITE_*` variable.
+
 The staging compose stack starts `pipeline-worker-staging` separately after
 migrations. Its process state and replay of a queued pipeline run must be
 captured as part of the worker-restart release gate below.
