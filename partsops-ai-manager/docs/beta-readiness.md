@@ -20,6 +20,13 @@ current command output or a production-like run linked from the release record.
   worker containers; Keycloak, MinIO and PostgreSQL bootstrap passwords are
   not exposed as standalone application environment variables.
 - [x] CI validates the SaaS/API test slice, migrations and cockpit lint/build.
+- [x] Cockpit browser regression suite covers RFQ intake, quote exports,
+  dashboard error states, desktop overflow, keyboard navigation and mobile
+  drawers. On 2026-08-01 `npx playwright test --reporter=list` passed 27/27
+  against the stable API contract mocks; the mocks cover every Commercial
+  Account request and therefore do not hide failed fetches. This is UI contract
+  evidence only, not a substitute for an authenticated production-like S3 or
+  ERPNext drill.
 
 ## Required before connecting design partners
 
