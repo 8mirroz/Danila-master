@@ -190,7 +190,7 @@ done
 approval="$(curl --fail --silent --show-error -X POST "http://localhost:8000/api/requests/${request_id}/approve" \
   "${auth_header[@]}" -H 'Content-Type: application/json' --data '{"action":"approve","comment":"QuoteOps staging proof"}')"
 quote_id="$(printf '%s' "${approval}" | json_field '["quote"]["quote_id"]')"
-printf '%s' "${approval}" | ./venv/bin/python -c 'import json, sys; payload=json.load(sys.stdin); assert payload["quote"]["version"] == 1; assert payload["quote"]["selected_offers"]'
+printf '%s' "${approval}" | ./venv/bin/python -c 'import json, sys; payload=json.load(sys.stdin); assert payload["new_status"] == "APPROVED"; assert payload["quote"]["version"] == 1; assert payload["quote"]["selected_offers"]'
 
 pdf_type="$(curl --fail --silent --show-error -o "${quote_pdf}" -w '%{content_type}' "${auth_header[@]}" "http://localhost:8000/api/quotes/${quote_id}/export/pdf")"
 xlsx_type="$(curl --fail --silent --show-error -o "${quote_xlsx}" -w '%{content_type}' "${auth_header[@]}" "http://localhost:8000/api/quotes/${quote_id}/export/xlsx")"
