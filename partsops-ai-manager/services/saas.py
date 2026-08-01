@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -30,6 +31,8 @@ PLAN_LIMITS: dict[str, dict[str, int]] = {
     "start": {"positions": 500, "feeds": 5, "users": 3},
     "team": {"positions": 2000, "feeds": 25, "users": 10},
 }
+
+ORGANIZATION_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{2,62}$")
 
 
 def _now() -> datetime:
@@ -188,6 +191,41 @@ def invite_member(
     existing_user = session.exec(
         select(User).where(User.email == normalized_email)
     ).first()
+    membership = (
+        session.exec(
+            select(Membership).where(
+                Membership.organization_id == organization_id,
+                Membership.user_id == existing_user.user_id,
+            )
+        ).first()
+        if existing_user
+        else None
+    )
+    if membership is None:
+        # Serialize new invitations for one organization in PostgreSQL so two
+        # concurrent requests cannot both pass the seat-limit check.
+        ensure_subscription(session, organization_id)
+        subscription = session.exec(
+            select(Subscription)
+            .where(Subscription.organization_id == organization_id)
+            .with_for_update()
+        ).one()
+        member_count = session.exec(
+            select(func.count()).select_from(Membership).where(
+                Membership.organization_id == organization_id,
+                Membership.status.in_(["active", "invited"]),
+            )
+        ).one()
+        if member_count >= subscription.user_limit:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "USER_QUOTA_EXHAUSTED",
+                    "message": "User limit reached for the current subscription",
+                    "user_limit": subscription.user_limit,
+                },
+            )
+
     now = _now()
     user = existing_user or User(
         user_id=f"user_{uuid.uuid4().hex[:12]}",
@@ -202,12 +240,6 @@ def invite_member(
         session.commit()
         session.refresh(user)
 
-    membership = session.exec(
-        select(Membership).where(
-            Membership.organization_id == organization_id,
-            Membership.user_id == user.user_id,
-        )
-    ).first()
     if membership is None:
         membership = Membership(
             organization_id=organization_id,
@@ -231,6 +263,43 @@ def invite_member(
     session.commit()
     session.refresh(membership)
     return {"user": user, "membership": membership}
+
+
+def provision_organization(
+    session: Session,
+    *,
+    organization_id: str,
+    display_name: str,
+    owner_email: str,
+    provisioned_by: str,
+) -> dict[str, Any]:
+    """Provision a managed-beta tenant and its first administrator invitation.
+
+    This is intentionally platform-only: an OIDC claim alone must never create
+    an organization. Repeating the request is safe and returns the existing
+    organization and invitation.
+    """
+    normalized_id = organization_id.strip().lower()
+    if not ORGANIZATION_ID_PATTERN.fullmatch(normalized_id):
+        raise HTTPException(
+            status_code=422,
+            detail="organization_id must be a 3-63 character lowercase slug",
+        )
+    normalized_name = display_name.strip()
+    if not normalized_name:
+        raise HTTPException(status_code=422, detail="display_name is required")
+
+    organization = ensure_organization(
+        session, normalized_id, display_name=normalized_name
+    )
+    invitation = invite_member(
+        session,
+        organization_id=normalized_id,
+        email=owner_email,
+        role="admin",
+        invited_by=provisioned_by,
+    )
+    return {"organization": organization, **invitation}
 
 
 def list_members(session: Session, organization_id: str) -> list[dict[str, Any]]:

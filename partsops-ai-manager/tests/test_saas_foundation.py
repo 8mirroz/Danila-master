@@ -212,6 +212,55 @@ def test_platform_admin_activates_subscription_idempotently():
     assert second.json()["position_limit"] == 2000
 
 
+def test_platform_admin_provisions_idempotent_managed_beta_organization():
+    payload = {
+        "organization_id": "acme-parts",
+        "display_name": "ACME Parts",
+        "owner_email": "owner@example.com",
+    }
+    first = client.post("/api/platform/organizations", json=payload, headers=PLATFORM_HEADERS)
+    second = client.post("/api/platform/organizations", json=payload, headers=PLATFORM_HEADERS)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["organization"]["organization_id"] == "acme-parts"
+    assert first.json()["subscription"]["status"] == "trial"
+    assert first.json()["membership"]["role"] == "admin"
+    assert second.json()["owner"]["user_id"] == first.json()["owner"]["user_id"]
+
+
+def test_invitation_respects_subscription_user_limit():
+    with Session(engine) as session:
+        session.add(
+            Subscription(
+                organization_id="tenant-saas",
+                status="active",
+                plan_code="start",
+                position_limit=500,
+                supplier_feed_limit=5,
+                user_limit=1,
+            )
+        )
+        session.commit()
+
+    first = client.post(
+        "/api/organizations/current/invitations",
+        json={"email": "first@example.com", "role": "manager"},
+        headers=AUTH_HEADERS,
+    )
+    second = client.post(
+        "/api/organizations/current/invitations",
+        json={"email": "second@example.com", "role": "manager"},
+        headers=AUTH_HEADERS,
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 402
+    assert second.json()["detail"]["code"] == "USER_QUOTA_EXHAUSTED"
+    with Session(engine) as session:
+        assert len(session.exec(select(User)).all()) == 1
+
+
 def test_pipeline_run_records_valid_position_usage_once():
     _seed_request(parts=2)
 
