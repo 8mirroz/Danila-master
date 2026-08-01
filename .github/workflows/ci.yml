@@ -120,7 +120,7 @@ jobs:
         if: always()
         with:
           name: junit-unit-report
-          path: junit-unit.xml
+          path: partsops-ai-manager/junit-unit.xml
 
   integration-tests:
     name: 🔗 Integration Tests
@@ -156,8 +156,8 @@ jobs:
         with:
           name: test-artifacts
           path: |
-            junit-integration.xml
-            coverage.xml
+            partsops-ai-manager/junit-integration.xml
+            partsops-ai-manager/coverage.xml
 
   algorithm-regression:
     name: 🧮 Algorithm Regression Tests
@@ -190,7 +190,7 @@ jobs:
         if: always()
         with:
           name: junit-algorithms-report
-          path: junit-algorithms.xml
+          path: partsops-ai-manager/junit-algorithms.xml
 
   security-tests:
     name: 🛡️ Security & PII Tests
@@ -233,7 +233,7 @@ jobs:
         if: always()
         with:
           name: junit-security-report
-          path: junit-security.xml
+          path: partsops-ai-manager/junit-security.xml
 
   migration-tests:
     name: 🗄️ Database Migration Tests
