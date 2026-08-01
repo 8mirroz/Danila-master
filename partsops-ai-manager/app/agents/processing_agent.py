@@ -179,7 +179,7 @@ class ProcessingAgent(BaseAgent):
                 # Find matching supplier offers
                 matches = match_part_from_db(
                     part_name, session, threshold=50.0, limit=3,
-                    vehicle_context=vehicle_make
+                    vehicle_context=vehicle_make, tenant_id=request.tenant_id
                 )
                 
                 if matches:

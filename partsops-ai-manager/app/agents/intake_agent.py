@@ -92,7 +92,8 @@ class IntakeAgent(BaseAgent):
         intake_result = process_intake_request(
             text=masked_text,
             priority=source_input.priority,
-            vehicle_context=vehicle_context
+            vehicle_context=vehicle_context,
+            tenant_id=context.tenant_id,
         )
         
         # Create PartRequest record with original reference

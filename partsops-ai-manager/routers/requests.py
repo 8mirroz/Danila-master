@@ -280,6 +280,7 @@ async def import_from_artifact(
         intake_result = process_intake_request(
             text=text_content,
             priority=payload.priority,
+            tenant_id=tenant_id,
         )
         
         request_payload = {

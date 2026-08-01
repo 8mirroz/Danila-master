@@ -446,7 +446,11 @@ class RequestService:
 
         # 2. RUN LLM / EXTERNAL CALLS - outside of active db transaction (Rule R7 compliance)
         pre_parse = secure_pre_parse(payload_data["text"])
-        agent_result = process_intake_request(pre_parse["masked_text"], vehicle_context=pre_parse["vehicle_context"])
+        agent_result = process_intake_request(
+            pre_parse["masked_text"],
+            vehicle_context=pre_parse["vehicle_context"],
+            tenant_id=tenant_id,
+        )
 
         request_id = f"REQ-{uuid.uuid4().hex[:8].upper()}"
         status = RequestState.PART_EXTRACTION if agent_result["validation_status"] == "PASSED" else RequestState.NEEDS_CLARIFICATION

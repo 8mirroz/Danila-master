@@ -2,10 +2,10 @@
 Tests: Agent Swarm Nodes and Workflows (v3)
 """
 import pytest
-from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import SQLModel, create_engine, Session, delete
 from sqlalchemy.pool import StaticPool
 
-from models import PartRequest, SupplierOffer, RequestEvent, MatchEvidence, ERPSyncLog, GoldenSample
+from models import PartRequest, RequestState, SupplierOffer, RequestEvent, MatchEvidence, ERPSyncLog, GoldenSample
 from suppliers import Supplier, SupplierCatalogItem, Invoice, seed_database
 import database
 
@@ -202,3 +202,87 @@ class TestE2EAgentWorkflow:
             
             assert "NEVER return or hallucinate prices" in system_prompt
             assert "NEVER return or hallucinate supplier names" in system_prompt
+
+
+def test_processing_agent_does_not_match_another_organization_catalog():
+    """Pipeline matching must use the request organization, not all supplier feeds."""
+    from app.agents.base_agent import AgentContext
+    from app.agents.processing_agent import ProcessingAgent
+
+    with Session(engine) as session:
+        session.exec(delete(SupplierCatalogItem))
+        session.exec(delete(Supplier))
+        session.add(
+            Supplier(
+                tenant_id="other-organization",
+                supplier_id="SUP-OTHER",
+                name="Other organization supplier",
+                reliability_score=0.95,
+            )
+        )
+        session.add(
+            SupplierCatalogItem(
+                tenant_id="other-organization",
+                catalog_id="CAT-OTHER",
+                supplier_id="SUP-OTHER",
+                part_name="Тормозные колодки BMW X5",
+                brand="ATE",
+                price=1000.0,
+            )
+        )
+        request = PartRequest(
+            request_id="REQ-TENANT-ISOLATION",
+            tenant_id="request-organization",
+            source="test",
+            status=RequestState.PART_EXTRACTION,
+            customer_name="Tenant test",
+            parts_json='[{"name":"Тормозные колодки BMW X5","quantity":1}]',
+        )
+        session.add(request)
+        session.commit()
+
+        result = ProcessingAgent(tenant_id="request-organization")._run_processing_pipeline(
+            request,
+            [{"name": "Тормозные колодки BMW X5", "quantity": 1}],
+            AgentContext(tenant_id="request-organization", request_id=request.request_id),
+        )
+
+    assert result["success"] is False
+    assert result["errors"] == ["No valid supplier matches found for any parts"]
+
+
+def test_intake_scatter_gather_does_not_expose_another_organization_catalog():
+    """Tenant context must survive the legacy intake path before a request exists."""
+    with Session(engine) as session:
+        session.exec(delete(SupplierCatalogItem))
+        session.exec(delete(Supplier))
+        session.add(
+            Supplier(
+                tenant_id="other-organization",
+                supplier_id="SUP-OTHER-INTAKE",
+                name="Other organization supplier",
+                reliability_score=0.95,
+            )
+        )
+        session.add(
+            SupplierCatalogItem(
+                tenant_id="other-organization",
+                catalog_id="CAT-OTHER-INTAKE",
+                supplier_id="SUP-OTHER-INTAKE",
+                part_name="Тормозные колодки BMW X5",
+                brand="ATE",
+                price=1000.0,
+            )
+        )
+        session.commit()
+
+    result = supplier_scatter_gather_node(
+        {
+            "tenant_id": "request-organization",
+            "extracted_parts": [{"name": "Тормозные колодки BMW X5", "quantity": 1}],
+            "agent_trace": [],
+        }
+    )
+
+    assert result["validation_status"] == "FAILED"
+    assert result["extracted_parts"][0]["best_match"] is None

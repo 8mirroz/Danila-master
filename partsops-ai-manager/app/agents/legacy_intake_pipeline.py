@@ -22,6 +22,7 @@ from llm import call_llm, parse_request_with_llm, resolve_model
 # ──────────────────────────────────────────────
 
 class IntakeState(TypedDict):
+    tenant_id: Optional[str]
     raw_request: str
     customer_name: Optional[str]
     customer_phone: Optional[str]
@@ -41,6 +42,7 @@ class IntakeState(TypedDict):
     price_anomaly_detected: Optional[bool]
 
     agent_trace: List[str]
+    _priority: str
 
 
 # ──────────────────────────────────────────────
@@ -247,6 +249,7 @@ def parts_extractor_node(state: IntakeState) -> Dict:
 
 def supplier_scatter_gather_node(state: IntakeState) -> Dict:
     extracted_parts = state.get("extracted_parts", [])
+    tenant_id = state.get("tenant_id")
     trace = list(state.get("agent_trace", []))
     trace.append("Supplier Scatter-Gather: Finding catalog matches")
 
@@ -266,7 +269,8 @@ def supplier_scatter_gather_node(state: IntakeState) -> Dict:
                 # Find matching supplier offers in catalog
                 matches = match_part_from_db(
                     part_name, session, threshold=50.0, limit=3,
-                    vehicle_context=vehicle_make  # Pass vehicle for cross-brand filter
+                    vehicle_context=vehicle_make,  # Pass vehicle for cross-brand filter
+                    tenant_id=tenant_id,
                 )
                 if matches:
                     best_match = matches[0]["item"]
@@ -480,13 +484,19 @@ full_workflow.add_edge("gates_checker", END)
 full_pipeline_graph = full_workflow.compile()
 
 
-def process_intake_request(text: str, priority: str = "normal", vehicle_context: dict = None) -> dict:
+def process_intake_request(
+    text: str,
+    priority: str = "normal",
+    vehicle_context: dict = None,
+    tenant_id: str | None = None,
+) -> dict:
     """Wrapper function to trigger intake pipeline.
     
     Args:
         text: raw request text from customer (already PII-masked).
         priority: request priority (low/normal/urgent/vip) — affects model routing.
         vehicle_context: offline extracted vehicle context (make, model, year, vin_validity).
+        tenant_id: organization whose supplier feeds may be matched.
     """
     from pii import secure_pre_parse
     
@@ -543,7 +553,14 @@ def process_intake_request(text: str, priority: str = "normal", vehicle_context:
                 part_name = part.get("name", "")
                 qty = part.get("quantity", 1)
                 if part_name != "Неизвестная деталь":
-                    matches = match_part_from_db(part_name, session, threshold=50.0, limit=1, vehicle_context=vehicle_make)
+                    matches = match_part_from_db(
+                        part_name,
+                        session,
+                        threshold=50.0,
+                        limit=1,
+                        vehicle_context=vehicle_make,
+                        tenant_id=tenant_id,
+                    )
                     if matches:
                         matched_parts.append({
                             "name": part_name,
@@ -602,6 +619,7 @@ def process_intake_request(text: str, priority: str = "normal", vehicle_context:
         "price_anomaly_detected": None,
         "agent_trace": [],
         "_priority": priority,
+        "tenant_id": tenant_id,
     }
     result = intake_app.invoke(initial_state)
     return result
