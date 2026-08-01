@@ -43,12 +43,21 @@ The staging compose stack starts `pipeline-worker-staging` separately after
 migrations. Its process state and replay of a queued pipeline run must be
 captured as part of the worker-restart release gate below.
 
-- [ ] Provision Keycloak and record the issuer, audience, organization claim,
-  role claim and a successful signed JWT request against staging. Each user
-  must have an `organization_id` user attribute; the imported realm maps it
-  into the access token.
-- [ ] Run the full workflow against production-like PostgreSQL, including a
-  concurrent quota-reservation test.
+- [x] Provision Keycloak and record the issuer, audience, organization claim,
+  role claim and a successful signed JWT request against staging. On
+  2026-08-01 the local Docker staging stack verified issuer
+  `http://localhost:8080/realms/partsops`, audience `partsops-api`, the
+  `organization_id` claim, the realm role claim, platform provisioning and an
+  authenticated customer `GET /api/session`. The temporary proof organization
+  and Keycloak users were removed and direct password grants were restored to
+  disabled. Each managed user must have an admin-controlled `organization_id`
+  attribute; the imported realm maps it into the access token.
+- [x] Run the PostgreSQL quota-reservation gate. On 2026-08-01
+  `python scripts/verify_staging_quota_concurrency.py` ran inside the staging
+  backend container: two concurrent runs with one billable position resulted
+  in exactly one acceptance, one quota rejection and one usage event. The
+  verifier self-cleans its temporary organization. The remaining full quote
+  workflow gate is tracked with the end-to-end release checks below.
 - [ ] Configure the S3-compatible production bucket, credentials, lifecycle
   retention and signed-access policy, then capture an upload/restore drill.
 - [ ] Provision the ERPNext connector with scoped credentials and prove an

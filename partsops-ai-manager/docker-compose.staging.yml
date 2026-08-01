@@ -26,6 +26,8 @@ services:
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD must be set in .env.staging}
       - KC_HEALTH_ENABLED=true
       - KC_HTTP_PORT=8080
+      # Keep issued access-token issuer stable for the browser-facing staging URL.
+      - KC_HOSTNAME=localhost
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
@@ -91,8 +93,11 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-partsops}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.staging}@postgres:5432/${POSTGRES_DB:-partsops}
       PARTSOPS_S3_ENDPOINT_URL: http://minio:9000
+      # The browser-visible issuer remains localhost, while backend JWKS
+      # verification must use the Docker service hostname.
+      PARTSOPS_OIDC_JWKS_URL: http://keycloak:8080/realms/partsops/protocol/openid-connect/certs
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; from settings import settings; settings.validate_auth_configuration(); urlopen(settings.OIDC_JWKS_URL, timeout=3).read(1); urlopen('http://localhost:8000/health', timeout=3).read(1)"]
       interval: 10s
       timeout: 5s
       retries: 3
