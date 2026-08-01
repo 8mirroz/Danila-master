@@ -27,13 +27,15 @@ if ! "${COMPOSE[@]}" config --quiet; then
 fi
 
 echo "--> Launching Docker Staging Services (PostgreSQL 16, Keycloak, MinIO)..."
-"${COMPOSE[@]}" up -d --wait postgres keycloak minio minio-init
+"${COMPOSE[@]}" up -d --wait postgres keycloak minio
+"${COMPOSE[@]}" up -d minio-init
+"${COMPOSE[@]}" wait minio-init
 
 echo "--> Staging dependencies are healthy."
 "${COMPOSE[@]}" ps
 
 echo "--> Executing Alembic database migrations in the staging backend..."
-"${COMPOSE[@]}" up -d --wait backend-staging
+"${COMPOSE[@]}" up -d --wait --build backend-staging
 "${COMPOSE[@]}" exec -T backend-staging python -m alembic upgrade head
 
 echo "--> Starting durable pipeline worker..."
@@ -46,5 +48,5 @@ echo "====================================================="
 echo " SUCCESS: Staging environment initialized and verified!"
 echo " Keycloak Admin Console: http://localhost:8080"
 echo " MinIO S3 Console:       http://localhost:9001"
-echo " PostgreSQL Endpoint:   localhost:5432"
+echo " PostgreSQL Endpoint:   localhost:${POSTGRES_HOST_PORT:-5433}"
 echo "====================================================="

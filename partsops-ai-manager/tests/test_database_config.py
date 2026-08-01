@@ -50,3 +50,13 @@ def test_production_requires_postgresql_database_url():
         production_settings = Settings()
         with pytest.raises(RuntimeError, match="PostgreSQL DATABASE_URL is required"):
             _ = production_settings.DATABASE_URL
+
+
+def test_postgresql_schema_initialization_is_deferred_to_alembic():
+    from main import _should_initialize_schema_on_start
+
+    with mock.patch.dict(os.environ, {"DATABASE_URL": "postgresql://user:pass@host:5432/db"}):
+        assert _should_initialize_schema_on_start() is False
+
+    with mock.patch.dict(os.environ, {"DATABASE_URL": "sqlite:///database.db"}):
+        assert _should_initialize_schema_on_start() is True

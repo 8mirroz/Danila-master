@@ -58,10 +58,19 @@ def _should_seed_on_start() -> bool:
     return False
 
 
+def _should_initialize_schema_on_start() -> bool:
+    """Keep SQLite development convenient without racing Alembic on PostgreSQL."""
+    db_url = (os.getenv("DATABASE_URL") or "").strip().lower()
+    return not db_url.startswith(("postgresql://", "postgres://"))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.validate_auth_configuration()
-    init_db()
+    if _should_initialize_schema_on_start():
+        init_db()
+    else:
+        print("[startup] schema initialization deferred to Alembic")
     if _should_seed_on_start():
         with Session(engine) as session:
             seed_database(session)
