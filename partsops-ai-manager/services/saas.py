@@ -343,6 +343,17 @@ def activate_subscription(
         )
 
     subscription = ensure_subscription(session, organization_id)
+    if (
+        subscription.status == "active"
+        and subscription.plan_code == plan_code
+        and subscription.external_invoice_number == invoice_number
+        and subscription.external_invoice_date == invoice_date
+    ):
+        # The platform operator may safely retry an activation request after a
+        # timeout. Do not extend the paid period or alter audit timestamps for
+        # the same active external invoice.
+        return subscription
+
     limits = _limits_for_plan(plan_code)
     now = _now()
     subscription.status = "active"

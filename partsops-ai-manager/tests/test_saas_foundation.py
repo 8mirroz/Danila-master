@@ -4,7 +4,7 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import SQLModel, Session, select
+from sqlmodel import Session, SQLModel, select
 
 from database import engine
 from main import app
@@ -210,6 +210,9 @@ def test_platform_admin_activates_subscription_idempotently():
     assert second.status_code == 200
     assert first.json()["status"] == "active"
     assert second.json()["position_limit"] == 2000
+    assert second.json()["current_period_start"] == first.json()["current_period_start"]
+    assert second.json()["current_period_end"] == first.json()["current_period_end"]
+    assert second.json()["updated_at"] == first.json()["updated_at"]
 
 
 def test_platform_admin_provisions_idempotent_managed_beta_organization():
