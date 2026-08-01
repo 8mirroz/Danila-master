@@ -316,6 +316,9 @@ jobs:
   final-gate:
     name: 🏁 Final Gate
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     needs:
       - workflow-lint
       - python-quality
