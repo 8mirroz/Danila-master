@@ -60,6 +60,12 @@ captured as part of the worker-restart release gate below.
   workflow gate is tracked with the end-to-end release checks below.
 - [ ] Configure the S3-compatible production bucket, credentials, lifecycle
   retention and signed-access policy, then capture an upload/restore drill.
+  Local staging storage was proven on 2026-08-01 with
+  `python scripts/verify_staging_s3_storage.py` inside `backend-staging`:
+  upload, tenant metadata, materialization/SHA-256 and cleanup all passed.
+  The staging backend deliberately derives credentials from its isolated
+  MinIO bootstrap account; production must use a separate least-privilege
+  bucket credential and documented retention/access policies.
 - [ ] Provision the ERPNext connector with scoped credentials and prove an
   outbox retry/DLQ run against an authorized non-production endpoint.
 - [ ] Perform backup/restore into a clean environment and a worker-restart run

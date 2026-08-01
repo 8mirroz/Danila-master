@@ -93,6 +93,11 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-partsops}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.staging}@postgres:5432/${POSTGRES_DB:-partsops}
       PARTSOPS_S3_ENDPOINT_URL: http://minio:9000
+      # The local staging backend must use the same S3 credentials that boot
+      # the isolated MinIO instance; do not depend on stale AWS_* values in
+      # an inherited developer environment.
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set in .env.staging}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set in .env.staging}
       # The browser-visible issuer remains localhost, while backend JWKS
       # verification must use the Docker service hostname.
       PARTSOPS_OIDC_JWKS_URL: http://keycloak:8080/realms/partsops/protocol/openid-connect/certs
@@ -117,6 +122,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-partsops}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.staging}@postgres:5432/${POSTGRES_DB:-partsops}
       PARTSOPS_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set in .env.staging}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set in .env.staging}
       PARTSOPS_PIPELINE_WORKER_ID: staging-pipeline-worker-1
 
 volumes:
