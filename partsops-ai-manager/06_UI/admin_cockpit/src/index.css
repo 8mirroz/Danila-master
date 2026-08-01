@@ -91,7 +91,7 @@
     height: 100%;
     background: var(--bg-app);
     color: var(--text-primary);
-    font-family: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'Inter', sans-serif;
+    font-family: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', sans-serif;
     overflow: hidden;
   }
 
