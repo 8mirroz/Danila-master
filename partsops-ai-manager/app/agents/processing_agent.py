@@ -104,16 +104,14 @@ class ProcessingAgent(BaseAgent):
         # Check protective gates
         gates_result = self._check_protective_gates(request, result)
         
-        # Determine next step
-        if gates_result["auto_advance_allowed"] and self.auto_advance_enabled:
-            # Auto-advance to approval
-            self._update_status(request, RequestState.READY_FOR_APPROVAL)
-            next_agent = AgentType.DELIVERY  # Skip to delivery for auto-approval
-        else:
-            # Requires manual approval
-            self._update_status(request, RequestState.READY_FOR_APPROVAL)
-            self._create_approval_ticket(request, gates_result)
-            next_agent = AgentType.DELIVERY  # Still pass to delivery for notification
+        # Every commercial quote is explicitly approved by a finance/admin
+        # operator.  Automatic matching may make a request eligible for a fast
+        # decision, but it must never skip the immutable quote snapshot and
+        # send a preliminary document directly to the customer.
+        self._update_status(request, RequestState.READY_FOR_APPROVAL)
+        self._create_approval_ticket(request, gates_result)
+        gates_result["auto_advance_allowed"] = False
+        next_agent = AgentType.DELIVERY
         
         # Store processing results in context
         context.previous_results["processing"] = result
@@ -475,7 +473,7 @@ class ProcessingAgent(BaseAgent):
             request_id=request.request_id,
             tool_name="processing_agent",
             reason=f"Protective gates check failed: {json_lib.dumps(gates_result['gate_results'])}",
-            role_required="manager",
+            role_required="finance",
             requested_by="system",
             status="pending",
             payload_json=json_lib.dumps({

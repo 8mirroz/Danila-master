@@ -81,7 +81,7 @@ def test_pipeline_creates_request_with_original_ref():
 
 
 def test_pipeline_status_flow():
-    """Request should move from NEW -> SENT_TO_CLIENT after full pipeline."""
+    """A completed pipeline stops at an auditable operator-approval gate."""
     response = client.post(
         "/api/pipeline/run",
         json={
@@ -97,7 +97,13 @@ def test_pipeline_status_flow():
     status_resp = client.get(
         f"/api/pipeline/status/{request_id}", headers=AUTH_HEADERS
     )
-    assert status_resp.json()["status"] == "SENT_TO_CLIENT"
+    assert status_resp.json()["status"] == "READY_FOR_APPROVAL"
+
+    tickets_resp = client.get(
+        f"/api/requests/{request_id}/approval-tickets", headers=AUTH_HEADERS
+    )
+    assert tickets_resp.status_code == 200
+    assert tickets_resp.json()[0]["status"] == "pending"
 
 
 def test_approval_workflow_continues_pipeline():

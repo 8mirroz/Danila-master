@@ -72,8 +72,16 @@ captured as part of the worker-restart release gate below.
   `python scripts/verify_staging_quota_concurrency.py` ran inside the staging
   backend container: two concurrent runs with one billable position resulted
   in exactly one acceptance, one quota rejection and one usage event. The
-  verifier self-cleans its temporary organization. The remaining full quote
-  workflow gate is tracked with the end-to-end release checks below.
+  verifier self-cleans its temporary organization.
+- [x] Execute the authenticated full QuoteOps workflow against staging. On
+  2026-08-01 `bash scripts/verify_staging_quoteops.sh` created a temporary
+  Keycloak admin and organization, imported a customer supplier CSV and RFQ
+  CSV through the public API, completed a durable worker run at
+  `READY_FOR_APPROVAL`, approved it through the finance/admin gate, and
+  downloaded the resulting versioned PDF and XLSX quote. It also checked the
+  single valid-position usage record and removed temporary IdP, PostgreSQL and
+  object-storage records. A completed pipeline intentionally stops at approval
+  so a preliminary document can never be sent without a quote snapshot.
 - [ ] Configure the S3-compatible production bucket, credentials, lifecycle
   retention and signed-access policy, then capture an upload/restore drill.
   Local staging storage was proven on 2026-08-01 with
