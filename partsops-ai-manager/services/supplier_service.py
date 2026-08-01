@@ -25,8 +25,10 @@ from suppliers import (
     SupplierActivityLog,
 )
 
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 def _json_load(raw_value: Optional[str], default: Any) -> Any:
     if not raw_value:
@@ -36,7 +38,10 @@ def _json_load(raw_value: Optional[str], default: Any) -> Any:
     except json.JSONDecodeError:
         return default
 
-def _find_supplier_by_tenant(session: Session, supplier_id: str, tenant_id: str) -> Supplier | None:
+
+def _find_supplier_by_tenant(
+    session: Session, supplier_id: str, tenant_id: str
+) -> Supplier | None:
     return session.exec(
         select(Supplier).where(
             Supplier.supplier_id == supplier_id,
@@ -44,7 +49,10 @@ def _find_supplier_by_tenant(session: Session, supplier_id: str, tenant_id: str)
         )
     ).first()
 
-def _get_supplier_categories(session: Session, supplier_id: str, tenant_id: str) -> list[str]:
+
+def _get_supplier_categories(
+    session: Session, supplier_id: str, tenant_id: str
+) -> list[str]:
     items = session.exec(
         select(SupplierCatalogItem).where(
             SupplierCatalogItem.supplier_id == supplier_id,
@@ -54,8 +62,11 @@ def _get_supplier_categories(session: Session, supplier_id: str, tenant_id: str)
     categories = sorted({item.category for item in items if item.category})
     return categories
 
+
 def _serialize_supplier(session: Session, supplier: Supplier) -> dict[str, Any]:
-    categories = _get_supplier_categories(session, supplier.supplier_id, supplier.tenant_id)
+    categories = _get_supplier_categories(
+        session, supplier.supplier_id, supplier.tenant_id
+    )
     tables = session.exec(
         select(SupplierTable).where(
             SupplierTable.supplier_id == supplier.supplier_id,
@@ -63,10 +74,12 @@ def _serialize_supplier(session: Session, supplier: Supplier) -> dict[str, Any]:
         )
     ).all()
     last_log = session.exec(
-        select(SupplierActivityLog).where(
+        select(SupplierActivityLog)
+        .where(
             SupplierActivityLog.supplier_id == supplier.supplier_id,
             SupplierActivityLog.tenant_id == supplier.tenant_id,
-        ).order_by(col(SupplierActivityLog.created_at).desc())
+        )
+        .order_by(col(SupplierActivityLog.created_at).desc())
     ).first()
     from services.live_scraper_service import SCRAPER_REGISTRY
 
@@ -75,7 +88,10 @@ def _serialize_supplier(session: Session, supplier: Supplier) -> dict[str, Any]:
     has_scraper_config = False
 
     for source_key, sc_info in SCRAPER_REGISTRY.items():
-        if sc_info.get("supplier_id") == supplier.supplier_id or source_key in supplier.supplier_id:
+        if (
+            sc_info.get("supplier_id") == supplier.supplier_id
+            or source_key in supplier.supplier_id
+        ):
             scraper_source = source_key
             search_url_template = sc_info.get("search_url_template")
             has_scraper_config = True
@@ -100,7 +116,9 @@ def _serialize_supplier(session: Session, supplier: Supplier) -> dict[str, Any]:
         "delivery_terms": supplier.delivery_terms,
         "currency_default": supplier.currency_default,
         "notes_internal": supplier.notes_internal,
-        "last_feed_at": supplier.last_feed_at.isoformat() if supplier.last_feed_at else None,
+        "last_feed_at": supplier.last_feed_at.isoformat()
+        if supplier.last_feed_at
+        else None,
         "last_sync_status": supplier.last_sync_status,
         "created_at": supplier.created_at.isoformat(),
         "categories": categories,
@@ -111,6 +129,7 @@ def _serialize_supplier(session: Session, supplier: Supplier) -> dict[str, Any]:
         "search_url_template": search_url_template,
         "has_scraper_config": has_scraper_config,
     }
+
 
 def _serialize_table(table: SupplierTable) -> dict[str, Any]:
     return {
@@ -129,6 +148,7 @@ def _serialize_table(table: SupplierTable) -> dict[str, Any]:
         "is_active": table.is_active,
     }
 
+
 def _serialize_row(row: SupplierTableRow) -> dict[str, Any]:
     return {
         "row_key": row.row_key,
@@ -143,6 +163,7 @@ def _serialize_row(row: SupplierTableRow) -> dict[str, Any]:
         "raw_payload_json": _json_load(row.raw_payload_json, {}),
     }
 
+
 def _serialize_log(log: SupplierActivityLog) -> dict[str, Any]:
     return {
         "event_id": log.event_id,
@@ -153,6 +174,7 @@ def _serialize_log(log: SupplierActivityLog) -> dict[str, Any]:
         "payload": _json_load(log.payload_json, {}),
         "created_at": log.created_at.isoformat(),
     }
+
 
 def _append_supplier_log(
     session: Session,
@@ -176,10 +198,12 @@ def _append_supplier_log(
     session.add(log)
     return log
 
+
 def _coerce_text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
 
 def _coerce_float(value: Any, default: float = 0.0) -> float:
     if value in (None, ""):
@@ -190,6 +214,7 @@ def _coerce_float(value: Any, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return default
 
+
 def _coerce_int(value: Any, default: int = 0) -> int:
     if value in (None, ""):
         return default
@@ -199,14 +224,17 @@ def _coerce_int(value: Any, default: int = 0) -> int:
     except (TypeError, ValueError):
         return default
 
+
 def _normalize_header(value: Any) -> str:
     return "".join(ch.lower() for ch in _coerce_text(value) if ch.isalnum())
+
 
 def _parse_xlsx_rows(stored_path: str) -> list[dict[str, Any]]:
     import openpyxl
     from settings import settings
+
     max_rows = settings.MAX_PARSE_ROWS
-    
+
     try:
         wb = openpyxl.load_workbook(stored_path, read_only=True, data_only=True)
     except Exception as e:
@@ -225,8 +253,10 @@ def _parse_xlsx_rows(stored_path: str) -> list[dict[str, Any]]:
     if not header_row:
         return []
 
-    headers = [_coerce_text(val) or f"column_{idx + 1}" for idx, val in enumerate(header_row)]
-    
+    headers = [
+        _coerce_text(val) or f"column_{idx + 1}" for idx, val in enumerate(header_row)
+    ]
+
     parsed_rows: list[dict[str, Any]] = []
     for r in rows_iter:
         if not r or not any(_coerce_text(val) for val in r):
@@ -238,9 +268,10 @@ def _parse_xlsx_rows(stored_path: str) -> list[dict[str, Any]]:
         parsed_rows.append(row_dict)
         if len(parsed_rows) >= max_rows:
             break
-    
+
     wb.close()
     return parsed_rows
+
 
 def _decode_text_file(raw_bytes: bytes) -> str:
     for encoding in ("utf-8-sig", "utf-8", "cp1251", "latin-1"):
@@ -250,17 +281,23 @@ def _decode_text_file(raw_bytes: bytes) -> str:
             continue
     return raw_bytes.decode("utf-8", errors="ignore")
 
-def _parse_delimited_rows(stored_path: str, delimiter: Optional[str] = None) -> list[dict[str, Any]]:
+
+def _parse_delimited_rows(
+    stored_path: str, delimiter: Optional[str] = None
+) -> list[dict[str, Any]]:
     from settings import settings
+
     max_rows = settings.MAX_PARSE_ROWS
-    
+
     raw_bytes = Path(stored_path).read_bytes()
     text = _decode_text_file(raw_bytes)
     sample = text[:2048]
     resolved_delimiter = delimiter
     if resolved_delimiter is None:
         try:
-            resolved_delimiter = csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
+            resolved_delimiter = (
+                csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
+            )
         except csv.Error:
             resolved_delimiter = ","
     reader = csv.DictReader(io.StringIO(text), delimiter=resolved_delimiter)
@@ -272,20 +309,29 @@ def _parse_delimited_rows(stored_path: str, delimiter: Optional[str] = None) -> 
                 break
     return rows
 
+
 def _parse_json_rows(stored_path: str) -> list[dict[str, Any]]:
     from settings import settings
+
     max_rows = settings.MAX_PARSE_ROWS
-    
+
     raw_payload = json.loads(_decode_text_file(Path(stored_path).read_bytes()))
     if isinstance(raw_payload, dict):
         raw_payload = raw_payload.get("rows", [])
     if not isinstance(raw_payload, list):
-        raise ValueError("JSON import must contain a list of rows or an object with 'rows'")
+        raise ValueError(
+            "JSON import must contain a list of rows or an object with 'rows'"
+        )
     return [row for row in raw_payload if isinstance(row, dict)][:max_rows]
 
-def _parse_supplier_table_file(stored_path: str, filename: str, content_type: Optional[str]) -> tuple[list[dict[str, Any]], str]:
+
+def _parse_supplier_table_file(
+    stored_path: str, filename: str, content_type: Optional[str]
+) -> tuple[list[dict[str, Any]], str]:
+    from app.automation.storage import storage
     from settings import settings
-    
+
+    stored_path = storage.materialize(stored_path)
     # Hard file-size guard at parser level (defense in depth beyond storage)
     try:
         file_size = os.path.getsize(stored_path)
@@ -293,31 +339,82 @@ def _parse_supplier_table_file(stored_path: str, filename: str, content_type: Op
         file_size = 0
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     if file_size > max_bytes:
-        raise ValueError(f"UPLOAD_FILE_TOO_LARGE: {file_size} bytes exceeds limit {max_bytes} bytes")
-    
+        raise ValueError(
+            f"UPLOAD_FILE_TOO_LARGE: {file_size} bytes exceeds limit {max_bytes} bytes"
+        )
+
     extension = Path(filename or stored_path).suffix.lower()
     if extension == ".json" or content_type == "application/json":
         return _parse_json_rows(stored_path), "json"
-    if extension == ".xlsx" or content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+    if (
+        extension == ".xlsx"
+        or content_type
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ):
         return _parse_xlsx_rows(stored_path), "excel"
     if extension in {".txt", ".tsv"}:
         return _parse_delimited_rows(stored_path, delimiter="\t"), "text"
     return _parse_delimited_rows(stored_path), "csv"
 
-def _extract_supplier_table_rows(raw_rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, str], dict[str, Any]]:
+
+def _extract_supplier_table_rows(
+    raw_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, str], dict[str, Any]]:
     from settings import settings
+
     max_rows = settings.MAX_PARSE_ROWS
     if len(raw_rows) > max_rows:
-        raise ValueError(f"UPLOAD_TOO_MANY_ROWS: {len(raw_rows)} rows exceeds limit {max_rows}")
-    
+        raise ValueError(
+            f"UPLOAD_TOO_MANY_ROWS: {len(raw_rows)} rows exceeds limit {max_rows}"
+        )
+
     alias_map = {
-        "part_name": ["partname", "name", "part", "detail", "description", "item", "название", "деталь", "позиция", "наименование"],
-        "oem_number": ["oemnumber", "oem", "oemno", "articlenumber", "article", "sku", "номер", "артикул", "номердетали"],
+        "part_name": [
+            "partname",
+            "name",
+            "part",
+            "detail",
+            "description",
+            "item",
+            "название",
+            "деталь",
+            "позиция",
+            "наименование",
+        ],
+        "oem_number": [
+            "oemnumber",
+            "oem",
+            "oemno",
+            "articlenumber",
+            "article",
+            "sku",
+            "номер",
+            "артикул",
+            "номердетали",
+        ],
         "brand": ["brand", "manufacturer", "make", "бренд", "производитель", "марка"],
         "price": ["price", "cost", "unitprice", "цена", "стоимость", "priceруб"],
         "currency": ["currency", "curr", "валюта"],
-        "stock_qty": ["stockqty", "stock", "qty", "quantity", "availability", "остаток", "наличие", "количество"],
-        "delivery_days": ["deliverydays", "delivery", "leadtime", "sla", "days", "срок", "доставка", "дней"],
+        "stock_qty": [
+            "stockqty",
+            "stock",
+            "qty",
+            "quantity",
+            "availability",
+            "остаток",
+            "наличие",
+            "количество",
+        ],
+        "delivery_days": [
+            "deliverydays",
+            "delivery",
+            "leadtime",
+            "sla",
+            "days",
+            "срок",
+            "доставка",
+            "дней",
+        ],
         "category": ["category", "group", "family", "категория", "группа"],
     }
     normalized_aliases = {
@@ -331,7 +428,11 @@ def _extract_supplier_table_rows(raw_rows: list[dict[str, Any]]) -> tuple[list[d
 
     for index, row in enumerate(raw_rows, start=1):
         original_items = list(row.items())
-        normalized_source = {_normalize_header(key): value for key, value in original_items if _normalize_header(key)}
+        normalized_source = {
+            _normalize_header(key): value
+            for key, value in original_items
+            if _normalize_header(key)
+        }
 
         extracted: dict[str, Any] = {}
         for target, aliases in normalized_aliases.items():
@@ -340,13 +441,22 @@ def _extract_supplier_table_rows(raw_rows: list[dict[str, Any]]) -> tuple[list[d
                     extracted[target] = source_value
                     mapped_columns.setdefault(
                         target,
-                        next((original_key for original_key, value in original_items if _normalize_header(original_key) == source_key), source_key),
+                        next(
+                            (
+                                original_key
+                                for original_key, value in original_items
+                                if _normalize_header(original_key) == source_key
+                            ),
+                            source_key,
+                        ),
                     )
                     break
 
         part_name = _coerce_text(extracted.get("part_name"))
         if not part_name:
-            fallback = next((value for value in row.values() if _coerce_text(value)), "")
+            fallback = next(
+                (value for value in row.values() if _coerce_text(value)), ""
+            )
             part_name = _coerce_text(fallback)
         if not part_name:
             skipped_rows += 1
@@ -382,6 +492,7 @@ def _extract_supplier_table_rows(raw_rows: list[dict[str, Any]]) -> tuple[list[d
         "warnings": warnings,
     }
     return normalized_rows, mapped_columns, validation_summary
+
 
 def _create_supplier_table_entry(
     session: Session,
@@ -421,7 +532,9 @@ def _create_supplier_table_entry(
         uploaded_by=uploaded_by,
         row_count=len(rows),
         mapped_columns_json=json.dumps(mapped_columns_json or {}, ensure_ascii=False),
-        validation_summary_json=json.dumps(validation_summary_json or {}, ensure_ascii=False),
+        validation_summary_json=json.dumps(
+            validation_summary_json or {}, ensure_ascii=False
+        ),
         is_active=True,
     )
     session.add(table)
@@ -443,12 +556,15 @@ def _create_supplier_table_entry(
                 stock_qty=_coerce_int(row.get("stock_qty")),
                 delivery_days=_coerce_int(row.get("delivery_days")),
                 category=_coerce_text(row.get("category")),
-                raw_payload_json=json.dumps(raw_payload, ensure_ascii=False, default=str),
+                raw_payload_json=json.dumps(
+                    raw_payload, ensure_ascii=False, default=str
+                ),
                 created_at=_utcnow(),
             )
         )
 
     return table
+
 
 def _find_supplier_table_row(
     session: Session,
@@ -466,7 +582,10 @@ def _find_supplier_table_row(
         )
     ).first()
 
-def _apply_row_patch(row: SupplierTableRow, payload_data: dict[str, Any]) -> dict[str, Any]:
+
+def _apply_row_patch(
+    row: SupplierTableRow, payload_data: dict[str, Any]
+) -> dict[str, Any]:
     changed_fields: dict[str, Any] = {}
     for field in (
         "part_name",
@@ -494,7 +613,9 @@ def _apply_row_patch(row: SupplierTableRow, payload_data: dict[str, Any]) -> dic
 
 class SupplierService:
     @staticmethod
-    def get_suppliers(session: Session, tenant_id: str, status: Optional[str] = None, q: str = "") -> list[dict[str, Any]]:
+    def get_suppliers(
+        session: Session, tenant_id: str, status: Optional[str] = None, q: str = ""
+    ) -> list[dict[str, Any]]:
         statement = select(Supplier).where(Supplier.tenant_id == tenant_id)
         if status:
             statement = statement.where(Supplier.status == status)
@@ -508,7 +629,10 @@ class SupplierService:
                 matched = (
                     query_text in s.name.lower()
                     or query_text in s.specialization.lower()
-                    or any(query_text in cat.lower() for cat in serialized.get("categories", []))
+                    or any(
+                        query_text in cat.lower()
+                        for cat in serialized.get("categories", [])
+                    )
                 )
                 if not matched:
                     continue
@@ -516,11 +640,17 @@ class SupplierService:
         return results
 
     @staticmethod
-    def create_supplier(session: Session, tenant_id: str, payload_data: dict[str, Any]) -> dict[str, Any]:
-        supplier_id = payload_data.get("supplier_id") or f"SUP-{uuid.uuid4().hex[:8].upper()}"
+    def create_supplier(
+        session: Session, tenant_id: str, payload_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        supplier_id = (
+            payload_data.get("supplier_id") or f"SUP-{uuid.uuid4().hex[:8].upper()}"
+        )
         existing = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if existing:
-            raise HTTPException(status_code=400, detail="Supplier with this ID already exists")
+            raise HTTPException(
+                status_code=400, detail="Supplier with this ID already exists"
+            )
 
         new_supplier = Supplier(
             tenant_id=tenant_id,
@@ -547,20 +677,30 @@ class SupplierService:
             created_at=_utcnow(),
         )
         session.add(new_supplier)
-        _append_supplier_log(session, supplier_id, tenant_id, "supplier_created", payload={"name": new_supplier.name})
+        _append_supplier_log(
+            session,
+            supplier_id,
+            tenant_id,
+            "supplier_created",
+            payload={"name": new_supplier.name},
+        )
         session.commit()
         session.refresh(new_supplier)
         return _serialize_supplier(session, new_supplier)
 
     @staticmethod
-    def get_supplier(session: Session, supplier_id: str, tenant_id: str) -> dict[str, Any]:
+    def get_supplier(
+        session: Session, supplier_id: str, tenant_id: str
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
         return _serialize_supplier(session, s)
 
     @staticmethod
-    def patch_supplier(session: Session, supplier_id: str, tenant_id: str, payload_data: dict[str, Any]) -> dict[str, Any]:
+    def patch_supplier(
+        session: Session, supplier_id: str, tenant_id: str, payload_data: dict[str, Any]
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -569,7 +709,7 @@ class SupplierService:
         for k, v in payload_data.items():
             if k == "status" and v is not None:
                 s.status = v
-                s.is_active = (v == "active")
+                s.is_active = v == "active"
                 updates[k] = v
             elif k == "supplier_id":
                 continue
@@ -578,14 +718,22 @@ class SupplierService:
                 updates[k] = v
 
         if updates:
-            _append_supplier_log(session, supplier_id, tenant_id, "supplier_updated", payload={"updated_fields": updates})
+            _append_supplier_log(
+                session,
+                supplier_id,
+                tenant_id,
+                "supplier_updated",
+                payload={"updated_fields": updates},
+            )
             session.add(s)
             session.commit()
             session.refresh(s)
         return _serialize_supplier(session, s)
 
     @staticmethod
-    def archive_supplier(session: Session, supplier_id: str, tenant_id: str) -> dict[str, Any]:
+    def archive_supplier(
+        session: Session, supplier_id: str, tenant_id: str
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -597,7 +745,13 @@ class SupplierService:
         return {"status": "success", "supplier_id": supplier_id}
 
     @staticmethod
-    def update_supplier_rating(session: Session, supplier_id: str, tenant_id: str, rating_manual: float, reason: str) -> dict[str, Any]:
+    def update_supplier_rating(
+        session: Session,
+        supplier_id: str,
+        tenant_id: str,
+        rating_manual: float,
+        reason: str,
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -608,22 +762,34 @@ class SupplierService:
             supplier_id,
             tenant_id,
             "rating_manually_updated",
-            payload={"old_rating": old_rating, "new_rating": rating_manual, "reason": reason},
+            payload={
+                "old_rating": old_rating,
+                "new_rating": rating_manual,
+                "reason": reason,
+            },
         )
         session.add(s)
         session.commit()
-        return {"status": "success", "supplier_id": supplier_id, "rating_manual": rating_manual}
+        return {
+            "status": "success",
+            "supplier_id": supplier_id,
+            "rating_manual": rating_manual,
+        }
 
     @staticmethod
-    def get_supplier_items(session: Session, supplier_id: str, tenant_id: str) -> list[dict[str, Any]]:
+    def get_supplier_items(
+        session: Session, supplier_id: str, tenant_id: str
+    ) -> list[dict[str, Any]]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
         items = session.exec(
-            select(SupplierCatalogItem).where(
+            select(SupplierCatalogItem)
+            .where(
                 SupplierCatalogItem.supplier_id == supplier_id,
                 SupplierCatalogItem.tenant_id == tenant_id,
-            ).order_by(col(SupplierCatalogItem.part_name).asc())
+            )
+            .order_by(col(SupplierCatalogItem.part_name).asc())
         ).all()
         return [
             {
@@ -641,20 +807,26 @@ class SupplierService:
         ]
 
     @staticmethod
-    def get_supplier_tables(session: Session, supplier_id: str, tenant_id: str) -> list[dict[str, Any]]:
+    def get_supplier_tables(
+        session: Session, supplier_id: str, tenant_id: str
+    ) -> list[dict[str, Any]]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
         tables = session.exec(
-            select(SupplierTable).where(
+            select(SupplierTable)
+            .where(
                 SupplierTable.supplier_id == supplier_id,
                 SupplierTable.tenant_id == tenant_id,
-            ).order_by(col(SupplierTable.uploaded_at).desc())
+            )
+            .order_by(col(SupplierTable.uploaded_at).desc())
         ).all()
         return [_serialize_table(t) for t in tables]
 
     @staticmethod
-    def create_supplier_table(session: Session, supplier_id: str, tenant_id: str, payload_data: dict[str, Any]) -> dict[str, Any]:
+    def create_supplier_table(
+        session: Session, supplier_id: str, tenant_id: str, payload_data: dict[str, Any]
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -720,13 +892,20 @@ class SupplierService:
                 tenant_id=tenant_id,
                 artifact_id=artifact_id,
                 file_obj=file_obj,
-                original_filename=original_filename or f"{supplier_id}-table-upload.bin",
+                original_filename=original_filename
+                or f"{supplier_id}-table-upload.bin",
             )
-            raw_rows, file_type = _parse_supplier_table_file(stored_path, original_filename or safe_filename, content_type)
-            normalized_rows, mapped_columns, validation_summary = _extract_supplier_table_rows(raw_rows)
+            raw_rows, file_type = _parse_supplier_table_file(
+                stored_path, original_filename or safe_filename, content_type
+            )
+            normalized_rows, mapped_columns, validation_summary = (
+                _extract_supplier_table_rows(raw_rows)
+            )
 
             if not normalized_rows:
-                raise HTTPException(status_code=422, detail="Импорт не дал ни одной валидной строки")
+                raise HTTPException(
+                    status_code=422, detail="Импорт не дал ни одной валидной строки"
+                )
 
             artifact = UploadArtifact(
                 artifact_id=artifact_id,
@@ -752,7 +931,11 @@ class SupplierService:
             )
             session.add(artifact)
 
-            table_name = (name or "").strip() or (original_table.name if original_table else Path(original_filename or safe_filename).stem or "Imported table")
+            table_name = (name or "").strip() or (
+                original_table.name
+                if original_table
+                else Path(original_filename or safe_filename).stem or "Imported table"
+            )
             validation_summary["artifact_id"] = artifact_id
             if original_table:
                 validation_summary["replaced_table_id"] = original_table.table_id
@@ -779,7 +962,9 @@ class SupplierService:
                 session,
                 supplier_id=supplier_id,
                 tenant_id=tenant_id,
-                event_type="supplier_table_imported" if not original_table else "supplier_table_reimported",
+                event_type="supplier_table_imported"
+                if not original_table
+                else "supplier_table_reimported",
                 actor_id=principal_tenant_id,
                 table_id=table.table_id,
                 payload={
@@ -807,10 +992,14 @@ class SupplierService:
             session.rollback()
             if stored_path:
                 storage.delete_file(stored_path)
-            raise HTTPException(status_code=500, detail=f"Supplier table import failed: {exc}") from exc
+            raise HTTPException(
+                status_code=500, detail=f"Supplier table import failed: {exc}"
+            ) from exc
 
     @staticmethod
-    def get_supplier_table(session: Session, supplier_id: str, table_id: str, tenant_id: str) -> dict[str, Any]:
+    def get_supplier_table(
+        session: Session, supplier_id: str, table_id: str, tenant_id: str
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -873,7 +1062,9 @@ class SupplierService:
         return _serialize_table(table)
 
     @staticmethod
-    def activate_supplier_table(session: Session, supplier_id: str, table_id: str, tenant_id: str) -> dict[str, Any]:
+    def activate_supplier_table(
+        session: Session, supplier_id: str, table_id: str, tenant_id: str
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -894,10 +1085,12 @@ class SupplierService:
             )
         ).all()
         for t in all_tables:
-            t.is_active = (t.table_id == table_id)
+            t.is_active = t.table_id == table_id
             session.add(t)
 
-        _append_supplier_log(session, supplier_id, tenant_id, "table_activated", table_id=table_id)
+        _append_supplier_log(
+            session, supplier_id, tenant_id, "table_activated", table_id=table_id
+        )
         session.commit()
         session.refresh(table)
         return _serialize_table(table)
@@ -908,7 +1101,7 @@ class SupplierService:
         supplier_id: str,
         table_id: str,
         tenant_id: str,
-        payload_data: dict[str, Any]
+        payload_data: dict[str, Any],
     ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
@@ -1025,21 +1218,29 @@ class SupplierService:
             )
         # Fetch total count matching the statement before limit/offset
         from sqlmodel import func
+
         # Count using a query over statement
-        total = len(session.exec(statement).all()) # simple for sqlite, or we can use select(func.count()).select_from(statement)
-        
-        rows = session.exec(statement.order_by(col(SupplierTableRow.row_key).asc()).limit(limit).offset(offset)).all()
-        return {
-            "total": total,
-            "rows": [_serialize_row(row) for row in rows]
-        }
+        total = len(
+            session.exec(statement).all()
+        )  # simple for sqlite, or we can use select(func.count()).select_from(statement)
+
+        rows = session.exec(
+            statement.order_by(col(SupplierTableRow.row_key).asc())
+            .limit(limit)
+            .offset(offset)
+        ).all()
+        return {"total": total, "rows": [_serialize_row(row) for row in rows]}
 
     @staticmethod
-    def get_supplier_table_row(session: Session, supplier_id: str, table_id: str, row_key: str, tenant_id: str) -> dict[str, Any]:
+    def get_supplier_table_row(
+        session: Session, supplier_id: str, table_id: str, row_key: str, tenant_id: str
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
-        row = _find_supplier_table_row(session, supplier_id, table_id, row_key, tenant_id)
+        row = _find_supplier_table_row(
+            session, supplier_id, table_id, row_key, tenant_id
+        )
         if not row:
             raise HTTPException(status_code=404, detail="Supplier table row not found")
         return _serialize_row(row)
@@ -1056,7 +1257,9 @@ class SupplierService:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
-        row = _find_supplier_table_row(session, supplier_id, table_id, row_key, tenant_id)
+        row = _find_supplier_table_row(
+            session, supplier_id, table_id, row_key, tenant_id
+        )
         if not row:
             raise HTTPException(status_code=404, detail="Supplier table row not found")
 
@@ -1103,7 +1306,7 @@ class SupplierService:
         rows = session.exec(
             select(SupplierTableRow).where(
                 SupplierTableRow.table_id == table_id,
-                SupplierTableRow.row_key.in_(row_keys), # type: ignore
+                SupplierTableRow.row_key.in_(row_keys),  # type: ignore
                 SupplierTableRow.tenant_id == tenant_id,
             )
         ).all()
@@ -1122,13 +1325,18 @@ class SupplierService:
                 tenant_id,
                 "rows_bulk_updated",
                 table_id=table_id,
-                payload={"row_keys_count": len(row_keys), "updated_count": updated_count},
+                payload={
+                    "row_keys_count": len(row_keys),
+                    "updated_count": updated_count,
+                },
             )
             session.commit()
         return {"status": "success", "updated_count": updated_count}
 
     @staticmethod
-    def get_supplier_analytics(session: Session, supplier_id: str, tenant_id: str) -> dict[str, Any]:
+    def get_supplier_analytics(
+        session: Session, supplier_id: str, tenant_id: str
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -1148,7 +1356,9 @@ class SupplierService:
         ).all()
 
         total_parts = len(items)
-        avg_price = sum(item.price for item in items) / total_parts if total_parts else 0.0
+        avg_price = (
+            sum(item.price for item in items) / total_parts if total_parts else 0.0
+        )
         min_price = min((item.price for item in items), default=0.0)
         max_price = max((item.price for item in items), default=0.0)
 
@@ -1156,7 +1366,9 @@ class SupplierService:
         categories_count = {}
         for item in items:
             if item.category:
-                categories_count[item.category] = categories_count.get(item.category, 0) + 1
+                categories_count[item.category] = (
+                    categories_count.get(item.category, 0) + 1
+                )
 
         return {
             "supplier_id": supplier_id,
@@ -1172,32 +1384,37 @@ class SupplierService:
         }
 
     @staticmethod
-    def get_supplier_logs(session: Session, supplier_id: str, tenant_id: str) -> dict[str, Any]:
+    def get_supplier_logs(
+        session: Session, supplier_id: str, tenant_id: str
+    ) -> dict[str, Any]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
         logs = session.exec(
-            select(SupplierActivityLog).where(
+            select(SupplierActivityLog)
+            .where(
                 SupplierActivityLog.supplier_id == supplier_id,
                 SupplierActivityLog.tenant_id == tenant_id,
-            ).order_by(col(SupplierActivityLog.created_at).desc())
+            )
+            .order_by(col(SupplierActivityLog.created_at).desc())
         ).all()
         serialized = [_serialize_log(l) for l in logs]
-        return {
-            "total": len(serialized),
-            "logs": serialized
-        }
+        return {"total": len(serialized), "logs": serialized}
 
     @staticmethod
-    def get_supplier_reliability_history(session: Session, supplier_id: str, tenant_id: str) -> list[dict[str, Any]]:
+    def get_supplier_reliability_history(
+        session: Session, supplier_id: str, tenant_id: str
+    ) -> list[dict[str, Any]]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
         logs = session.exec(
-            select(SupplierReliabilityLog).where(
+            select(SupplierReliabilityLog)
+            .where(
                 col(SupplierReliabilityLog.supplier_id) == supplier_id,
                 col(SupplierReliabilityLog.tenant_id) == tenant_id,
-            ).order_by(col(SupplierReliabilityLog.logged_at).desc())
+            )
+            .order_by(col(SupplierReliabilityLog.logged_at).desc())
         ).all()
         return [
             {
@@ -1205,13 +1422,17 @@ class SupplierService:
                 "reliability_score": log.reliability_score,
                 "event_type": log.event_type,
                 "reason": log.reason,
-                "logged_at": log.logged_at.isoformat() if isinstance(log.logged_at, datetime) else str(log.logged_at),
+                "logged_at": log.logged_at.isoformat()
+                if isinstance(log.logged_at, datetime)
+                else str(log.logged_at),
             }
             for log in logs
         ]
 
     @staticmethod
-    def get_supplier_price_history(session: Session, supplier_id: str, tenant_id: str) -> list[dict[str, Any]]:
+    def get_supplier_price_history(
+        session: Session, supplier_id: str, tenant_id: str
+    ) -> list[dict[str, Any]]:
         s = _find_supplier_by_tenant(session, supplier_id, tenant_id)
         if not s:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -1224,10 +1445,12 @@ class SupplierService:
         if not catalog_item_ids:
             return []
         logs = session.exec(
-            select(PriceHistoryLedger).where(
+            select(PriceHistoryLedger)
+            .where(
                 col(PriceHistoryLedger.catalog_id).in_(catalog_item_ids),
                 col(PriceHistoryLedger.tenant_id) == tenant_id,
-            ).order_by(col(PriceHistoryLedger.recorded_at).desc())
+            )
+            .order_by(col(PriceHistoryLedger.recorded_at).desc())
         ).all()
         return [
             {
@@ -1235,7 +1458,9 @@ class SupplierService:
                 "catalog_id": log.catalog_id,
                 "price": log.price,
                 "currency": log.currency,
-                "recorded_at": log.recorded_at.isoformat() if isinstance(log.recorded_at, datetime) else str(log.recorded_at),
+                "recorded_at": log.recorded_at.isoformat()
+                if isinstance(log.recorded_at, datetime)
+                else str(log.recorded_at),
             }
             for log in logs
         ]

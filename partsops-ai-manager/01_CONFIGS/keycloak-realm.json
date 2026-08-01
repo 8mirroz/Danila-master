@@ -1,0 +1,71 @@
+{
+  "realm": "partsops",
+  "enabled": true,
+  "registrationAllowed": false,
+  "accessTokenLifespan": 3600,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Administrator role for PartsOps AI Manager"
+      },
+      {
+        "name": "manager",
+        "description": "Manager role for PartsOps AI Manager"
+      },
+      {
+        "name": "finance",
+        "description": "Finance role for PartsOps AI Manager"
+      },
+      {
+        "name": "platform_admin",
+        "description": "Platform Admin role"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "partsops-api",
+      "name": "PartsOps API Backend",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "fullScopeAllowed": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "webOrigins": ["http://localhost:5173"],
+      "redirectUris": ["http://localhost:5173/*"],
+      "protocolMappers": [
+        {
+          "name": "organization_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "organization_id",
+            "claim.name": "organization_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "partsops-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "partsops-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": []
+}

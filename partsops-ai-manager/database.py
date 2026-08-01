@@ -28,6 +28,8 @@ else:
 def init_db():
     # Import all models so SQLModel.metadata knows about them
     from models import (PartRequest, SupplierOffer, RequestEvent, MatchEvidence, ERPSyncLog, GoldenSample,
+                        Organization, User, Membership, Subscription, UsageEvent,
+                        IntegrationConnection, ServiceApiKey, OnboardingState, ImportMapping, QuoteDocument, QuoteVersion,
                         ContractPosition, PriceEvidence, ContractExport, ContractAuditRun,
                         ContractRequirement, RequirementCoverage, ContractGap, AdaptationDecisionRecord,
                         ContractExceptionRecord, ClientApproval, PurchaseAuthorization, OEMCandidate,

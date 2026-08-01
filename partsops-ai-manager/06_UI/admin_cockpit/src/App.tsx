@@ -30,6 +30,7 @@ import { PipelineMonitor } from './components/PipelineMonitor';
 import { AgentOSPanel } from './components/AgentOSPanel';
 import { MultiAgentOrchestraView } from './components/MultiAgentOrchestraView';
 import { CrawlerIntakePanel } from './components/CrawlerIntakePanel';
+import { RFQFileImportPanel } from './components/RFQFileImportPanel';
 import { ContractControlPanel } from './components/ContractControlPanel';
 import { BlockedQueue } from './components/BlockedQueue';
 import { TransitionActions } from './components/TransitionActions';
@@ -39,6 +40,8 @@ import { HermesChatDrawer } from './components/HermesChatDrawer';
 import { BatchSearchModal } from './components/BatchSearchModal';
 import { getWorkflowStepIndex } from './lib/workflow';
 import { type RequestItem } from './lib/types';
+import { CommercialAccountPanel, type CommercialAccountData } from './components/CommercialAccountPanel';
+import { QuotesPanel } from './components/QuotesPanel';
 
 type Request = {
   id: number;
@@ -85,6 +88,9 @@ function App() {
   const [searchGlobalQuery, setSearchGlobalQuery] = useState('');
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [commercialAccount, setCommercialAccount] = useState<CommercialAccountData | null>(null);
+  const [commercialLoading, setCommercialLoading] = useState(true);
+  const [commercialError, setCommercialError] = useState<string | null>(null);
 
   const [requests, setRequests] = useState<Request[]>([]);
   const [normalizedParts, setNormalizedParts] = useState<Array<{ name: string; quantity: number }>>([]);
@@ -104,6 +110,31 @@ function App() {
 
   const dashboardVm = useDashboardViewModel(fetchTrigger);
 
+  const fetchCommercialAccount = async () => {
+    setCommercialLoading(true);
+    setCommercialError(null);
+    try {
+      const [organizationResponse, usageResponse, membersResponse, analyticsResponse] = await Promise.all([
+        apiFetch('/api/organizations/current'),
+        apiFetch('/api/billing/usage'),
+        apiFetch('/api/organizations/current/members'),
+        apiFetch('/api/analytics/quoteops'),
+      ]);
+      if (!organizationResponse.ok || !usageResponse.ok || !membersResponse.ok || !analyticsResponse.ok) throw new Error('Commercial account HTTP error');
+      const organization = await organizationResponse.json();
+      const usage = await usageResponse.json();
+      const members = await membersResponse.json();
+      const analytics = await analyticsResponse.json();
+      setCommercialAccount({ ...organization, usage, members, analytics });
+    } catch (error) {
+      console.error('Commercial account unavailable', error);
+      setCommercialAccount(null);
+      setCommercialError('Commercial account unavailable');
+    } finally {
+      setCommercialLoading(false);
+    }
+  };
+
   useEffect(() => {
     void apiFetch('/api/session')
       .then(async (res) => {
@@ -115,6 +146,8 @@ function App() {
         setWorkspaceError('Не удалось подтвердить роль пользователя. Действия заблокированы до восстановления соединения.');
       });
   }, []);
+
+  useEffect(() => { void fetchCommercialAccount(); }, []);
 
   const fetchDataHealth = async () => {
     try {
@@ -424,6 +457,7 @@ function App() {
     { id: 'suppliers', label: 'Каталог поставщиков', icon: 'car', group: 'main' as const },
     { id: 'orders', label: 'Загрузка заказа', icon: 'cloud-arrow-up', group: 'main' as const },
     { id: 'matching', label: 'Матрица подбора и цен', icon: 'rotate', group: 'main' as const },
+    { id: 'quotes', label: 'Коммерческие предложения', icon: 'document', group: 'main' as const },
     { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'robot', group: 'admin' as const },
     { id: 'orchestra', label: 'Мультиагентный оркестр', icon: 'wave-square', group: 'admin' as const },
     { id: 'agent_os', label: 'Консоль ИИ-агента', icon: 'robot', group: 'admin' as const },
@@ -808,6 +842,15 @@ function App() {
                     }
                   />
 
+                  <CommercialAccountPanel
+                    data={commercialAccount}
+                    loading={commercialLoading}
+                    error={commercialError}
+                    onRetry={() => void fetchCommercialAccount()}
+                    onOpenSuppliers={() => setActiveNav('suppliers')}
+                    onCreateRequest={handleOpenNewOrder}
+                  />
+
                   <div className="grid grid-cols-1 gap-4">
                     <LLMCostPanel />
                   </div>
@@ -865,12 +908,19 @@ function App() {
 
               {activeNav === 'orders' && (
                 <div className="mx-auto max-w-5xl space-y-4">
+                  <RFQFileImportPanel onImported={(requestId) => { setFetchTrigger((value) => value + 1); setActiveNav('kanban'); notify.success(`Заявка ${requestId} создана из RFQ`); }} />
                   <CrawlerIntakePanel
                     key={orderIntakeKey}
                     onCreated={() => {
                       setFetchTrigger((prev) => prev + 1);
                     }}
                   />
+                </div>
+              )}
+
+              {activeNav === 'quotes' && (
+                <div className="mx-auto max-w-6xl">
+                  <QuotesPanel selectedRequestId={selectedReq?.request_id} />
                 </div>
               )}
 

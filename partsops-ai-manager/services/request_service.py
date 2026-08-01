@@ -613,6 +613,14 @@ class RequestService:
         req = _find_request_by_tenant(session, request_id, tenant_id)
         if not req:
             raise HTTPException(status_code=404, detail="Request not found")
+        corrected_indexes = payload_data.get("corrected_position_indexes")
+        if corrected_indexes is not None:
+            try:
+                position_count = len(json.loads(req.parts_json or "[]"))
+            except json.JSONDecodeError:
+                position_count = 0
+            if any(index < 0 or index >= position_count for index in corrected_indexes):
+                raise HTTPException(status_code=422, detail="Corrected position index is outside request parts")
         sample = save_manual_correction(
             session=session,
             request_id=request_id,
@@ -622,6 +630,7 @@ class RequestService:
             correction_reason_tags=payload_data.get("correction_reason_tags", []),
             user_id="admin",
             corrected_vehicle_json=payload_data.get("corrected_vehicle_json"),
+            corrected_position_indexes=corrected_indexes,
         )
         return {"status": "saved", "sample_id": sample.sample_id}
 

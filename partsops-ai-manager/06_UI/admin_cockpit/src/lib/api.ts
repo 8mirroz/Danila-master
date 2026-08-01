@@ -1,3 +1,5 @@
+import { getAccessToken, oidcEnabled } from './auth';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `${window.location.protocol}//${window.location.hostname}:8000`;
 
 export class ApiError extends Error {
@@ -13,13 +15,13 @@ export class ApiError extends Error {
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
-  const token = import.meta.env.VITE_PARTSOPS_API_TOKEN;
+  const token = oidcEnabled() ? getAccessToken() : import.meta.env.VITE_PARTSOPS_API_TOKEN;
   const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID;
 
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  if (tenantId && !headers.has('X-Tenant-ID')) {
+  if (!oidcEnabled() && tenantId && !headers.has('X-Tenant-ID')) {
     headers.set('X-Tenant-ID', tenantId);
   }
 
@@ -59,11 +61,11 @@ export async function uploadAttachment(
   formData.append('file', file);
   
   const headers = new Headers();
-  const token = import.meta.env.VITE_PARTSOPS_API_TOKEN;
+  const token = oidcEnabled() ? getAccessToken() : import.meta.env.VITE_PARTSOPS_API_TOKEN;
   const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID;
 
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (tenantId) headers.set('X-Tenant-ID', tenantId);
+  if (!oidcEnabled() && tenantId) headers.set('X-Tenant-ID', tenantId);
   if (requestId) headers.set('Request-Id', requestId);
 
   const controller = new AbortController();
@@ -98,11 +100,11 @@ export async function importFromArtifact(
 ): Promise<{ request: any }> {
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
-  const token = import.meta.env.VITE_PARTSOPS_API_TOKEN;
+  const token = oidcEnabled() ? getAccessToken() : import.meta.env.VITE_PARTSOPS_API_TOKEN;
   const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID;
 
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (tenantId) headers.set('X-Tenant-ID', tenantId);
+  if (!oidcEnabled() && tenantId) headers.set('X-Tenant-ID', tenantId);
 
   const res = await fetch(`${API_BASE_URL}/api/requests/import-from-artifact`, {
     method: 'POST',
@@ -415,11 +417,52 @@ export async function registerContractAnalogCandidate(
   );
 }
 
-export function createEventSource(tenantId?: string): EventSource {
+export type PartsOpsEventSource = Pick<EventSource, 'close' | 'onerror' | 'onmessage'>;
+
+class AuthenticatedEventSource implements PartsOpsEventSource {
+  onerror: ((this: EventSource, ev: Event) => any) | null = null;
+  onmessage: ((this: EventSource, ev: MessageEvent) => any) | null = null;
+  private readonly controller = new AbortController();
+
+  constructor(url: string, token: string) {
+    void this.consume(url, token);
+  }
+
+  close(): void {
+    this.controller.abort();
+  }
+
+  private async consume(url: string, token: string): Promise<void> {
+    try {
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: this.controller.signal });
+      if (!response.ok || !response.body) throw new Error(`SSE HTTP ${response.status}`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (!this.controller.signal.aborted) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() ?? '';
+        frames.forEach((frame) => {
+          const data = frame.split('\n').find((line) => line.startsWith('data:'))?.slice(5).trim();
+          if (data) this.onmessage?.call(this as unknown as EventSource, new MessageEvent('message', { data }));
+        });
+      }
+      if (!this.controller.signal.aborted) this.onerror?.call(this as unknown as EventSource, new Event('error'));
+    } catch {
+      if (!this.controller.signal.aborted) this.onerror?.call(this as unknown as EventSource, new Event('error'));
+    }
+  }
+}
+
+export function createEventSource(tenantId?: string): PartsOpsEventSource {
   const baseUrl = API_BASE_URL.replace('/api', '');
+  const token = getAccessToken();
+  if (oidcEnabled() && token) return new AuthenticatedEventSource(`${baseUrl}/api/events/stream`, token);
   const url = `${baseUrl}/api/events/stream${tenantId ? `?tenant_id=${tenantId}` : ''}`;
-  const es = new EventSource(url);
-  return es;
+  return new EventSource(url);
 }
 
 export type SupplierAuthStatusMap = Record<string, { site: string; auth_at: string | null; profile_exists: boolean }>;
@@ -433,4 +476,3 @@ export async function validateContractData(requestId: string): Promise<any> {
     method: 'POST',
   });
 }
-

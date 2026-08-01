@@ -2065,11 +2065,11 @@ def export_custom_contract_xlsx(
                 src_cell = _c(src_row, col)
                 dest_cell = _c(dest_row, col)
                 
-                dest_cell.font = copy(src_cell.font)
-                dest_cell.border = copy(src_cell.border)
-                dest_cell.fill = copy(src_cell.fill)
-                dest_cell.number_format = copy(src_cell.number_format)
-                dest_cell.alignment = copy(src_cell.alignment)
+                dest_cell.font = copy(src_cell.font)  # type: ignore[arg-type]
+                dest_cell.border = copy(src_cell.border)  # type: ignore[arg-type]
+                dest_cell.fill = copy(src_cell.fill)  # type: ignore[arg-type]
+                dest_cell.number_format = copy(src_cell.number_format)  # type: ignore[arg-type]
+                dest_cell.alignment = copy(src_cell.alignment)  # type: ignore[arg-type]
 
         if is_even:
             zebra_fill = PatternFill(start_color="F6F9D4", end_color="F6F9D4", fill_type="solid")

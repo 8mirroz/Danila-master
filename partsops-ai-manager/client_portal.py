@@ -4,13 +4,16 @@ Client Portal MVP (Phase 9) — public tracking, offer acceptance.
 from __future__ import annotations
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from sqlmodel import Session, select
 from models import PartRequest, RequestState
 from state_machine import validate_transition, transition
 from event_store import append_request_event
 from rbac import get_current_tenant
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 TRACKING_TOKEN_TTL_HOURS = 72
 
@@ -38,7 +41,7 @@ def create_tracking_token(request_id: str, tenant_id: str, expires_hours: int = 
         
         if req:
             req.tracking_token = token
-            req.tracking_token_expires_at = datetime.utcnow() + timedelta(hours=expires_hours)
+            req.tracking_token_expires_at = _utcnow() + timedelta(hours=expires_hours)
             session.add(req)
             session.commit()
     
@@ -73,7 +76,7 @@ def verify_tracking_token(
             return False
         if (
             req.tracking_token_expires_at is not None
-            and req.tracking_token_expires_at < datetime.utcnow()
+            and req.tracking_token_expires_at < _utcnow()
         ):
             return False
         return True
@@ -96,7 +99,7 @@ def get_public_request_view(token: str, session: Session, tenant_id: str) -> Opt
     # Expired public tokens must not expose request data
     if (
         req.tracking_token_expires_at is not None
-        and req.tracking_token_expires_at < datetime.utcnow()
+        and req.tracking_token_expires_at < _utcnow()
     ):
         return None
     
@@ -141,7 +144,7 @@ def accept_offer(token: str, session: Session, tenant_id: str) -> Dict[str, Any]
 
     if (
         req.tracking_token_expires_at is not None
-        and req.tracking_token_expires_at < datetime.utcnow()
+        and req.tracking_token_expires_at < _utcnow()
     ):
         return {"ok": False, "error": "Tracking token expired"}
     
@@ -182,7 +185,7 @@ def reject_offer(token: str, reason: str, session: Session, tenant_id: str) -> D
 
     if (
         req.tracking_token_expires_at is not None
-        and req.tracking_token_expires_at < datetime.utcnow()
+        and req.tracking_token_expires_at < _utcnow()
     ):
         return {"ok": False, "error": "Tracking token expired"}
     

@@ -3,6 +3,46 @@ import { test, expect } from '@playwright/test';
 test.describe('PartsOps Admin Cockpit - Refactored Soft UI & View Model', () => {
 
   test.beforeEach(async ({ page }) => {
+    await page.route('**/api/attachments/upload', async (route) => {
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ artifact_id: 'art-rfq-e2e', stored_path: 'tenant/rfq.csv', status: 'success' }) });
+    });
+    await page.route('**/api/rfq-imports/preview', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ artifact_id: 'art-rfq-e2e', mapping: { part_number: 'Артикул', description: 'Наименование', quantity: 'Количество' }, valid_positions: 1, invalid_rows: 0, requires_mapping: false, sample_positions: [{ part_number: 'A-123', description: 'Тормозные колодки', quantity: 2, brand: 'OEM' }] }) });
+    });
+    await page.route('**/api/rfq-imports/commit', async (route) => {
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ request: { request_id: 'REQ-RFQ-E2E' }, idempotent: false, import: { artifact_id: 'art-rfq-e2e', valid_positions: 1 } }) });
+    });
+    await page.route('**/api/session', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ tenant_id: 'tenant-e2e-test', role: 'manager', authenticated: true, auth_mode: 'token', permissions: {} }) });
+    });
+    await page.route('**/api/organizations/current', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          organization: { organization_id: 'tenant-e2e-test', display_name: 'АвтоТехСнаб' },
+          subscription: { status: 'trial', plan_code: 'beta_trial', position_limit: 100, current_period_end: '2026-08-15T00:00:00' },
+          onboarding: { checklist_json: JSON.stringify(['import_supplier_feed', 'configure_pricing_policy']), completed_steps_json: JSON.stringify(['import_supplier_feed']) },
+          integrations: [],
+        }),
+      });
+    });
+    await page.route('**/api/billing/usage', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ positions_used: 12, positions_remaining: 88, position_limit: 100 }) });
+    });
+    await page.route('**/api/analytics/quoteops', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ automation_rate: 52.5, automated_positions: 21, valid_positions: 40, margin_violations: 2, pending_approvals: 3 }) });
+    });
+    await page.route('**/api/organizations/current/members', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ email: 'buyer@example.com', role: 'manager', status: 'active' }]) });
+    });
+    await page.route('**/api/quotes', async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ quote_id: 'QTE-E2E', request_id: 'REQ-E2E', version: 1 }) });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ quote_id: 'QTE-E2E', request_id: 'REQ-E2E', status: 'issued', current_version: 1, valid_until: '2026-08-15T00:00:00Z', updated_at: '2026-08-01T00:00:00Z' }]) });
+    });
     await page.route('**/api/admin/data-health', async (route) => {
       await route.fulfill({
         status: 200,
@@ -170,6 +210,41 @@ test.describe('PartsOps Admin Cockpit - Refactored Soft UI & View Model', () => 
     await expect(page.locator('text=Нагрузка согласования')).toBeVisible();
     await expect(page.locator('.ui-metric-card--queue')).toBeVisible();
     await expect(page.locator('button.hermes-nav-button[aria-label="Открыть AI агент"]')).toBeVisible();
+  });
+
+  test('Dashboard shows server-confirmed organization usage and onboarding', async ({ page }) => {
+    await page.goto('http://localhost:5176');
+    await page.waitForLoadState('networkidle');
+
+    const panel = page.getByRole('region', { name: 'Организация и тариф' });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText('АвтоТехСнаб')).toBeVisible();
+    await expect(panel.getByText('12 / 100')).toBeVisible();
+    await expect(panel.getByText('Импортировать прайс поставщика')).toBeVisible();
+    await expect(panel.getByText('52.5%')).toBeVisible();
+    await expect(panel.getByText('Margin violations:')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Новая заявка' })).toBeVisible();
+  });
+
+  test('RFQ file intake previews server-confirmed rows before it creates a request', async ({ page }) => {
+    await page.goto('http://localhost:5176');
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: 'Загрузка заказа' }).click();
+    const intake = page.getByRole('region', { name: 'Входящие RFQ' });
+    await expect(intake).toBeVisible();
+    await intake.locator('input[type="file"]').setInputFiles({ name: 'rfq.csv', mimeType: 'text/csv', buffer: Buffer.from('Артикул;Наименование;Количество\nA-123;Тормозные колодки;2\n') });
+    await expect(intake.getByText('Подтверждено позиций:')).toBeVisible();
+    await expect(intake.getByText('A-123')).toBeVisible();
+    await intake.getByRole('button', { name: 'Создать заявку' }).click();
+    await expect(page.getByText('Интерактивный рабочий процесс')).toBeVisible();
+  });
+
+  test('Commercial quotes registry issues and exposes versioned exports', async ({ page }) => {
+    await page.goto('http://localhost:5176');
+    await page.getByRole('button', { name: 'Коммерческие предложения' }).click();
+    const quotes = page.getByRole('region', { name: 'Коммерческие предложения' });
+    await expect(quotes.getByText('QTE-E2E · v1')).toBeVisible();
+    await expect(quotes.getByRole('link', { name: 'PDF' })).toHaveAttribute('href', '/api/quotes/QTE-E2E/export/pdf');
   });
 
   test('Dashboard marks health metrics unavailable instead of showing zero after a health failure', async ({ page }) => {

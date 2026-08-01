@@ -10,7 +10,8 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select, func, desc, col
 
 from database import get_session, engine
-from rbac import get_privileged_tenant, CurrentPrincipal, _get_api_token, _parse_bearer_token, verify_signed_token, _normalize_role, DEFAULT_TENANT
+from rbac import _require_active_oidc_membership, get_privileged_tenant, get_current_principal, CurrentPrincipal, _get_api_token, _parse_bearer_token, verify_signed_token, _normalize_role, DEFAULT_TENANT
+from settings import settings
 from models import LLMUsageLog, PartRequest
 from state_machine import get_allowed_next, is_terminal
 from learning import calculate_system_accuracy
@@ -284,32 +285,40 @@ async def sse_stream(request: Request, tenant_id: Optional[str] = None):
             )
         return None
 
-    secret = _get_api_token()
     auth_header = request.headers.get("authorization")
-    query_token = request.query_params.get("token")
-    resolved_tenant = tenant_id or request.query_params.get("tenant_id")
-
-    if secret:
-        principal = None
-        if auth_header:
-            principal = _build_principal_from_token(_parse_bearer_token(auth_header), secret)
-        elif query_token:
-            principal = _build_principal_from_token(query_token, secret)
-        else:
-            principal = CurrentPrincipal(
-                tenant_id=DEFAULT_TENANT,
-                role=_normalize_role(None),
-                authenticated=False,
-                auth_mode="token",
-            )
-
-        if not principal or not principal.authenticated:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
-
+    if settings.AUTH_MODE == "oidc":
+        # Native EventSource cannot send Authorization headers, so the OIDC
+        # client uses the fetch-stream implementation. Never accept JWTs in a URL.
+        principal = get_current_principal(authorization=auth_header)
+        with Session(engine) as auth_session:
+            _require_active_oidc_membership(auth_session, principal)
         stream_tenant = principal.tenant_id
     else:
-        stream_tenant = resolved_tenant or DEFAULT_TENANT
+        secret = _get_api_token()
+        query_token = request.query_params.get("token")
+        resolved_tenant = tenant_id or request.query_params.get("tenant_id")
+
+        if secret:
+            principal = None
+            if auth_header:
+                principal = _build_principal_from_token(_parse_bearer_token(auth_header), secret)
+            elif query_token:
+                principal = _build_principal_from_token(query_token, secret)
+            else:
+                principal = CurrentPrincipal(
+                    tenant_id=DEFAULT_TENANT,
+                    role=_normalize_role(None),
+                    authenticated=False,
+                    auth_mode="token",
+                )
+
+            if not principal or not principal.authenticated:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=401, detail="Требуется Authorization: Bearer ***")
+
+            stream_tenant = principal.tenant_id
+        else:
+            stream_tenant = resolved_tenant or DEFAULT_TENANT
 
     visited_corr_cache: set[str] = set()
 

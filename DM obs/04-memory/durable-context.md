@@ -278,3 +278,7 @@ PartsOps runtime guard: предотвратить 502 от дублирующе
 ## 🧠 Durable Fact | 2026-07-30T14:56:27+03:00
 
 Редизайн каталога поставщиков и отображение настроенных scraper-коннекторов (Exist.ru, Autodoc.ru, Rossko.ru) без заявления об их live-доступности
+
+## 🧠 Durable Fact | 2026-08-01T15:30:42+03:00
+
+Развертывание бесплатной Staging/Beta инфраструктуры с Neon PostgreSQL, Keycloak OIDC и MinIO S3

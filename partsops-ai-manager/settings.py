@@ -6,13 +6,73 @@ load_dotenv()
 
 class Settings:
     @property
+    def ENVIRONMENT(self) -> str:
+        return os.environ.get("PARTSOPS_ENV", os.environ.get("ENV", "")).lower()
+
+    @property
+    def IS_PRODUCTION(self) -> bool:
+        return self.ENVIRONMENT in ("prod", "production")
+
+    @property
+    def AUTH_MODE(self) -> str:
+        configured = os.environ.get("PARTSOPS_AUTH_MODE", "").strip().lower()
+        if configured:
+            return configured
+        return "oidc" if self.IS_PRODUCTION else "legacy"
+
+    @property
+    def OIDC_ISSUER(self) -> str:
+        return os.environ.get("PARTSOPS_OIDC_ISSUER", "").rstrip("/")
+
+    @property
+    def OIDC_AUDIENCE(self) -> str:
+        return os.environ.get("PARTSOPS_OIDC_AUDIENCE", "").strip()
+
+    @property
+    def OIDC_TENANT_CLAIM(self) -> str:
+        return os.environ.get("PARTSOPS_OIDC_TENANT_CLAIM", "organization_id").strip()
+
+    @property
+    def OIDC_ROLE_CLAIM(self) -> str:
+        return os.environ.get("PARTSOPS_OIDC_ROLE_CLAIM", "realm_access.roles").strip()
+
+    @property
+    def OIDC_JWKS_URL(self) -> str:
+        configured = os.environ.get("PARTSOPS_OIDC_JWKS_URL", "").strip()
+        if configured:
+            return configured
+        return f"{self.OIDC_ISSUER}/protocol/openid-connect/certs" if self.OIDC_ISSUER else ""
+
+    @property
+    def ALLOW_MASTER_TOKEN_PLATFORM_ADMIN(self) -> bool:
+        return os.environ.get("PARTSOPS_ALLOW_MASTER_TOKEN_PLATFORM_ADMIN", "false").lower() in ("true", "1", "yes")
+
+    def validate_auth_configuration(self) -> None:
+        if self.AUTH_MODE not in {"legacy", "oidc"}:
+            raise RuntimeError("PARTSOPS_AUTH_MODE must be either legacy or oidc")
+        if self.IS_PRODUCTION and self.AUTH_MODE != "oidc":
+            raise RuntimeError("PARTSOPS_AUTH_MODE=oidc is required when PARTSOPS_ENV=production")
+        if self.AUTH_MODE == "oidc" and (not self.OIDC_ISSUER or not self.OIDC_AUDIENCE):
+            raise RuntimeError(
+                "PARTSOPS_OIDC_ISSUER and PARTSOPS_OIDC_AUDIENCE are required when PARTSOPS_AUTH_MODE=oidc"
+            )
+        if self.STORAGE_BACKEND not in {"local", "s3"}:
+            raise RuntimeError("PARTSOPS_STORAGE_BACKEND must be either local or s3")
+        if self.IS_PRODUCTION and self.STORAGE_BACKEND != "s3":
+            raise RuntimeError("PARTSOPS_STORAGE_BACKEND=s3 is required when PARTSOPS_ENV=production")
+        if self.STORAGE_BACKEND == "s3" and not self.S3_BUCKET:
+            raise RuntimeError("PARTSOPS_S3_BUCKET is required when PARTSOPS_STORAGE_BACKEND=s3")
+
+    @property
     def TESTING(self) -> bool:
         return os.environ.get("TESTING") == "1"
 
     @property
     def DATABASE_URL(self) -> str:
         env_url = os.environ.get("DATABASE_URL")
-        if env_url and env_url.startswith(("postgresql://", "postgres://")):
+        if self.IS_PRODUCTION and not (env_url and env_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))):
+            raise RuntimeError("PostgreSQL DATABASE_URL is required when PARTSOPS_ENV=production")
+        if env_url and env_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://")):
             return env_url
         if self.TESTING:
             return "sqlite:///test_database.db"
@@ -54,6 +114,26 @@ class Settings:
     @property
     def UPLOAD_DIR(self) -> str:
         return os.environ.get("UPLOAD_DIR") or "08_DATA/uploads"
+
+    @property
+    def STORAGE_BACKEND(self) -> str:
+        return os.environ.get("PARTSOPS_STORAGE_BACKEND", "local").strip().lower()
+
+    @property
+    def S3_BUCKET(self) -> str:
+        return os.environ.get("PARTSOPS_S3_BUCKET", "").strip()
+
+    @property
+    def S3_ENDPOINT_URL(self) -> str:
+        return os.environ.get("PARTSOPS_S3_ENDPOINT_URL", "").strip()
+
+    @property
+    def S3_REGION(self) -> str:
+        return os.environ.get("PARTSOPS_S3_REGION", "ru-central1").strip()
+
+    @property
+    def S3_PREFIX(self) -> str:
+        return os.environ.get("PARTSOPS_S3_PREFIX", "partsops").strip("/")
 
     @property
     def ENABLE_STRICT_UPLOAD_VALIDATION(self) -> bool:
@@ -113,6 +193,21 @@ class Settings:
             return int(os.environ.get("COPILOT_MAX_CONCURRENT_RUNS", "2"))
         except ValueError:
             return 2
+
+    @property
+    def OUTBOUND_WEBHOOK_SECRET(self) -> str:
+        return os.environ.get("PARTSOPS_OUTBOUND_WEBHOOK_SECRET", "")
+
+    @property
+    def OUTBOUND_WEBHOOK_TIMEOUT_SECONDS(self) -> float:
+        try:
+            return max(1.0, float(os.environ.get("PARTSOPS_OUTBOUND_WEBHOOK_TIMEOUT_SECONDS", "10")))
+        except ValueError:
+            return 10.0
+
+    @property
+    def OUTBOUND_WEBHOOK_ALLOWED_HOSTS(self) -> set[str]:
+        return {value.strip().lower() for value in os.environ.get("PARTSOPS_OUTBOUND_WEBHOOK_ALLOWED_HOSTS", "").split(",") if value.strip()}
 
 # Global singleton
 settings = Settings()

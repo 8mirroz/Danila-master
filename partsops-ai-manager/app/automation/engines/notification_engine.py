@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def notify(
                 "ok": False,
             }
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         rid = request_id or "none"
         idempotency_key = f"notify:{tenant_id}:{rid}:{channel}:{uuid.uuid4().hex[:12]}"
         subject = f"PartsOps notification ({channel})"

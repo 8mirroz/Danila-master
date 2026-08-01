@@ -31,6 +31,11 @@ from routers.contracts import router as contracts_router
 from routers.webhooks import router as webhooks_router
 from routers.analogs import router as analogs_router
 from routers.copilot import router as copilot_router
+from routers.saas import router as saas_router
+from routers.rfq_imports import router as rfq_imports_router
+from routers.quotes import router as quotes_router
+from routers.integrations import router as integrations_router
+from routers.analytics import router as analytics_router
 import models_copilot
 
 load_dotenv()
@@ -55,6 +60,7 @@ def _should_seed_on_start() -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.validate_auth_configuration()
     init_db()
     if _should_seed_on_start():
         with Session(engine) as session:
@@ -90,7 +96,9 @@ app.add_middleware(
 )
 app.add_middleware(CorrelationIDMiddleware)
 
-# Include routers
+# Include routers. SaaS precedes requests because it owns the enriched /api/session
+# contract while preserving the existing principal and permissions fields.
+app.include_router(saas_router)
 app.include_router(requests_router)
 app.include_router(suppliers_router)
 app.include_router(observability_router)
@@ -102,6 +110,10 @@ app.include_router(contracts_router)
 app.include_router(webhooks_router)
 app.include_router(analogs_router)
 app.include_router(copilot_router)
+app.include_router(rfq_imports_router)
+app.include_router(quotes_router)
+app.include_router(integrations_router)
+app.include_router(analytics_router)
 
 @app.get("/")
 def read_root():

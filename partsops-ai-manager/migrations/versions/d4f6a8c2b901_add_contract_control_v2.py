@@ -39,9 +39,9 @@ def upgrade() -> None:
         if "max_delivery_days" not in position_columns:
             batch.add_column(sa.Column("max_delivery_days", sa.Integer(), nullable=True))
         if "safety_related" not in position_columns:
-            batch.add_column(sa.Column("safety_related", sa.Boolean(), nullable=False, server_default=sa.text("0")))
+            batch.add_column(sa.Column("safety_related", sa.Boolean(), nullable=False, server_default=sa.text("false")))
         if "warranty_impact" not in position_columns:
-            batch.add_column(sa.Column("warranty_impact", sa.Boolean(), nullable=False, server_default=sa.text("0")))
+            batch.add_column(sa.Column("warranty_impact", sa.Boolean(), nullable=False, server_default=sa.text("false")))
         if "requirement_id" not in position_columns:
             batch.add_column(sa.Column("requirement_id", string, nullable=True))
         if "completeness_status" not in position_columns:
@@ -72,7 +72,7 @@ def upgrade() -> None:
         if "condition" not in evidence_columns:
             batch.add_column(sa.Column("condition", string, nullable=False, server_default="new"))
         if "vat_included" not in evidence_columns:
-            batch.add_column(sa.Column("vat_included", sa.Boolean(), nullable=False, server_default=sa.text("1")))
+            batch.add_column(sa.Column("vat_included", sa.Boolean(), nullable=False, server_default=sa.text("true")))
         if "available_quantity" not in evidence_columns:
             batch.add_column(sa.Column("available_quantity", sa.Integer(), nullable=True))
         if "warehouse" not in evidence_columns:

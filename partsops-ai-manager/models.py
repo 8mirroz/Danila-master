@@ -9,9 +9,10 @@ LLMUsageLog, RequestScore, ApprovalTicket. These are owned by the
 them at engine init.
 """
 from typing import Optional, List, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 import uuid
+from sqlalchemy import UniqueConstraint
 from sqlmodel import SQLModel, Field
 
 
@@ -99,6 +100,174 @@ class RequestPriority(str, Enum):
     NORMAL = "normal"
     URGENT = "urgent"
     VIP = "vip"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+# ──────────────────────────────────────────────
+# SAAS FOUNDATION
+# ──────────────────────────────────────────────
+
+class Organization(SQLModel, table=True):
+    """Commercial tenant. Existing tenant_id values map to organization_id."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: str = Field(index=True, unique=True)
+    display_name: str
+    legal_name: Optional[str] = None
+    country: str = Field(default="RU")
+    locale: str = Field(default="ru-RU")
+    timezone: str = Field(default="Europe/Moscow")
+    currency: str = Field(default="RUB")
+    tax_policy: str = Field(default="vat_ru")
+    status: str = Field(default="active", index=True)  # active|suspended|archived
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class User(SQLModel, table=True):
+    __tablename__ = "appuser"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(index=True, unique=True)
+    email: str = Field(index=True)
+    display_name: Optional[str] = None
+    external_subject: Optional[str] = Field(default=None, index=True)
+    identity_provider: str = Field(default="manual")
+    status: str = Field(default="active", index=True)  # invited|active|disabled
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class Membership(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_membership_org_user"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: str = Field(index=True)
+    user_id: str = Field(index=True)
+    role: str = Field(default="manager")
+    status: str = Field(default="active", index=True)  # invited|active|disabled
+    invited_by: Optional[str] = None
+    invited_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class Subscription(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: str = Field(index=True, unique=True)
+    status: str = Field(default="trial", index=True)  # trial|active|past_due|suspended|canceled
+    plan_code: str = Field(default="beta_trial", index=True)
+    position_limit: int = Field(default=100)
+    supplier_feed_limit: int = Field(default=5)
+    user_limit: int = Field(default=3)
+    external_invoice_number: Optional[str] = None
+    external_invoice_date: Optional[str] = None
+    trial_started_at: Optional[datetime] = None
+    current_period_start: datetime = Field(default_factory=_utcnow)
+    current_period_end: Optional[datetime] = None
+    activated_at: Optional[datetime] = None
+    suspended_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class UsageEvent(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: str = Field(index=True)
+    request_id: Optional[str] = Field(default=None, index=True)
+    event_type: str = Field(index=True)  # valid_rfq_position
+    quantity: int = Field(default=1)
+    idempotency_key: str = Field(index=True, unique=True)
+    source: str = Field(default="pipeline")
+    metadata_json: Optional[str] = None
+    occurred_at: datetime = Field(default_factory=_utcnow)
+
+
+class IntegrationConnection(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("organization_id", "provider", "name", name="uq_integration_org_provider_name"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: str = Field(index=True)
+    provider: str = Field(index=True)  # erpnext|csv|webhook|email
+    name: str = Field(default="default")
+    status: str = Field(default="draft", index=True)  # draft|active|paused|error
+    scopes_json: Optional[str] = None
+    config_ref: Optional[str] = None
+    last_health_status: Optional[str] = None
+    last_health_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class ServiceApiKey(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("key_id", name="uq_service_api_key_id"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    key_id: str = Field(index=True, unique=True)
+    organization_id: str = Field(index=True)
+    name: str
+    key_hash: str
+    scopes_json: str
+    status: str = Field(default="active", index=True)  # active|revoked
+    last_used_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=_utcnow)
+    revoked_at: Optional[datetime] = None
+
+
+class OnboardingState(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: str = Field(index=True, unique=True)
+    status: str = Field(default="not_started", index=True)  # not_started|in_progress|completed
+    checklist_json: Optional[str] = None
+    completed_steps_json: Optional[str] = None
+    first_catalog_imported_at: Optional[datetime] = None
+    first_rfq_processed_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class ImportMapping(SQLModel, table=True):
+    """Versioned, tenant-scoped column mapping for RFQ and supplier-feed imports."""
+    __table_args__ = (UniqueConstraint("organization_id", "kind", "name", name="uq_import_mapping_org_kind_name"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: str = Field(index=True)
+    kind: str = Field(index=True)  # rfq|supplier_feed
+    name: str
+    mapping_json: str
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class QuoteDocument(SQLModel, table=True):
+    """Tenant-scoped commercial quote with append-only immutable revisions."""
+    __table_args__ = (UniqueConstraint("organization_id", "request_id", name="uq_quote_document_org_request"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    quote_id: str = Field(index=True, unique=True)
+    organization_id: str = Field(index=True)
+    request_id: str = Field(index=True)
+    status: str = Field(default="issued", index=True)  # issued|superseded|expired|accepted|rejected
+    current_version: int = Field(default=1)
+    valid_until: datetime
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class QuoteVersion(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("quote_id", "version", name="uq_quote_version"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    quote_id: str = Field(index=True)
+    organization_id: str = Field(index=True)
+    version: int
+    pricing_snapshot_json: str
+    selected_offer_snapshot_json: str
+    created_by: str = Field(default="operator")
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 # ──────────────────────────────────────────────
@@ -291,6 +460,9 @@ class GoldenSample(SQLModel, table=True):
     source_text: str
     corrected_parts_json: str       # JSON array of corrected part_intent objects
     corrected_vehicle_json: Optional[str] = None
+    # JSON indexes into the original request parts array. Null means a legacy
+    # correction without position attribution and is counted conservatively.
+    corrected_position_indexes_json: Optional[str] = None
 
     correction_reason_tags: Optional[str] = None  # JSON list: wrong_vin|wrong_brand|wrong_side|...
 

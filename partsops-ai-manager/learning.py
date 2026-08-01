@@ -18,6 +18,7 @@ def save_manual_correction(
     correction_reason_tags: list[str],
     user_id: str,
     corrected_vehicle_json: str = None,
+    corrected_position_indexes: list[int] | None = None,
 ) -> GoldenSample:
     """
     Saves a manager-approved manual correction to the Golden Dataset.
@@ -33,6 +34,11 @@ def save_manual_correction(
     if existing:
         existing.corrected_parts_json = corrected_parts_json
         existing.corrected_vehicle_json = corrected_vehicle_json
+        existing.corrected_position_indexes_json = (
+            json.dumps(sorted(set(corrected_position_indexes)))
+            if corrected_position_indexes is not None
+            else None
+        )
         existing.correction_reason_tags = json.dumps(correction_reason_tags, ensure_ascii=False)
         existing.approved_by = user_id
         session.add(existing)
@@ -47,6 +53,11 @@ def save_manual_correction(
             source_text=source_text,
             corrected_parts_json=corrected_parts_json,
             corrected_vehicle_json=corrected_vehicle_json,
+            corrected_position_indexes_json=(
+                json.dumps(sorted(set(corrected_position_indexes)))
+                if corrected_position_indexes is not None
+                else None
+            ),
             correction_reason_tags=json.dumps(correction_reason_tags, ensure_ascii=False),
             approved_by=user_id,
             model_version="meta/llama-3.1-70b-instruct",

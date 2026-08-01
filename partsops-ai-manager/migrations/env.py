@@ -16,6 +16,8 @@ from models import (AdaptationDecisionRecord, ClientApproval, ContractArchiveRec
                     ContractPurchaseRecord, ContractReceiptVerification, ContractRequirement, ERPSyncLog,
                     GoldenSample, MatchEvidence, OEMCandidate, PartRequest, PriceEvidence,
                     PurchaseAuthorization, RequirementCoverage, RequestEvent, SupplierOffer,
+                    Organization, User, Membership, Subscription, UsageEvent,
+    IntegrationConnection, ServiceApiKey, OnboardingState, ImportMapping, QuoteDocument, QuoteVersion,
                     AnalogCandidate, CompatibilityEvidence, ContractWorkflowState,
                     ContractWorkflowEvent)  # noqa
 from suppliers import Supplier, SupplierCatalogItem, Invoice  # noqa

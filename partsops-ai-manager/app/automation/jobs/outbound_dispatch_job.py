@@ -5,8 +5,12 @@ Handles email, telegram, webhook channels via existing adapters.
 from __future__ import annotations
 
 import logging
+import hashlib
+import hmac
+import json
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 from sqlmodel import Session, select
 
@@ -15,8 +19,36 @@ from app.automation.events import append_system_event
 from models import OutboundMessage, PartRequest
 from delivery import EmailAdapter, TelegramAdapter
 from event_store import EventType
+from settings import settings
 
 logger = logging.getLogger("automation.jobs.outbound_dispatcher")
+
+
+def _dispatch_webhook(message: OutboundMessage) -> tuple[bool, Optional[str]]:
+    """Send a signed, tenant-scoped webhook. Retry/DLQ remains owned by the outbox job."""
+    parsed = urlsplit(message.recipient)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return False, "Outbound webhook recipient must be a valid HTTPS URL"
+    hostname = (parsed.hostname or "").lower()
+    if hostname not in settings.OUTBOUND_WEBHOOK_ALLOWED_HOSTS:
+        return False, "Outbound webhook host is not allowlisted"
+    if not settings.OUTBOUND_WEBHOOK_SECRET:
+        return False, "Outbound webhook secret is not configured"
+    try:
+        payload = json.loads(message.payload_json or "{}")
+    except json.JSONDecodeError:
+        return False, "Outbound webhook payload is invalid JSON"
+    envelope = {"event_id": message.idempotency_key, "tenant_id": message.tenant_id, "request_id": message.request_id, "subject": message.subject, "body": message.body_text, "payload": payload}
+    body = json.dumps(envelope, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    signature = hmac.new(settings.OUTBOUND_WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    try:
+        import httpx
+        response = httpx.post(message.recipient, content=body, headers={"Content-Type": "application/json", "X-PartsOps-Signature": f"sha256={signature}", "X-PartsOps-Event-ID": message.idempotency_key}, timeout=settings.OUTBOUND_WEBHOOK_TIMEOUT_SECONDS, follow_redirects=False)
+        if 200 <= response.status_code < 300:
+            return True, None
+        return False, f"Webhook HTTP {response.status_code}"
+    except Exception as exc:  # network errors are retried by caller
+        return False, f"Webhook delivery failed: {exc}"
 
 
 def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
@@ -120,9 +152,7 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
                     error_msg = "No valid telegram chat_id"
                     
             elif msg.channel == "webhook":
-                # Webhook delivery - would need httpx call
-                logger.warning(f"Webhook delivery not fully implemented for {msg.id}")
-                error_msg = "Webhook delivery not implemented"
+                success, error_msg = _dispatch_webhook(msg)
                 
             else:
                 error_msg = f"Unknown channel: {msg.channel}"

@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 from datetime import datetime, timezone
 from sqlmodel import Session, select
 
@@ -43,8 +43,8 @@ def classify_brand_tier(brand: str) -> tuple[str, int]:
 
 
 def detect_oem_unavailability(
-    oem_evidence: list[PriceEvidence],
-    oem_candidates: list[OEMCandidate],
+    oem_evidence: Sequence[PriceEvidence],
+    oem_candidates: Sequence[OEMCandidate],
     max_acceptable_eta: int = 30
 ) -> dict[str, Any]:
     """

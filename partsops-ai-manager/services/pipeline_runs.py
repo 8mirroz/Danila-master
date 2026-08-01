@@ -1,17 +1,18 @@
 """Durable pipeline-run queue used by the Kanban operator workflow."""
+
 from __future__ import annotations
 
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
 from event_store import emit_event
 from models import PartRequest, PipelineRun, PipelineRunEvent, RequestState
-
+from services.saas import reserve_pipeline_usage
 
 ACTIVE_STATUSES = {"queued", "running"}
 TERMINAL_STATUSES = {"completed", "failed", "blocked"}
@@ -56,8 +57,15 @@ def _resolve_start_from(request: PartRequest) -> str:
             status_code=422,
             detail="Запрос ожидает решения оператора: сначала согласуйте или отправьте на доработку.",
         )
-    if status in {RequestState.CLOSED, RequestState.CANCELLED, RequestState.CLIENT_REJECTED, RequestState.EXPIRED}:
-        raise HTTPException(status_code=422, detail="Для терминального запроса pipeline не запускается.")
+    if status in {
+        RequestState.CLOSED,
+        RequestState.CANCELLED,
+        RequestState.CLIENT_REJECTED,
+        RequestState.EXPIRED,
+    }:
+        raise HTTPException(
+            status_code=422, detail="Для терминального запроса pipeline не запускается."
+        )
     parts = _json_load(request.parts_json, [])
     if not isinstance(parts, list) or not parts:
         raise HTTPException(
@@ -105,23 +113,34 @@ def start_pipeline_run(
         created_at=_now(),
         updated_at=_now(),
     )
+    reserve_pipeline_usage(
+        session, organization_id=tenant_id, request=request, run_id=run.run_id
+    )
     session.add(run)
     session.commit()
     session.refresh(run)
-    append_run_event(session, run, "queued", message="Запуск pipeline поставлен в очередь.")
+    append_run_event(
+        session, run, "queued", message="Запуск pipeline поставлен в очередь."
+    )
     emit_event(
         session=session,
         request_id=request_id,
         event_type="PIPELINE_RUN_QUEUED",
         actor_type="user",
         actor_id=requested_by,
-        payload={"run_id": run.run_id, "correlation_id": run.correlation_id, "start_from": run.start_from},
+        payload={
+            "run_id": run.run_id,
+            "correlation_id": run.correlation_id,
+            "start_from": run.start_from,
+        },
         tenant_id=tenant_id,
     )
     return run, False
 
 
-def get_pipeline_run(session: Session, *, request_id: str, run_id: str, tenant_id: str) -> PipelineRun:
+def get_pipeline_run(
+    session: Session, *, request_id: str, run_id: str, tenant_id: str
+) -> PipelineRun:
     run = session.exec(
         select(PipelineRun).where(
             PipelineRun.run_id == run_id,
@@ -134,10 +153,14 @@ def get_pipeline_run(session: Session, *, request_id: str, run_id: str, tenant_i
     return run
 
 
-def list_run_events(session: Session, *, run_id: str, tenant_id: str, after: int = 0) -> list[PipelineRunEvent]:
+def list_run_events(
+    session: Session, *, run_id: str, tenant_id: str, after: int = 0
+) -> list[PipelineRunEvent]:
     return session.exec(
         select(PipelineRunEvent)
-        .where(PipelineRunEvent.run_id == run_id, PipelineRunEvent.tenant_id == tenant_id)
+        .where(
+            PipelineRunEvent.run_id == run_id, PipelineRunEvent.tenant_id == tenant_id
+        )
         .where(PipelineRunEvent.sequence > after)
         .order_by(PipelineRunEvent.sequence)
     ).all()
@@ -154,7 +177,10 @@ def append_run_event(
 ) -> PipelineRunEvent:
     previous = session.exec(
         select(PipelineRunEvent)
-        .where(PipelineRunEvent.run_id == run.run_id, PipelineRunEvent.tenant_id == run.tenant_id)
+        .where(
+            PipelineRunEvent.run_id == run.run_id,
+            PipelineRunEvent.tenant_id == run.tenant_id,
+        )
         .order_by(PipelineRunEvent.sequence.desc())
     ).first()
     event = PipelineRunEvent(
@@ -173,11 +199,16 @@ def append_run_event(
     return event
 
 
-def claim_next_run(session: Session, *, worker_id: str, lease_seconds: int = 120) -> Optional[PipelineRun]:
+def claim_next_run(
+    session: Session, *, worker_id: str, lease_seconds: int = 120
+) -> Optional[PipelineRun]:
     now = _now()
     candidates = session.exec(
         select(PipelineRun)
-        .where((PipelineRun.status == "queued") | ((PipelineRun.status == "running") & (PipelineRun.lease_expires_at < now)))
+        .where(
+            (PipelineRun.status == "queued")
+            | ((PipelineRun.status == "running") & (PipelineRun.lease_expires_at < now))
+        )
         .order_by(PipelineRun.created_at)
     ).all()
     if not candidates:
@@ -191,7 +222,9 @@ def claim_next_run(session: Session, *, worker_id: str, lease_seconds: int = 120
     session.add(run)
     session.commit()
     session.refresh(run)
-    append_run_event(session, run, "started", message="Worker начал выполнение pipeline.")
+    append_run_event(
+        session, run, "started", message="Worker начал выполнение pipeline."
+    )
     return run
 
 
@@ -215,21 +248,29 @@ def execute_claimed_run(session: Session, run: PipelineRun) -> PipelineRun:
             start_from=AgentType(run.start_from),
             on_phase=on_phase,
         )
-        run.result_json = json.dumps({
-            "success": result.success,
-            "request_id": result.request_id,
-            "phases": {name: phase.to_dict() for name, phase in result.phases.items()},
-            "errors": result.errors,
-            "warnings": result.warnings,
-            "total_time_ms": result.total_time_ms,
-        }, ensure_ascii=False, default=str)
+        run.result_json = json.dumps(
+            {
+                "success": result.success,
+                "request_id": result.request_id,
+                "phases": {
+                    name: phase.to_dict() for name, phase in result.phases.items()
+                },
+                "errors": result.errors,
+                "warnings": result.warnings,
+                "total_time_ms": result.total_time_ms,
+            },
+            ensure_ascii=False,
+            default=str,
+        )
         run.status = "completed" if result.success else "failed"
         run.error_message = "; ".join(result.errors) if result.errors else None
         append_run_event(
             session,
             run,
             "completed" if result.success else "failed",
-            message="Pipeline завершён." if result.success else "Pipeline завершился с ошибкой.",
+            message="Pipeline завершён."
+            if result.success
+            else "Pipeline завершился с ошибкой.",
             payload={"errors": result.errors, "warnings": result.warnings},
         )
     except Exception as exc:  # noqa: BLE001
@@ -261,6 +302,7 @@ def execute_claimed_run(session: Session, run: PipelineRun) -> PipelineRun:
 
 def run_once(worker_id: str) -> Optional[dict[str, Any]]:
     from database import engine
+
     with Session(engine) as session:
         run = claim_next_run(session, worker_id=worker_id)
         if run is None:

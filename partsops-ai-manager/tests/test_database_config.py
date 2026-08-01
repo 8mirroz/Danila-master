@@ -43,3 +43,10 @@ def test_custom_settings():
         assert custom_settings.UPLOAD_DIR == "tmp/uploads"
         assert custom_settings.ENABLE_STRICT_UPLOAD_VALIDATION is False
         assert custom_settings.ENABLE_STRICT_TENANT_ENFORCEMENT is False
+
+def test_production_requires_postgresql_database_url():
+    with mock.patch.dict(os.environ, {"TESTING": "0", "PARTSOPS_ENV": "production", "DATABASE_URL": "sqlite:///database.db"}):
+        from settings import Settings
+        production_settings = Settings()
+        with pytest.raises(RuntimeError, match="PostgreSQL DATABASE_URL is required"):
+            _ = production_settings.DATABASE_URL

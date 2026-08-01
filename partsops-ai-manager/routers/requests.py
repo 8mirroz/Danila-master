@@ -8,7 +8,7 @@ from typing import Any, Optional, List, Dict
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Body, File, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field as PydanticField
-from sqlmodel import Session, select, desc
+from sqlmodel import Session, select, desc, col
 
 from database import get_session
 from rbac import get_privileged_tenant, get_current_tenant, get_current_principal, CurrentPrincipal
@@ -36,7 +36,9 @@ _RATE_LIMIT = int(_os.getenv("PARTSOPS_INTAKE_RATE_LIMIT", "10"))
 _RATE_WINDOW = int(_os.getenv("PARTSOPS_INTAKE_RATE_WINDOW", "60"))
 
 
-def _rate_limit(request: Request, tenant_id: str):
+def _rate_limit(request: Optional[Request], tenant_id: str):
+    if not request:
+        return
     key = f"intake:{tenant_id}:{request.client.host if request.client else 'unknown'}"
     allowed, retry_after = rate_limiter.allow(key, _RATE_LIMIT, _RATE_WINDOW)
     if not allowed:
@@ -63,6 +65,7 @@ class RawRequestPayload(BaseModel):
 class ManualCorrectionPayload(BaseModel):
     source_text: str
     corrected_parts_json: str
+    corrected_position_indexes: Optional[list[int]] = None
     correction_reason_tags: list[str] = []
     corrected_vehicle_json: Optional[str] = None
 
@@ -154,19 +157,21 @@ async def upload_attachment(
     request_id: Optional[str] = Header(None),
     session: Session = Depends(get_session),
 ):
+    stored_path: Optional[str] = None
+    fname = file.filename or "uploaded_file"
     try:
         artifact_id = f"art_{uuid.uuid4().hex[:12]}"
         stored_path, safe_filename, size_bytes = storage.save_file(
             tenant_id=tenant_id,
             artifact_id=artifact_id,
             file_obj=file.file,
-            original_filename=file.filename,
+            original_filename=fname,
         )
         artifact = UploadArtifact(
             artifact_id=artifact_id,
             tenant_id=tenant_id,
             request_id=request_id,
-            original_filename=file.filename,
+            original_filename=fname,
             safe_filename=safe_filename,
             stored_path=stored_path,
             content_type=file.content_type,
@@ -186,7 +191,7 @@ async def upload_attachment(
                 event_type=EventType.DOCUMENT_PARSED,
                 actor_type="user",
                 actor_id=principal.tenant_id,
-                payload={"artifact_id": artifact_id, "filename": file.filename},
+                payload={"artifact_id": artifact_id, "filename": fname},
                 tenant_id=tenant_id,
             )
         return {
@@ -196,7 +201,7 @@ async def upload_attachment(
             "sha256": artifact.sha256,
         }
     except Exception as exc:  # pragma: no cover - defensive
-        if "stored_path" in locals():
+        if stored_path is not None:
             storage.delete_file(stored_path)
         raise HTTPException(status_code=500, detail=f"Upload failed: {exc}") from exc
 
@@ -229,9 +234,9 @@ def get_requests(
 @router.post("/requests/import-from-artifact")
 async def import_from_artifact(
     payload: ImportFromArtifactPayload,
+    request: Request,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant),
-    request: Request = None,
 ):
     _rate_limit(request, tenant_id)
     """Import a request from a previously uploaded artifact (file)."""
@@ -258,7 +263,7 @@ async def import_from_artifact(
         from services.supplier_service import _parse_supplier_table_file, _extract_supplier_table_rows
         from event_store import emit_event, EventType
         
-        raw_rows, file_type = _parse_supplier_table_file(stored_path, filename, file_type)
+        raw_rows, _parsed_type = _parse_supplier_table_file(stored_path, filename, file_type)
         normalized_rows, mapped_columns, validation_summary = _extract_supplier_table_rows(raw_rows)
         
         text_parts = []
@@ -322,10 +327,10 @@ async def import_from_artifact(
 @router.post("/requests")
 async def create_request(
     payload: RawRequestPayload,
+    request: Request,
     session: Session = Depends(get_session),
     x_idempotency_key: Optional[str] = Header(default=None),
     tenant_id: str = Depends(get_privileged_tenant),
-    request: Request = None,
 ):
     _rate_limit(request, tenant_id)
     return await asyncio.to_thread(
@@ -739,7 +744,7 @@ def get_delivery_status(
         select(OutboundMessage).where(
             OutboundMessage.request_id == request_id,
             OutboundMessage.tenant_id == tenant_id,
-        ).order_by(OutboundMessage.created_at.desc())
+        ).order_by(col(OutboundMessage.created_at).desc())
     ).all()
     
     return [
@@ -904,14 +909,14 @@ def approve_request(
     if payload.action == "approve":
         # Approve the request
         request.status = RequestState.APPROVED
-        request.updated_at = datetime.utcnow()
+        request.updated_at = _utcnow()
         session.add(request)
         
         # Update ticket
         if ticket:
             ticket.status = "approved"
             ticket.decided_by = payload.actor_id
-            ticket.decided_at = datetime.utcnow()
+            ticket.decided_at = _utcnow()
             ticket.decision_note = payload.comment
             session.add(ticket)
         
@@ -950,14 +955,14 @@ def approve_request(
     else:
         # Reject the request
         request.status = RequestState.CLIENT_REJECTED
-        request.updated_at = datetime.utcnow()
+        request.updated_at = _utcnow()
         session.add(request)
         
         # Update ticket
         if ticket:
             ticket.status = "rejected"
             ticket.decided_by = payload.actor_id
-            ticket.decided_at = datetime.utcnow()
+            ticket.decided_at = _utcnow()
             ticket.decision_note = payload.comment
             session.add(ticket)
         
@@ -998,7 +1003,7 @@ def get_approval_tickets(
         select(ApprovalTicket).where(
             ApprovalTicket.request_id == request_id,
             ApprovalTicket.tenant_id == tenant_id,
-        ).order_by(ApprovalTicket.created_at.desc())
+        ).order_by(col(ApprovalTicket.created_at).desc())
     ).all()
     
     return [
@@ -1115,7 +1120,7 @@ def generate_tracking_token_endpoint(
     
     # Store token in request
     request.tracking_token = token
-    request.tracking_token_expires_at = datetime.utcnow() + timedelta(hours=72)
+    request.tracking_token_expires_at = _utcnow() + timedelta(hours=72)
     session.add(request)
     session.commit()
     
@@ -1154,7 +1159,7 @@ def export_request_excel(
         raise HTTPException(status_code=404, detail="Request not found")
 
     wb = Workbook()
-    ws = wb.active
+    ws = wb.active or wb.create_sheet("Спецификация Заказа")
     ws.title = "Спецификация Заказа"
     ws.views.sheetView[0].showGridLines = True
 
@@ -1178,7 +1183,7 @@ def export_request_excel(
     # Title Block
     ws.append(["PARTSOPS AI MANAGER — ИТОГОВЫЙ ОТЧЕТ ПО ЗАДАНИЮ И СМЕТА"])
     ws.cell(row=1, column=1).font = font_title
-    ws.append([f"Сгенерировано: {datetime.utcnow().strftime('%d.%m.%Y %H:%M UTC')} | Система PartsOps AI v6.0"])
+    ws.append([f"Сгенерировано: {_utcnow().strftime('%d.%m.%Y %H:%M UTC')} | Система PartsOps AI v6.0"])
     ws.cell(row=2, column=1).font = font_subtitle
     ws.append([])
 
@@ -1258,10 +1263,12 @@ def export_request_excel(
             cell.number_format = '#,##0.00 "₽"'
 
     # Auto-adjust column widths for Sheet 1
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
-        col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+    for col_cells in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col_cells)
+        col_idx = col_cells[0].column
+        if col_idx is not None:
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
     # ----------------------------------------------------
     # Sheet 2: Аналоги и Замены (Smart Analog Report)
@@ -1316,7 +1323,7 @@ def export_request_excel(
         pos_ids = [p.position_id for p in contract_positions]
         analogs_list = session.exec(
             select(AnalogCandidate).where(
-                AnalogCandidate.position_id.in_(pos_ids),
+                col(AnalogCandidate.position_id).in_(pos_ids),
                 AnalogCandidate.tenant_id == tenant_id
             )
         ).all()
@@ -1373,10 +1380,12 @@ def export_request_excel(
                 ws2.cell(row=row_idx, column=c).border = thin_border
 
     # Auto-adjust column widths for Sheet 2
-    for col in ws2.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
-        col_letter = get_column_letter(col[0].column)
-        ws2.column_dimensions[col_letter].width = max(max_len + 3, 14)
+    for col_cells in ws2.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col_cells)
+        col_idx = col_cells[0].column
+        if col_idx is not None:
+            col_letter = get_column_letter(col_idx)
+            ws2.column_dimensions[col_letter].width = max(max_len + 3, 14)
 
     output = io.BytesIO()
     wb.save(output)

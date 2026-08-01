@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
+import { oidcEnabled } from '../lib/auth';
 import { notify } from '../lib/notify';
 import { Icon } from './Primitives';
 
@@ -111,8 +112,9 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
     setError(null);
     try {
       const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID || 'default';
+      const tenantQuery = oidcEnabled() ? '' : `?tenant_id=${encodeURIComponent(tenantId)}`;
       const res = await apiFetch(
-        `/api/contracts/${encodeURIComponent(requestId)}/analogs-report?tenant_id=${encodeURIComponent(tenantId)}`,
+        `/api/contracts/${encodeURIComponent(requestId)}/analogs-report${tenantQuery}`,
       );
       if (res.status === 404) {
         setAnalogs([]);
@@ -147,8 +149,9 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
     }
     try {
       const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID || 'default';
+      const tenantQuery = oidcEnabled() ? '' : `?tenant_id=${encodeURIComponent(tenantId)}`;
       const res = await apiFetch(
-        `/api/contracts/${encodeURIComponent(requestId)}/positions/${encodeURIComponent(item.position_id)}/select-analog?tenant_id=${encodeURIComponent(tenantId)}`,
+        `/api/contracts/${encodeURIComponent(requestId)}/positions/${encodeURIComponent(item.position_id)}/select-analog${tenantQuery}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
