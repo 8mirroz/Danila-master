@@ -16,6 +16,9 @@ current command output or a production-like run linked from the release record.
 - [x] S3-compatible storage can persist canonical tenant-safe object URIs and
   materialize a parser cache; the local backend remains the dev/test default.
 - [x] Outbound webhooks use the outbox and a signed HTTPS envelope.
+- [x] Local staging injects only application configuration into backend and
+  worker containers; Keycloak, MinIO and PostgreSQL bootstrap passwords are
+  not exposed as standalone application environment variables.
 - [x] CI validates the SaaS/API test slice, migrations and cockpit lint/build.
 
 ## Required before connecting design partners

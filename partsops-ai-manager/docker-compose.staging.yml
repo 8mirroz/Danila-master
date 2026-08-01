@@ -79,8 +79,6 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"
-    env_file:
-      - .env.staging
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,12 +90,38 @@ services:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-partsops}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.staging}@postgres:5432/${POSTGRES_DB:-partsops}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
+      ENABLE_STRICT_TENANT_ENFORCEMENT: ${ENABLE_STRICT_TENANT_ENFORCEMENT:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PARTSOPS_ENV: ${PARTSOPS_ENV:?PARTSOPS_ENV must be set in .env.staging}
+      PARTSOPS_AUTH_MODE: ${PARTSOPS_AUTH_MODE:?PARTSOPS_AUTH_MODE must be set in .env.staging}
+      PARTSOPS_PHASE_LABEL: ${PARTSOPS_PHASE_LABEL:-Phase 1 — Beta Staging Gate}
+      PARTSOPS_CORS_ORIGINS: ${PARTSOPS_CORS_ORIGINS:?PARTSOPS_CORS_ORIGINS must be set in .env.staging}
+      PARTSOPS_OIDC_ISSUER: ${PARTSOPS_OIDC_ISSUER:?PARTSOPS_OIDC_ISSUER must be set in .env.staging}
+      PARTSOPS_OIDC_AUDIENCE: ${PARTSOPS_OIDC_AUDIENCE:?PARTSOPS_OIDC_AUDIENCE must be set in .env.staging}
+      PARTSOPS_OIDC_TENANT_CLAIM: ${PARTSOPS_OIDC_TENANT_CLAIM:-organization_id}
+      PARTSOPS_OIDC_ROLE_CLAIM: ${PARTSOPS_OIDC_ROLE_CLAIM:-realm_access.roles}
+      PARTSOPS_STORAGE_BACKEND: ${PARTSOPS_STORAGE_BACKEND:?PARTSOPS_STORAGE_BACKEND must be set in .env.staging}
+      PARTSOPS_S3_BUCKET: ${PARTSOPS_S3_BUCKET:?PARTSOPS_S3_BUCKET must be set in .env.staging}
+      PARTSOPS_S3_PREFIX: ${PARTSOPS_S3_PREFIX:-partsops}
+      PARTSOPS_S3_REGION: ${PARTSOPS_S3_REGION:-ru-central1}
       PARTSOPS_S3_ENDPOINT_URL: http://minio:9000
       # The local staging backend must use the same S3 credentials that boot
       # the isolated MinIO instance; do not depend on stale AWS_* values in
       # an inherited developer environment.
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set in .env.staging}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set in .env.staging}
+      PARTSOPS_OUTBOUND_WEBHOOK_SECRET: ${PARTSOPS_OUTBOUND_WEBHOOK_SECRET:?PARTSOPS_OUTBOUND_WEBHOOK_SECRET must be set in .env.staging}
+      PARTSOPS_OUTBOUND_WEBHOOK_TIMEOUT_SECONDS: ${PARTSOPS_OUTBOUND_WEBHOOK_TIMEOUT_SECONDS:-10}
+      ERP_WEBHOOK_SECRET: ${ERP_WEBHOOK_SECRET:?ERP_WEBHOOK_SECRET must be set in .env.staging}
+      ERPNEXT_URL: ${ERPNEXT_URL:-}
+      ERPNEXT_API_KEY: ${ERPNEXT_API_KEY:-}
+      ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET:-}
+      ERP_DRY_RUN: ${ERP_DRY_RUN:-0}
+      HERMES_API_URL: ${HERMES_API_URL:-}
+      HERMES_API_KEY: ${HERMES_API_KEY:-}
       # The browser-visible issuer remains localhost, while backend JWKS
       # verification must use the Docker service hostname.
       PARTSOPS_OIDC_JWKS_URL: http://keycloak:8080/realms/partsops/protocol/openid-connect/certs
@@ -114,16 +138,39 @@ services:
       dockerfile: Dockerfile.backend
     restart: unless-stopped
     command: ["python", "-m", "app.automation.pipeline_worker", "--poll-seconds", "1"]
-    env_file:
-      - .env.staging
     depends_on:
       backend-staging:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-partsops}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.staging}@postgres:5432/${POSTGRES_DB:-partsops}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
+      ENABLE_STRICT_TENANT_ENFORCEMENT: ${ENABLE_STRICT_TENANT_ENFORCEMENT:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PARTSOPS_ENV: ${PARTSOPS_ENV:?PARTSOPS_ENV must be set in .env.staging}
+      PARTSOPS_AUTH_MODE: ${PARTSOPS_AUTH_MODE:?PARTSOPS_AUTH_MODE must be set in .env.staging}
+      PARTSOPS_PHASE_LABEL: ${PARTSOPS_PHASE_LABEL:-Phase 1 — Beta Staging Gate}
+      PARTSOPS_OIDC_ISSUER: ${PARTSOPS_OIDC_ISSUER:?PARTSOPS_OIDC_ISSUER must be set in .env.staging}
+      PARTSOPS_OIDC_AUDIENCE: ${PARTSOPS_OIDC_AUDIENCE:?PARTSOPS_OIDC_AUDIENCE must be set in .env.staging}
+      PARTSOPS_OIDC_TENANT_CLAIM: ${PARTSOPS_OIDC_TENANT_CLAIM:-organization_id}
+      PARTSOPS_OIDC_ROLE_CLAIM: ${PARTSOPS_OIDC_ROLE_CLAIM:-realm_access.roles}
+      PARTSOPS_STORAGE_BACKEND: ${PARTSOPS_STORAGE_BACKEND:?PARTSOPS_STORAGE_BACKEND must be set in .env.staging}
+      PARTSOPS_S3_BUCKET: ${PARTSOPS_S3_BUCKET:?PARTSOPS_S3_BUCKET must be set in .env.staging}
+      PARTSOPS_S3_PREFIX: ${PARTSOPS_S3_PREFIX:-partsops}
+      PARTSOPS_S3_REGION: ${PARTSOPS_S3_REGION:-ru-central1}
       PARTSOPS_S3_ENDPOINT_URL: http://minio:9000
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set in .env.staging}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set in .env.staging}
+      PARTSOPS_OUTBOUND_WEBHOOK_SECRET: ${PARTSOPS_OUTBOUND_WEBHOOK_SECRET:?PARTSOPS_OUTBOUND_WEBHOOK_SECRET must be set in .env.staging}
+      PARTSOPS_OUTBOUND_WEBHOOK_TIMEOUT_SECONDS: ${PARTSOPS_OUTBOUND_WEBHOOK_TIMEOUT_SECONDS:-10}
+      ERP_WEBHOOK_SECRET: ${ERP_WEBHOOK_SECRET:?ERP_WEBHOOK_SECRET must be set in .env.staging}
+      ERPNEXT_URL: ${ERPNEXT_URL:-}
+      ERPNEXT_API_KEY: ${ERPNEXT_API_KEY:-}
+      ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET:-}
+      ERP_DRY_RUN: ${ERP_DRY_RUN:-0}
+      HERMES_API_URL: ${HERMES_API_URL:-}
+      HERMES_API_KEY: ${HERMES_API_KEY:-}
       PARTSOPS_PIPELINE_WORKER_ID: staging-pipeline-worker-1
 
 volumes:

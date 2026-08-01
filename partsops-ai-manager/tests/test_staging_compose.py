@@ -16,6 +16,7 @@ def test_backend_uses_docker_reachable_jwks_url() -> None:
     assert "KC_HOSTNAME=localhost" in compose
     assert "AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER" in compose
     assert "AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD" in compose
+    assert "env_file:" not in compose
 
 
 def test_backup_restore_verifier_uses_an_isolated_postgres_service() -> None:
