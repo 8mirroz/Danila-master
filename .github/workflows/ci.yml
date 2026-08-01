@@ -13,6 +13,10 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: partsops-ai-manager
+
 jobs:
   workflow-lint:
     name: 🛡️ Workflow Lint
@@ -26,7 +30,7 @@ jobs:
         run: |
           echo "Checking YAML syntax..."
           # Basic syntax verification
-          python3 -c "import yaml, sys; yaml.safe_load(open('.github/workflows/ci.yml'))"
+          python3 -c "import yaml; yaml.safe_load(open('../.github/workflows/ci.yml'))"
 
   python-quality:
     name: 🐍 Python Quality & Lint
@@ -278,28 +282,28 @@ jobs:
 
       # Admin Cockpit checks
       - name: Install Admin Cockpit deps
-        working-directory: 06_UI/admin_cockpit
+        working-directory: partsops-ai-manager/06_UI/admin_cockpit
         run: |
           npm ci
 
       - name: Lint Admin Cockpit
-        working-directory: 06_UI/admin_cockpit
+        working-directory: partsops-ai-manager/06_UI/admin_cockpit
         run: |
           npm run lint || echo "Lint warnings found"
 
       - name: Typecheck and Build Admin Cockpit
-        working-directory: 06_UI/admin_cockpit
+        working-directory: partsops-ai-manager/06_UI/admin_cockpit
         run: |
           npm run build
 
       # Client Portal checks
       - name: Install Client Portal deps
-        working-directory: 06_UI/client_portal
+        working-directory: partsops-ai-manager/06_UI/client_portal
         run: |
           npm ci
 
       - name: Typecheck and Build Client Portal
-        working-directory: 06_UI/client_portal
+        working-directory: partsops-ai-manager/06_UI/client_portal
         run: |
           npm run build
 

@@ -18,7 +18,8 @@ jobs:
         run: |
           git config user.name "$GIT_AUTHOR_NAME"
           git config user.email "$GIT_AUTHOR_EMAIL"
-          git add "DM obs/00-overview.md" "DM obs/obsidian_sync.log"
+          git add "DM obs/00-overview.md"
+          git add -f "DM obs/obsidian_sync.log"
           if ! git diff --quiet; then
             git commit -m "🔄 Obsidian auto-sync: update status & log"
             git push origin main
