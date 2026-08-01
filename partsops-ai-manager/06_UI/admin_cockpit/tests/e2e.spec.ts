@@ -9,6 +9,35 @@ test.describe('PartsOps AI Manager E2E', () => {
         body: JSON.stringify({ tenant_id: 'default', role: 'manager', authenticated: true, auth_mode: 'token', permissions: { can_manage_matching: true } }),
       });
     });
+    await page.route('**/api/organizations/current', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          organization: { organization_id: 'default', display_name: 'PartsOps E2E' },
+          subscription: { status: 'trial', plan_code: 'beta_trial', position_limit: 100, current_period_end: '2026-08-15T00:00:00Z' },
+          onboarding: { checklist_json: '[]', completed_steps_json: '[]' },
+          integrations: [],
+        }),
+      });
+    });
+    await page.route('**/api/billing/usage', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ positions_used: 0, positions_remaining: 100, position_limit: 100 }),
+      });
+    });
+    await page.route('**/api/organizations/current/members', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+    await page.route('**/api/analytics/quoteops', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ automation_rate: 0, automated_positions: 0, valid_positions: 0, margin_violations: 0, pending_approvals: 0 }),
+      });
+    });
     await page.route('**/api/admin/data-health', async (route) => {
       await route.fulfill({
         status: 200,
