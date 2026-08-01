@@ -75,3 +75,22 @@ def test_service_key_can_read_only_its_erp_tenant():
     )
     assert response.status_code == 200
     assert response.json()["request_id"] == "REQ-INTEGRATION"
+
+
+def test_erp_connection_health_requires_admin(monkeypatch):
+    monkeypatch.setattr(
+        "erp_adapter.check_erpnext_connection",
+        lambda: {"status": "connected", "writes_enabled": True},
+    )
+
+    forbidden = client.get(
+        "/api/erp/connection-health",
+        headers={"Authorization": "Bearer test-token", "X-Tenant-ID": "tenant-key", "X-User-Role": "manager"},
+    )
+    allowed = client.get(
+        "/api/erp/connection-health",
+        headers={"Authorization": "Bearer test-token", "X-Tenant-ID": "tenant-key", "X-User-Role": "admin"},
+    )
+
+    assert forbidden.status_code == 403
+    assert allowed.json() == {"status": "connected", "writes_enabled": True}

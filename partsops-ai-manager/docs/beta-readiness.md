@@ -97,7 +97,12 @@ captured as part of the worker-restart release gate below.
   three attempts, one idempotent record and one DLQ entry, with all temporary
   database rows removed afterward. This is transport/DLQ evidence only; the
   configured external endpoint is loopback and is not represented as an
-  authorized ERPNext integration.
+  authorized ERPNext integration. Before the outbound drill, an organization
+  admin must call `GET /api/erp/connection-health`: only
+  `{"status":"connected","writes_enabled":true}` is an eligible ERPNext
+  target. The read-only preflight never returns credentials or creates an ERP
+  document; `unreachable`, `authentication_failed` and `not_configured` are
+  release blockers, not successful syncs.
 - [x] Perform backup/restore into a clean environment and a worker-restart run
   without losing a durable pipeline event. On 2026-08-01
   `bash scripts/verify_staging_worker_recovery.sh` reclaimed an expired lease

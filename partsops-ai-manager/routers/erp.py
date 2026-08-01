@@ -40,6 +40,18 @@ def integration_erp_status(
     return erp_status(request_id=request_id, session=session, tenant_id=tenant_id)
 
 
+@router.get("/connection-health")
+def erp_connection_health(
+    principal: CurrentPrincipal = Depends(get_current_principal),
+):
+    """Read-only ERPNext preflight for a tenant administrator."""
+    if principal.role != "admin":
+        raise HTTPException(403, "ERP connection health requires admin role")
+    from erp_adapter import check_erpnext_connection
+
+    return check_erpnext_connection()
+
+
 @router.get("/status/{request_id}")
 def erp_status(
     request_id: str,

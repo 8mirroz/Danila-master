@@ -67,6 +67,47 @@ BACKOFF_BASE_SECONDS = 1.0
 BACKOFF_MULTIPLIER = 4.0
 
 
+def check_erpnext_connection() -> dict[str, object]:
+    """Perform a read-only ERPNext credential and reachability check.
+
+    This deliberately uses a Frappe auth method rather than creating a Sales
+    Invoice. It is safe to call from an operator health screen and never
+    returns the endpoint or any credential material.
+    """
+    if not ERPNEXT_URL:
+        return {"status": "not_configured", "writes_enabled": not ERP_DRY_RUN}
+    if not ERPNEXT_API_KEY or not ERPNEXT_API_SECRET:
+        return {"status": "credentials_missing", "writes_enabled": not ERP_DRY_RUN}
+
+    try:
+        import httpx
+
+        with httpx.Client(timeout=5.0) as client:
+            response = client.get(
+                f"{ERPNEXT_URL.rstrip('/')}/api/method/frappe.auth.get_logged_user",
+                headers={"Authorization": f"token {ERPNEXT_API_KEY}:{ERPNEXT_API_SECRET}"},
+            )
+    except httpx.RequestError:
+        # httpx wraps DNS, TLS and connection errors in RequestError.
+        return {"status": "unreachable", "writes_enabled": not ERP_DRY_RUN}
+
+    if response.status_code in {401, 403}:
+        return {"status": "authentication_failed", "writes_enabled": not ERP_DRY_RUN}
+    if response.status_code != 200:
+        return {
+            "status": "unexpected_response",
+            "http_status": response.status_code,
+            "writes_enabled": not ERP_DRY_RUN,
+        }
+    try:
+        payload = response.json()
+    except ValueError:
+        return {"status": "unexpected_response", "writes_enabled": not ERP_DRY_RUN}
+    if not payload.get("message"):
+        return {"status": "unexpected_response", "writes_enabled": not ERP_DRY_RUN}
+    return {"status": "connected", "writes_enabled": not ERP_DRY_RUN}
+
+
 # ──────────────────────────────────────────────
 # HMAC-SHA256 Webhook Signature Verification
 # ──────────────────────────────────────────────

@@ -12,6 +12,7 @@ from models import PartRequest, RequestState, ERPSyncLog, RequestEvent, EventTyp
 from suppliers import Invoice, Supplier
 from erp_adapter import (
     _attempt_erp_sync,
+    check_erpnext_connection,
     verify_webhook_signature,
     compute_webhook_signature,
     sync_invoice_draft,
@@ -128,6 +129,53 @@ def test_real_erp_attempt_uses_configured_httpx_client(monkeypatch):
     assert captured["url"] == "https://erp.example.test/api/resource/Sales Invoice"
     assert captured["post_kwargs"]["json"] == {"data": {"doctype": "Sales Invoice"}}
     assert captured["client_kwargs"]["timeout"] == 30.0
+
+
+def test_erpnext_connection_health_is_read_only_and_hides_credentials(monkeypatch):
+    import httpx
+
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"message": "erpnext-operator"}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def get(self, url, **kwargs):
+            captured["url"] = url
+            captured["headers"] = kwargs["headers"]
+            return FakeResponse()
+
+    monkeypatch.setattr("erp_adapter.ERPNEXT_URL", "https://erp.example.test")
+    monkeypatch.setattr("erp_adapter.ERPNEXT_API_KEY", "proof-key")
+    monkeypatch.setattr("erp_adapter.ERPNEXT_API_SECRET", "proof-secret")
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    result = check_erpnext_connection()
+
+    assert result == {"status": "connected", "writes_enabled": False}
+    assert captured["url"] == "https://erp.example.test/api/method/frappe.auth.get_logged_user"
+    assert captured["client_kwargs"]["timeout"] == 5.0
+    assert "proof-key" in captured["headers"]["Authorization"]
+    assert "Authorization" not in result
+
+
+def test_erpnext_connection_health_reports_missing_configuration(monkeypatch):
+    monkeypatch.setattr("erp_adapter.ERPNEXT_URL", "")
+
+    assert check_erpnext_connection()["status"] == "not_configured"
 
 
 def test_sync_invoice_draft_already_synced_idempotency():
