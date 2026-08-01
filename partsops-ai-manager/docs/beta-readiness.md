@@ -67,7 +67,13 @@ captured as part of the worker-restart release gate below.
   MinIO bootstrap account; production must use a separate least-privilege
   bucket credential and documented retention/access policies.
 - [ ] Provision the ERPNext connector with scoped credentials and prove an
-  outbox retry/DLQ run against an authorized non-production endpoint.
+  outbox retry/DLQ run against an authorized non-production endpoint. On
+  2026-08-01 `python scripts/verify_staging_erp_dlq.py` proved the adapter's
+  actual HTTP retry path against a controlled in-container failure endpoint:
+  three attempts, one idempotent record and one DLQ entry, with all temporary
+  database rows removed afterward. This is transport/DLQ evidence only; the
+  configured external endpoint is loopback and is not represented as an
+  authorized ERPNext integration.
 - [ ] Perform backup/restore into a clean environment and a worker-restart run
   without losing a durable pipeline event.
 - [ ] Execute cross-tenant, signed-upload and audit-immutability security tests

@@ -11,6 +11,7 @@ from database import engine
 from models import PartRequest, RequestState, ERPSyncLog, RequestEvent, EventType
 from suppliers import Invoice, Supplier
 from erp_adapter import (
+    _attempt_erp_sync,
     verify_webhook_signature,
     compute_webhook_signature,
     sync_invoice_draft,
@@ -78,6 +79,55 @@ def test_sync_invoice_draft_dry_run():
         assert sync_log.attempt_count == 1
         assert sync_log.erp_document_type == "SalesInvoice"
         assert "DRY-SINV" in sync_log.erp_document_name
+
+
+def test_real_erp_attempt_uses_configured_httpx_client(monkeypatch):
+    import httpx
+
+    captured = {}
+
+    class Response:
+        status_code = 201
+
+        @staticmethod
+        def json():
+            return {"data": {"name": "SINV-PROOF"}}
+
+    class Client:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def post(self, url, **kwargs):
+            captured["url"] = url
+            captured["post_kwargs"] = kwargs
+            return Response()
+
+    monkeypatch.setattr(httpx, "Client", Client)
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *_args, **_kwargs: pytest.fail("ERP sync must use the configured HTTP client"),
+    )
+    monkeypatch.setattr("erp_adapter.ERPNEXT_URL", "https://erp.example.test")
+    monkeypatch.setattr("erp_adapter.ERPNEXT_API_KEY", "proof-key")
+    monkeypatch.setattr("erp_adapter.ERPNEXT_API_SECRET", "proof-secret")
+
+    result = _attempt_erp_sync(ERPSyncLog(sync_id="SYNC-PROOF"), {"doctype": "Sales Invoice"}, False)
+
+    assert result == {
+        "success": True,
+        "erp_document_name": "SINV-PROOF",
+        "dry_run": False,
+    }
+    assert captured["url"] == "https://erp.example.test/api/resource/Sales Invoice"
+    assert captured["post_kwargs"]["json"] == {"data": {"doctype": "Sales Invoice"}}
+    assert captured["client_kwargs"]["timeout"] == 30.0
 
 
 def test_sync_invoice_draft_already_synced_idempotency():

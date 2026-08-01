@@ -292,13 +292,15 @@ def _attempt_erp_sync(sync_log: ERPSyncLog, erp_payload: dict, dry_run: bool) ->
             "Content-Type": "application/json",
         }
         
-        response = httpx.post(
-            f"{ERPNEXT_URL}/api/resource/Sales Invoice",
-            headers=headers,
-            json={"data": erp_payload},
+        with httpx.Client(
             timeout=30.0,
             limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
-        )
+        ) as client:
+            response = client.post(
+                f"{ERPNEXT_URL}/api/resource/Sales Invoice",
+                headers=headers,
+                json={"data": erp_payload},
+            )
         
         if response.status_code in (200, 201):
             data = response.json()
