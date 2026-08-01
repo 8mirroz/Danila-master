@@ -24,7 +24,7 @@ export type CommercialAccountData = {
   usage: Usage;
   onboarding: Onboarding;
   members?: Array<{ email: string; role: string; status: string }>;
-  analytics?: { automation_rate: number; automated_positions: number; valid_positions: number; margin_violations: number; pending_approvals: number };
+  analytics?: { automation_rate: number; automated_positions: number; valid_positions: number; median_time_to_quote_minutes: number | null; margin_violations: number; pending_approvals: number };
 };
 
 interface CommercialAccountPanelProps {
@@ -54,6 +54,14 @@ function parseSteps(serialized?: string): string[] {
 
 function statusLabel(status: string): string {
   return ({ trial: 'Пробный период', active: 'Активна', past_due: 'Требует оплаты', suspended: 'Приостановлена', canceled: 'Отменена' } as Record<string, string>)[status] ?? status;
+}
+
+function formatTimeToQuote(minutes: number | null): string {
+  if (minutes === null) return 'ещё нет';
+  if (minutes < 60) return `${Math.round(minutes)} мин`;
+  const hours = Math.floor(minutes / 60);
+  const rest = Math.round(minutes % 60);
+  return rest ? `${hours} ч ${rest} мин` : `${hours} ч`;
 }
 
 export function CommercialAccountPanel({ data, loading, error, onRetry, onOpenSuppliers, onCreateRequest }: CommercialAccountPanelProps) {
@@ -104,7 +112,7 @@ export function CommercialAccountPanel({ data, loading, error, onRetry, onOpenSu
           </div>
         </div>
       </div>
-      {data.analytics && <div className="mx-5 mb-5 grid gap-3 rounded-[var(--radius-control)] border border-emerald-100 bg-emerald-50/60 px-4 py-3 sm:grid-cols-3"><div><div className="flex items-baseline justify-between gap-3"><span className="text-xs font-semibold text-emerald-900">Automation Rate</span><strong data-numeric className="font-mono text-lg text-emerald-800">{data.analytics.automation_rate}%</strong></div><p className="mt-1 text-[11px] text-emerald-800">{data.analytics.automated_positions} из {data.analytics.valid_positions} позиций без ручной коррекции.</p></div><p className="text-xs text-amber-900">Margin violations: <strong data-numeric>{data.analytics.margin_violations}</strong></p><p className="text-xs text-blue-900">Ожидают согласования: <strong data-numeric>{data.analytics.pending_approvals}</strong></p></div>}
+      {data.analytics && <div className="mx-5 mb-5 grid gap-3 rounded-[var(--radius-control)] border border-emerald-100 bg-emerald-50/60 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4"><div><div className="flex items-baseline justify-between gap-3"><span className="text-xs font-semibold text-emerald-900">Automation Rate</span><strong data-numeric className="font-mono text-lg text-emerald-800">{data.analytics.automation_rate}%</strong></div><p className="mt-1 text-[11px] text-emerald-800">{data.analytics.automated_positions} из {data.analytics.valid_positions} позиций без ручной коррекции.</p></div><p className="text-xs text-sky-900">Медиана подготовки КП: <strong data-numeric>{formatTimeToQuote(data.analytics.median_time_to_quote_minutes)}</strong></p><p className="text-xs text-amber-900">Margin violations: <strong data-numeric>{data.analytics.margin_violations}</strong></p><p className="text-xs text-blue-900">Ожидают согласования: <strong data-numeric>{data.analytics.pending_approvals}</strong></p></div>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-default)] px-5 py-3"><span className="text-[11px] text-[var(--text-secondary)]">Команда: <strong data-numeric>{data.members?.length ?? 0}</strong></span><div className="flex gap-2"><Button size="sm" variant="secondary" icon="car" onClick={onOpenSuppliers}>Поставщики</Button><Button size="sm" variant="primary" icon="plus" onClick={onCreateRequest}>Новая заявка</Button></div></div>
     </section>
   );

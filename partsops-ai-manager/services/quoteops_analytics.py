@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from statistics import median
 
 from sqlmodel import Session, select
 
-from models import GoldenSample, PartRequest, RequestState
+from models import GoldenSample, PartRequest, QuoteDocument, RequestState
 
 READY_STATES = {
     RequestState.READY_FOR_APPROVAL,
@@ -43,10 +44,19 @@ def _corrected_positions(sample: GoldenSample | None, position_count: int) -> tu
     return len(set(indexes)), False
 
 
-def quoteops_metrics(session: Session, organization_id: str) -> dict[str, int | float]:
+def quoteops_metrics(session: Session, organization_id: str) -> dict[str, int | float | None]:
     requests = session.exec(
         select(PartRequest).where(PartRequest.tenant_id == organization_id)
     ).all()
+    request_by_id = {request.request_id: request for request in requests}
+    quotes = session.exec(
+        select(QuoteDocument).where(QuoteDocument.organization_id == organization_id)
+    ).all()
+    time_to_quote_minutes = [
+        max(0.0, (quote.created_at - request_by_id[quote.request_id].created_at).total_seconds() / 60)
+        for quote in quotes
+        if quote.request_id in request_by_id
+    ]
     total = automated = ready_requests = margin_violations = pending_approvals = 0
     manually_corrected = unattributed_manual_corrections = 0
     for request in requests:
@@ -75,6 +85,10 @@ def quoteops_metrics(session: Session, organization_id: str) -> dict[str, int | 
         "manually_corrected_positions": manually_corrected,
         "unattributed_manual_correction_requests": unattributed_manual_corrections,
         "automation_rate": round((automated / total) * 100, 1) if total else 0.0,
+        "quotes_issued": len(time_to_quote_minutes),
+        "median_time_to_quote_minutes": round(median(time_to_quote_minutes), 1)
+        if time_to_quote_minutes
+        else None,
         "ready_for_approval_requests": ready_requests,
         "margin_violations": margin_violations,
         "pending_approvals": pending_approvals,

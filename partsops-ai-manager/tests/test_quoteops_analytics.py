@@ -1,11 +1,12 @@
 import json
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
 
 from database import engine
 from main import app
-from models import GoldenSample, PartRequest, RequestState
+from models import GoldenSample, PartRequest, QuoteDocument, RequestState
 
 client = TestClient(app)
 HEADERS = {
@@ -80,6 +81,52 @@ def test_automation_rate_and_pending_approvals_include_ready_for_approval():
     assert response.json()["automation_rate"] == 66.7
     assert response.json()["ready_for_approval_requests"] == 1
     assert response.json()["pending_approvals"] == 1
+
+
+def test_median_time_to_quote_uses_first_quote_per_tenant_request():
+    requested_at = datetime(2026, 8, 1, 9, 0, 0)
+    with Session(engine) as session:
+        session.add_all(
+            [
+                PartRequest(
+                    request_id="REQ-QUOTE-METRIC-A",
+                    tenant_id="analytics-tenant",
+                    source="test",
+                    parts_json=json.dumps([{"name": "A"}]),
+                    created_at=requested_at,
+                ),
+                PartRequest(
+                    request_id="REQ-QUOTE-METRIC-B",
+                    tenant_id="analytics-tenant",
+                    source="test",
+                    parts_json=json.dumps([{"name": "B"}]),
+                    created_at=requested_at,
+                ),
+                QuoteDocument(
+                    quote_id="QTE-METRIC-A",
+                    organization_id="analytics-tenant",
+                    request_id="REQ-QUOTE-METRIC-A",
+                    valid_until=requested_at + timedelta(days=14),
+                    created_at=requested_at + timedelta(minutes=30),
+                    updated_at=requested_at + timedelta(minutes=30),
+                ),
+                QuoteDocument(
+                    quote_id="QTE-METRIC-B",
+                    organization_id="analytics-tenant",
+                    request_id="REQ-QUOTE-METRIC-B",
+                    valid_until=requested_at + timedelta(days=14),
+                    created_at=requested_at + timedelta(minutes=90),
+                    updated_at=requested_at + timedelta(minutes=90),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/api/analytics/quoteops", headers=HEADERS)
+
+    assert response.status_code == 200
+    assert response.json()["quotes_issued"] == 2
+    assert response.json()["median_time_to_quote_minutes"] == 60.0
 
 
 def test_automation_rate_excludes_only_attributed_manual_positions():
