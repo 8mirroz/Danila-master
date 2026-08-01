@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 from models import GoldenSample, PartRequest, RequestState
 
 READY_STATES = {
-    RequestState.PRICING_REVIEW,
+    RequestState.READY_FOR_APPROVAL,
     RequestState.APPROVED,
     RequestState.INVOICE_DRAFTED,
     RequestState.ERP_SYNCING,
@@ -66,7 +66,7 @@ def quoteops_metrics(session: Session, organization_id: str) -> dict[str, int | 
             automated += max(0, count - corrected)
         if request.margin_policy_passed is False:
             margin_violations += 1
-        if request.status == RequestState.PRICING_REVIEW:
+        if request.status == RequestState.READY_FOR_APPROVAL:
             pending_approvals += 1
     return {
         "organization_id": organization_id,

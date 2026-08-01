@@ -1,7 +1,7 @@
 import json
 
 from fastapi.testclient import TestClient
-from sqlmodel import SQLModel, Session
+from sqlmodel import Session, SQLModel
 
 from database import engine
 from main import app
@@ -49,6 +49,37 @@ def test_automation_rate_counts_only_ready_unmodified_positions():
     assert response.status_code == 200
     assert response.json()["automation_rate"] == 66.7
     assert response.json()["automated_positions"] == 2
+
+
+def test_automation_rate_and_pending_approvals_include_ready_for_approval():
+    with Session(engine) as session:
+        session.add(
+            PartRequest(
+                request_id="REQ-READY-FOR-APPROVAL",
+                tenant_id="analytics-tenant",
+                source="test",
+                status=RequestState.READY_FOR_APPROVAL,
+                parts_json=json.dumps([{"name": "A"}, {"name": "B"}]),
+            )
+        )
+        session.add(
+            PartRequest(
+                request_id="REQ-PRICING-REVIEW",
+                tenant_id="analytics-tenant",
+                source="test",
+                status=RequestState.PRICING_REVIEW,
+                parts_json=json.dumps([{"name": "C"}]),
+            )
+        )
+        session.commit()
+
+    response = client.get("/api/analytics/quoteops", headers=HEADERS)
+
+    assert response.status_code == 200
+    assert response.json()["automated_positions"] == 2
+    assert response.json()["automation_rate"] == 66.7
+    assert response.json()["ready_for_approval_requests"] == 1
+    assert response.json()["pending_approvals"] == 1
 
 
 def test_automation_rate_excludes_only_attributed_manual_positions():
