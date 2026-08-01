@@ -165,7 +165,7 @@ def test_erpnext_connection_health_is_read_only_and_hides_credentials(monkeypatc
 
     result = check_erpnext_connection()
 
-    assert result == {"status": "connected", "writes_enabled": False}
+    assert result == {"status": "connected", "dry_run": True}
     assert captured["url"] == "https://erp.example.test/api/method/frappe.auth.get_logged_user"
     assert captured["client_kwargs"]["timeout"] == 5.0
     assert "proof-key" in captured["headers"]["Authorization"]

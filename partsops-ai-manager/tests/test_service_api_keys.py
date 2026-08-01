@@ -80,7 +80,7 @@ def test_service_key_can_read_only_its_erp_tenant():
 def test_erp_connection_health_requires_admin(monkeypatch):
     monkeypatch.setattr(
         "erp_adapter.check_erpnext_connection",
-        lambda: {"status": "connected", "writes_enabled": True},
+        lambda: {"status": "connected", "dry_run": False},
     )
 
     forbidden = client.get(
@@ -93,4 +93,4 @@ def test_erp_connection_health_requires_admin(monkeypatch):
     )
 
     assert forbidden.status_code == 403
-    assert allowed.json() == {"status": "connected", "writes_enabled": True}
+    assert allowed.json() == {"status": "connected", "dry_run": False}

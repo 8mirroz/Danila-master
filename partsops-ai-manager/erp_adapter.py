@@ -75,9 +75,9 @@ def check_erpnext_connection() -> dict[str, object]:
     returns the endpoint or any credential material.
     """
     if not ERPNEXT_URL:
-        return {"status": "not_configured", "writes_enabled": not ERP_DRY_RUN}
+        return {"status": "not_configured", "dry_run": ERP_DRY_RUN}
     if not ERPNEXT_API_KEY or not ERPNEXT_API_SECRET:
-        return {"status": "credentials_missing", "writes_enabled": not ERP_DRY_RUN}
+        return {"status": "credentials_missing", "dry_run": ERP_DRY_RUN}
 
     try:
         import httpx
@@ -89,23 +89,23 @@ def check_erpnext_connection() -> dict[str, object]:
             )
     except httpx.RequestError:
         # httpx wraps DNS, TLS and connection errors in RequestError.
-        return {"status": "unreachable", "writes_enabled": not ERP_DRY_RUN}
+        return {"status": "unreachable", "dry_run": ERP_DRY_RUN}
 
     if response.status_code in {401, 403}:
-        return {"status": "authentication_failed", "writes_enabled": not ERP_DRY_RUN}
+        return {"status": "authentication_failed", "dry_run": ERP_DRY_RUN}
     if response.status_code != 200:
         return {
             "status": "unexpected_response",
             "http_status": response.status_code,
-            "writes_enabled": not ERP_DRY_RUN,
+            "dry_run": ERP_DRY_RUN,
         }
     try:
         payload = response.json()
     except ValueError:
-        return {"status": "unexpected_response", "writes_enabled": not ERP_DRY_RUN}
+        return {"status": "unexpected_response", "dry_run": ERP_DRY_RUN}
     if not payload.get("message"):
-        return {"status": "unexpected_response", "writes_enabled": not ERP_DRY_RUN}
-    return {"status": "connected", "writes_enabled": not ERP_DRY_RUN}
+        return {"status": "unexpected_response", "dry_run": ERP_DRY_RUN}
+    return {"status": "connected", "dry_run": ERP_DRY_RUN}
 
 
 # ──────────────────────────────────────────────

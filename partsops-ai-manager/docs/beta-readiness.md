@@ -99,7 +99,7 @@ captured as part of the worker-restart release gate below.
   configured external endpoint is loopback and is not represented as an
   authorized ERPNext integration. Before the outbound drill, an organization
   admin must call `GET /api/erp/connection-health`: only
-  `{"status":"connected","writes_enabled":true}` is an eligible ERPNext
+  `{"status":"connected","dry_run":false}` is an eligible ERPNext
   target. The read-only preflight never returns credentials or creates an ERP
   document; `unreachable`, `authentication_failed` and `not_configured` are
   release blockers, not successful syncs.
