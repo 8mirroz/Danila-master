@@ -141,6 +141,9 @@ auth_header=( -H "Authorization: Bearer ${token}" )
 session_payload="$(curl --fail --silent --show-error "${auth_header[@]}" http://localhost:8000/api/session)"
 printf '%s' "${session_payload}" | ./venv/bin/python -c 'import json, sys; payload=json.load(sys.stdin); assert payload["tenant_id"].startswith("quoteops-proof-"); assert payload["role"] == "admin"'
 
+erp_health="$(curl --fail --silent --show-error "${auth_header[@]}" http://localhost:8000/api/erp/connection-health)"
+printf '%s' "${erp_health}" | ./venv/bin/python -c 'import json, sys; payload=json.load(sys.stdin); assert payload["status"] in {"connected", "not_configured", "credentials_missing", "unreachable", "authentication_failed", "unexpected_response"}; assert payload["dry_run"] is False; assert not ({"endpoint", "authorization", "api_key", "api_secret"} & payload.keys())'
+
 supplier_response="$(curl --fail --silent --show-error -X POST http://localhost:8000/api/suppliers \
   "${auth_header[@]}" -H 'Content-Type: application/json' \
   --data '{"name":"QuoteOps verification supplier","reliability_score":0.95,"avg_delivery_days":2,"status":"active"}')"
@@ -199,4 +202,4 @@ xlsx_type="$(curl --fail --silent --show-error -o "${quote_xlsx}" -w '%{content_
 usage="$(curl --fail --silent --show-error "${auth_header[@]}" http://localhost:8000/api/billing/usage)"
 printf '%s' "${usage}" | ./venv/bin/python -c 'import json, sys; payload=json.load(sys.stdin); assert payload["positions_used"] == 1'
 
-echo "staging_quoteops=passed oidc=1 supplier_feed=1 rfq_import=1 durable_pipeline=1 quote_exports=2 usage=1"
+echo "staging_quoteops=passed oidc=1 erp_preflight=1 supplier_feed=1 rfq_import=1 durable_pipeline=1 quote_exports=2 usage=1"
