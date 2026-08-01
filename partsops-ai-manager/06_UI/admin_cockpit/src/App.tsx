@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import {
   AppFrame,
   TopCommandBar,
@@ -22,6 +22,7 @@ import { EvidenceGatesWidget } from './components/EvidenceGatesWidget';
 import { InvoicePreview } from './components/InvoicePreview';
 import { LLMCostPanel } from './components/LLMCostPanel';
 import { apiFetch, createEventSource } from './lib/api';
+import { subscribeCommandPaletteShortcut } from './lib/commandPaletteShortcut';
 import { useDashboardViewModel } from './lib/useDashboardViewModel';
 import { ChevronStepper } from './components/ChevronStepper';
 import { SuppliersPage } from './components/SuppliersPage';
@@ -237,7 +238,9 @@ function App() {
   const pendingGRef = useRef(false);
   const pendingGTimerRef = useRef<number | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => subscribeCommandPaletteShortcut(() => setIsCommandPaletteOpen(true)), []);
+
+  useLayoutEffect(() => {
     const isTypingTarget = (el: EventTarget | null) => {
       if (!(el instanceof HTMLElement)) return false;
       const tag = el.tagName;
@@ -257,11 +260,6 @@ function App() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen(true);
-        return;
-      }
       if (e.key === 'Escape') {
         setIsCommandPaletteOpen(false);
         return;

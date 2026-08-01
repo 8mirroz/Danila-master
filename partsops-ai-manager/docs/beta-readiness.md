@@ -30,6 +30,10 @@ For the local staging compose stack, `.env.staging` must also contain fresh
 `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`. `scripts/start_staging.sh` checks
 this without starting containers; it does not source the file.
 
+If Docker Desktop's credential helper is unavailable, run the launcher with an
+isolated Docker config and `PARTSOPS_DOCKER_COMPOSE=docker-compose`; this avoids
+changing the user's global Docker login configuration.
+
 Run `scripts/verify_beta_staging.sh` with production secrets injected by the
 deployment platform. The script rejects local storage, legacy auth and SQLite
 before applying migrations; `PARTSOPS_STAGING_HEALTH_URL` additionally proves

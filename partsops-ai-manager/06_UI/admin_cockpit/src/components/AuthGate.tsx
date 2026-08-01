@@ -5,7 +5,13 @@ import { beginLogin, initializeAuth, type AuthBootstrap } from '../lib/auth';
 export function AuthGate() {
   const [auth, setAuth] = useState<AuthBootstrap | null>(null);
 
-  useEffect(() => { void initializeAuth().then(setAuth); }, []);
+  useEffect(() => {
+    let active = true;
+    void initializeAuth().then((nextAuth) => {
+      if (active) setAuth(nextAuth);
+    });
+    return () => { active = false; };
+  }, []);
 
   if (!auth) return <main className="auth-gate">Проверяем защищённую сессию…</main>;
   if (auth.status === 'unauthenticated') {

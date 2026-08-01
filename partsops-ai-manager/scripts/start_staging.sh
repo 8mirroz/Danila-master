@@ -15,7 +15,11 @@ if [[ ! -f .env.staging ]]; then
   exit 1
 fi
 
-COMPOSE=(docker compose --env-file .env.staging -f docker-compose.staging.yml)
+if [[ "${PARTSOPS_DOCKER_COMPOSE:-docker compose}" == "docker-compose" ]]; then
+  COMPOSE=(docker-compose --env-file .env.staging -f docker-compose.staging.yml)
+else
+  COMPOSE=(docker compose --env-file .env.staging -f docker-compose.staging.yml)
+fi
 
 if ! "${COMPOSE[@]}" config --quiet; then
   echo "ERROR: .env.staging is incomplete. Add the required compose bootstrap variables before starting staging." >&2
