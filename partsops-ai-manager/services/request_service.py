@@ -711,9 +711,53 @@ class RequestService:
             ).order_by(Invoice.created_at.desc())
         ).first()
         if existing_invoice:
+            # Processing creates a draft document for the approval workspace.
+            # It becomes an ERP-eligible invoice only after a finance/admin
+            # approval snapshots the selected offers and advances the durable
+            # lifecycle. Returning early here used to leave an APPROVED request
+            # permanently unable to reach the explicit ERP sync command.
+            activated_existing = req.status == RequestState.APPROVED
+            if activated_existing:
+                if not req.pricing_evidence_json or req.margin_policy_passed is not True:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Invoice generation requires approved pricing evidence",
+                    )
+                selected_offers = _json_load(req.match_evidence_json, {})
+                required_part_names = {
+                    str(part.get("name", "")).strip()
+                    for part in _json_load(req.parts_json, [])
+                    if isinstance(part, dict) and str(part.get("name", "")).strip()
+                }
+                if not isinstance(selected_offers, dict) or not required_part_names.issubset(selected_offers):
+                    raise HTTPException(
+                        status_code=422,
+                        detail={"code": "INVOICE_SELECTED_OFFER_REQUIRED"},
+                    )
+                pricing_evidence = _json_load(req.pricing_evidence_json, {})
+                if not isinstance(pricing_evidence, dict):
+                    pricing_evidence = {}
+                pricing_evidence["approved_offer_snapshot"] = selected_offers
+                pricing_evidence["approved_at"] = _utcnow().isoformat()
+                req.pricing_evidence_json = json.dumps(
+                    pricing_evidence, ensure_ascii=False, default=str
+                )
+                req.erp_invoice_ref = existing_invoice.invoice_number
+                session.add(req)
+                RequestService._apply_transition(
+                    session=session,
+                    req=req,
+                    target_state=RequestState.INVOICE_DRAFTED,
+                    actor_type="system",
+                    actor_id="pricing_engine",
+                    reason="Approved invoice draft activated",
+                    commit=False,
+                )
+                session.commit()
+                session.refresh(existing_invoice)
             return {
                 "status": "DRAFT_CREATED",
-                "idempotent": True,
+                "idempotent": not activated_existing,
                 "invoice": {
                     "invoice_number": existing_invoice.invoice_number,
                     "request_id": request_id,

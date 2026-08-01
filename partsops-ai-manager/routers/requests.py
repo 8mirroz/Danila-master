@@ -15,7 +15,7 @@ from rbac import get_privileged_tenant, get_current_tenant, get_current_principa
 from services.request_service import RequestService
 from app.automation.storage import storage
 from app.automation.rate_limiter import rate_limiter
-from models import UploadArtifact, EventType
+from models import EventType, PartRequest, RequestState, UploadArtifact
 from event_store import emit_event
 from fastapi import Request
 from services.pipeline_runs import (
@@ -804,6 +804,7 @@ def send_invoice(
     body: dict,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant),
+    principal: CurrentPrincipal = Depends(get_current_principal),
 ):
     """Send invoice via specified channel"""
     from suppliers import Invoice
@@ -816,6 +817,22 @@ def send_invoice(
     
     if not recipient:
         raise HTTPException(status_code=400, detail="Recipient is required")
+    if principal.role not in {"finance", "admin"}:
+        raise HTTPException(status_code=403, detail="Invoice delivery requires finance or admin role")
+
+    request = session.exec(
+        select(PartRequest).where(
+            PartRequest.request_id == request_id,
+            PartRequest.tenant_id == tenant_id,
+        )
+    ).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if request.status not in {RequestState.ERP_SYNCED, RequestState.SENT_TO_CLIENT}:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "DELIVERY_ERP_SYNC_REQUIRED", "request_status": request.status},
+        )
     
     # Find invoice for this request
     invoice = session.exec(
@@ -847,6 +864,17 @@ def send_invoice(
             )
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported channel: {channel}")
+
+        if result.status == "sent" and request.status == RequestState.ERP_SYNCED:
+            RequestService.transition_state(
+                session,
+                request_id,
+                tenant_id,
+                RequestState.SENT_TO_CLIENT,
+                reason=f"Invoice delivered via {channel}",
+                actor_id=f"operator:{principal.role}",
+            )
+            session.refresh(request)
         
         return {
             "success": result.status == "sent",
@@ -855,6 +883,7 @@ def send_invoice(
             "channel": result.channel,
             "recipient": result.recipient,
             "error": result.last_error,
+            "request_status": request.status,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send: {e}")
@@ -948,24 +977,7 @@ def approve_request(
             created_by=actor_id,
         )
         
-        # Continue pipeline after approval (delivery + reporting)
-        try:
-            from app.agents import create_orchestrator, AgentType
-            orchestrator = create_orchestrator(tenant_id=tenant_id)
-            continue_result = orchestrator.continue_pipeline(
-                request_id=request_id,
-                start_from=AgentType.DELIVERY,
-            )
-            if continue_result.success:
-                delivery_success = continue_result.phases.get('delivery')
-                delivery_success = delivery_success.success if delivery_success else False
-                reporting_success = continue_result.phases.get('reporting')
-                reporting_success = reporting_success.success if reporting_success else False
-                message += f" | Pipeline continued: delivery={delivery_success}, reporting={reporting_success}"
-            else:
-                message += f" | Pipeline continuation failed: {continue_result.errors}"
-        except Exception as e:
-            message += f" | Pipeline continuation error: {str(e)}"
+        message += " | Quote issued; delivery and ERP export require an explicit next action."
         
     else:
         # Reject the request

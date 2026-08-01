@@ -30,6 +30,32 @@ def setup_db():
     SQLModel.metadata.drop_all(engine)
 
 
+def approve_sync_and_send(request_id: str) -> None:
+    """Advance an approved quote through explicit invoice, ERP and delivery commands."""
+    assert client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"action": "approve"},
+        headers=APPROVAL_HEADERS,
+    ).status_code == 200
+    assert client.post(
+        f"/api/erp/invoice/{request_id}", headers=APPROVAL_HEADERS
+    ).status_code == 200
+    sync = client.post(
+        f"/api/erp/sync/{request_id}",
+        json={"dry_run": True},
+        headers=APPROVAL_HEADERS,
+    )
+    assert sync.status_code == 200
+    assert sync.json()["request_status"] == "ERP_SYNCED"
+    sent = client.post(
+        f"/api/delivery/send/{request_id}",
+        json={"channel": "email", "recipient": "buyer@example.com", "dry_run": True},
+        headers=APPROVAL_HEADERS,
+    )
+    assert sent.status_code == 200
+    assert sent.json()["status"] == "sent"
+
+
 def test_full_pipeline_runs_successfully():
     """Full pipeline: intake -> processing -> delivery -> reporting."""
     response = client.post(
@@ -106,8 +132,8 @@ def test_pipeline_status_flow():
     assert tickets_resp.json()[0]["status"] == "pending"
 
 
-def test_approval_workflow_continues_pipeline():
-    """Approving a request should continue delivery + reporting phases."""
+def test_approval_workflow_issues_quote_without_fake_erp_sync():
+    """Approval issues the quote but never manufactures an ERP sync state."""
     # Run pipeline
     run_resp = client.post(
         "/api/pipeline/run",
@@ -136,13 +162,33 @@ def test_approval_workflow_continues_pipeline():
     assert approve_resp.status_code == 200
     approve_data = approve_resp.json()
     assert approve_data["success"] is True
-    assert "Pipeline continued" in approve_data["message"]
+    assert "Quote issued" in approve_data["message"]
 
-    # Should be SENT_TO_CLIENT after approval + delivery
+    # Quote delivery and ERP export are separate explicit operations.
     status_resp = client.get(
         f"/api/pipeline/status/{request_id}", headers=AUTH_HEADERS
     )
-    assert status_resp.json()["status"] == "SENT_TO_CLIENT"
+    assert status_resp.json()["status"] == "APPROVED"
+
+    invoice_resp = client.post(
+        f"/api/erp/invoice/{request_id}", headers=APPROVAL_HEADERS
+    )
+    assert invoice_resp.status_code == 200
+    assert invoice_resp.json()["status"] == "DRAFT_CREATED"
+    assert client.get(
+        f"/api/pipeline/status/{request_id}", headers=AUTH_HEADERS
+    ).json()["status"] == "INVOICE_DRAFTED"
+
+    events_resp = client.get(
+        f"/api/requests/{request_id}/events", headers=AUTH_HEADERS
+    )
+    transitions = {
+        event["payload"].get("to")
+        for event in events_resp.json()["events"]
+        if event["event_type"] == EventType.STATE_CHANGED
+    }
+    assert RequestState.ERP_SYNCING not in transitions
+    assert RequestState.ERP_SYNCED not in transitions
 
     # Approval ticket must be stored
     tickets_resp = client.get(
@@ -260,12 +306,7 @@ def test_client_portal_tracking_token_flow():
     )
     request_id = run_resp.json()["request_id"]
 
-    # Approve to reach SENT_TO_CLIENT
-    client.post(
-        f"/api/requests/{request_id}/approve",
-        json={"action": "approve"},
-        headers=APPROVAL_HEADERS,
-    )
+    approve_sync_and_send(request_id)
 
     # Generate tracking token
     token_resp = client.post(
@@ -306,11 +347,7 @@ def test_client_portal_reject_flow():
     )
     request_id = run_resp.json()["request_id"]
 
-    client.post(
-        f"/api/requests/{request_id}/approve",
-        json={"action": "approve"},
-        headers=APPROVAL_HEADERS,
-    )
+    approve_sync_and_send(request_id)
 
     token_resp = client.post(
         f"/api/requests/{request_id}/generate-tracking-token", headers=AUTH_HEADERS
@@ -342,11 +379,7 @@ def test_delivery_logs_stored():
     )
     request_id = run_resp.json()["request_id"]
 
-    client.post(
-        f"/api/requests/{request_id}/approve",
-        json={"action": "approve"},
-        headers=APPROVAL_HEADERS,
-    )
+    approve_sync_and_send(request_id)
 
     delivery_resp = client.get(
         f"/api/delivery/status/{request_id}", headers=AUTH_HEADERS
@@ -354,7 +387,7 @@ def test_delivery_logs_stored():
     logs = delivery_resp.json()
     assert isinstance(logs, list)
     assert len(logs) >= 1
-    assert logs[0]["channel"] == "telegram"
+    assert logs[0]["channel"] == "email"
 
 
 def test_generate_tracking_token_endpoint_creates_token():
