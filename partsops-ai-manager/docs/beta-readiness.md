@@ -74,8 +74,15 @@ captured as part of the worker-restart release gate below.
   database rows removed afterward. This is transport/DLQ evidence only; the
   configured external endpoint is loopback and is not represented as an
   authorized ERPNext integration.
-- [ ] Perform backup/restore into a clean environment and a worker-restart run
-  without losing a durable pipeline event.
+- [x] Perform backup/restore into a clean environment and a worker-restart run
+  without losing a durable pipeline event. On 2026-08-01
+  `bash scripts/verify_staging_worker_recovery.sh` reclaimed an expired lease
+  after an actual worker stop/start; its three persisted events remained
+  replayable and the run reached a released terminal state. The verifier
+  removes its temporary records. `bash scripts/verify_staging_backup_restore.sh`
+  also restored a custom logical dump into a separate clean PostgreSQL
+  container and matched the schema revision and control data before deleting
+  the temporary container and volume.
 - [ ] Execute cross-tenant, signed-upload and audit-immutability security tests
   in the staging deployment.
 
