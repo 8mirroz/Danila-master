@@ -17,6 +17,7 @@ AUTH_HEADERS = {
     "Authorization": "Bearer test-token",
     "X-Tenant-ID": "default",
 }
+APPROVAL_HEADERS = {**AUTH_HEADERS, "X-User-Role": "admin"}
 
 
 @pytest.fixture(autouse=True)
@@ -119,8 +120,12 @@ def test_approval_workflow_continues_pipeline():
     # Approve
     approve_resp = client.post(
         f"/api/requests/{request_id}/approve",
-        json={"action": "approve", "comment": "Одобрено"},
-        headers=AUTH_HEADERS,
+        json={
+            "action": "approve",
+            "comment": "Одобрено",
+            "actor_id": "untrusted-client-identity",
+        },
+        headers=APPROVAL_HEADERS,
     )
     assert approve_resp.status_code == 200
     approve_data = approve_resp.json()
@@ -140,6 +145,30 @@ def test_approval_workflow_continues_pipeline():
     tickets = tickets_resp.json()
     assert len(tickets) >= 1
     assert tickets[0]["status"] == "approved"
+    assert tickets[0]["decided_by"] == "operator:admin"
+
+
+def test_manager_cannot_approve_pricing():
+    """Only finance and admins can approve a pricing decision."""
+    run_resp = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "telegram",
+            "text": "Тормозные колодки BMW X5",
+            "customer_name": "Role proof",
+        },
+        headers=AUTH_HEADERS,
+    )
+    request_id = run_resp.json()["request_id"]
+
+    response = client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"action": "approve"},
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Pricing approval requires finance or admin role"
 
 
 def test_approval_issues_versioned_quote_before_delivery():
@@ -162,7 +191,7 @@ def test_approval_issues_versioned_quote_before_delivery():
     approval = client.post(
         f"/api/requests/{request_id}/approve",
         json={"action": "approve", "comment": "Quote approved"},
-        headers=AUTH_HEADERS,
+        headers=APPROVAL_HEADERS,
     )
     assert approval.status_code == 200
     quote = approval.json()["quote"]
@@ -198,7 +227,7 @@ def test_reject_workflow():
     reject_resp = client.post(
         f"/api/requests/{request_id}/approve",
         json={"action": "reject", "comment": "Цена too high"},
-        headers=AUTH_HEADERS,
+        headers=APPROVAL_HEADERS,
     )
     assert reject_resp.status_code == 200
     assert reject_resp.json()["new_status"] == "CLIENT_REJECTED"
@@ -229,7 +258,7 @@ def test_client_portal_tracking_token_flow():
     client.post(
         f"/api/requests/{request_id}/approve",
         json={"action": "approve"},
-        headers=AUTH_HEADERS,
+        headers=APPROVAL_HEADERS,
     )
 
     # Generate tracking token
@@ -274,7 +303,7 @@ def test_client_portal_reject_flow():
     client.post(
         f"/api/requests/{request_id}/approve",
         json={"action": "approve"},
-        headers=AUTH_HEADERS,
+        headers=APPROVAL_HEADERS,
     )
 
     token_resp = client.post(
@@ -310,7 +339,7 @@ def test_delivery_logs_stored():
     client.post(
         f"/api/requests/{request_id}/approve",
         json={"action": "approve"},
-        headers=AUTH_HEADERS,
+        headers=APPROVAL_HEADERS,
     )
 
     delivery_resp = client.get(

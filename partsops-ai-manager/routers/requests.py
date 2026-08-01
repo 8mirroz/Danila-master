@@ -868,7 +868,6 @@ class ApprovalActionPayload(BaseModel):
     """Payload for approve/reject actions"""
     action: str  # "approve" or "reject"
     comment: Optional[str] = None
-    actor_id: str = "admin"
 
 
 @router.post("/requests/{request_id}/approve")
@@ -877,6 +876,7 @@ def approve_request(
     payload: ApprovalActionPayload,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_privileged_tenant),
+    principal: CurrentPrincipal = Depends(get_current_principal),
 ):
     """Approve or reject a request awaiting approval"""
     from models import PartRequest, ApprovalTicket, RequestState, EventType
@@ -884,6 +884,9 @@ def approve_request(
     
     if payload.action not in ("approve", "reject"):
         raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
+    if not RequestService._role_permissions(principal.role)["can_approve_pricing"]:
+        raise HTTPException(status_code=403, detail="Pricing approval requires finance or admin role")
+    actor_id = principal.subject or f"operator:{principal.role}"
     
     request = session.exec(
         select(PartRequest).where(
@@ -916,7 +919,7 @@ def approve_request(
         # Update ticket
         if ticket:
             ticket.status = "approved"
-            ticket.decided_by = payload.actor_id
+            ticket.decided_by = actor_id
             ticket.decided_at = _utcnow()
             ticket.decision_note = payload.comment
             session.add(ticket)
@@ -927,7 +930,7 @@ def approve_request(
             request_id=request_id,
             event_type=EventType.MANAGER_APPROVED,
             actor_type="user",
-            actor_id=payload.actor_id,
+            actor_id=actor_id,
             payload={"comment": payload.comment},
             tenant_id=tenant_id,
         )
@@ -942,7 +945,7 @@ def approve_request(
             session,
             organization_id=tenant_id,
             request_id=request_id,
-            created_by=payload.actor_id,
+            created_by=actor_id,
         )
         
         # Continue pipeline after approval (delivery + reporting)
@@ -973,7 +976,7 @@ def approve_request(
         # Update ticket
         if ticket:
             ticket.status = "rejected"
-            ticket.decided_by = payload.actor_id
+            ticket.decided_by = actor_id
             ticket.decided_at = _utcnow()
             ticket.decision_note = payload.comment
             session.add(ticket)
@@ -984,7 +987,7 @@ def approve_request(
             request_id=request_id,
             event_type=EventType.MANAGER_REJECTED,
             actor_type="user",
-            actor_id=payload.actor_id,
+            actor_id=actor_id,
             payload={"comment": payload.comment, "reason": "rejected_by_manager"},
             tenant_id=tenant_id,
         )

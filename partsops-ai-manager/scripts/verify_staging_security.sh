@@ -20,7 +20,11 @@ password="ProofPass2026"
 request_id=""
 artifact_uri=""
 client_id=""
-upload_file="$(mktemp "${TMPDIR:-/tmp}/partsops-security-upload.XXXXXX.csv")"
+# BSD mktemp (macOS) requires the X placeholder to be at the end of the
+# template, while upload validation uses the original filename extension.
+upload_file="$(mktemp "${TMPDIR:-/tmp}/partsops-security-upload.XXXXXX")"
+mv "${upload_file}" "${upload_file}.csv"
+upload_file="${upload_file}.csv"
 
 kc() {
   "${COMPOSE[@]}" exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"
