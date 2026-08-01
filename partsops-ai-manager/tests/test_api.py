@@ -241,6 +241,13 @@ def test_supplier_table_file_import():
     assert rows.json()["total"] == 2
     assert rows.json()["rows"][0]["part_name"] == "Brake Disc Front"
 
+    catalog = client.get(f"/api/suppliers/{supplier_id}/items")
+    assert catalog.status_code == 200
+    assert {item["part_name"] for item in catalog.json()} == {
+        "Brake Disc Front",
+        "Cabin Filter",
+    }
+
     logs = client.get(f"/api/suppliers/{supplier_id}/logs")
     assert logs.status_code == 200
     assert any(log["event_type"] == "supplier_table_imported" for log in logs.json()["logs"])

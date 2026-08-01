@@ -119,10 +119,18 @@ class ProcessingAgent(BaseAgent):
         context.previous_results["processing"] = result
         context.previous_results["gates"] = gates_result
         context.previous_results["document"] = doc_result
-        
+
+        selected_offers = {
+            str(part["name"]): {
+                "item": part["best_match"],
+                "supplier": part.get("supplier"),
+            }
+            for part in result.get("matched_parts", [])
+            if part.get("name") and part.get("best_match")
+        }
         # Update request with pricing evidence
         self._update_order(request.request_id, {
-            "match_evidence_json": json_lib.dumps(result.get("matched_parts", [])),
+            "match_evidence_json": json_lib.dumps(selected_offers),
             "pricing_evidence_json": json_lib.dumps(result.get("pricing_evidence", {})),
             "margin_policy_passed": result.get("margin_policy_passed", False),
         })

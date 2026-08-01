@@ -566,6 +566,52 @@ def _create_supplier_table_entry(
     return table
 
 
+def _sync_supplier_catalog_from_table(
+    session: Session,
+    supplier_id: str,
+    tenant_id: str,
+    table: SupplierTable,
+) -> int:
+    """Make the active supplier-feed rows available to the matcher."""
+    session.exec(
+        delete(SupplierCatalogItem).where(
+            col(SupplierCatalogItem.supplier_id) == supplier_id,
+            col(SupplierCatalogItem.tenant_id) == tenant_id,
+        )
+    )
+    rows = session.exec(
+        select(SupplierTableRow).where(
+            SupplierTableRow.table_id == table.table_id,
+            SupplierTableRow.tenant_id == tenant_id,
+        )
+    ).all()
+    for index, row in enumerate(rows, start=1):
+        item = SupplierCatalogItem(
+            tenant_id=tenant_id,
+            catalog_id=f"ITEM-{table.table_id}-{index}",
+            supplier_id=supplier_id,
+            part_name=row.part_name,
+            oem_number=row.oem_number,
+            brand=row.brand,
+            price=row.price,
+            currency=row.currency,
+            stock_qty=row.stock_qty,
+            delivery_days=row.delivery_days,
+            category=row.category,
+        )
+        session.add(item)
+        session.add(
+            PriceHistoryLedger(
+                tenant_id=tenant_id,
+                catalog_id=item.catalog_id,
+                price=row.price,
+                currency=row.currency,
+                recorded_at=_utcnow(),
+            )
+        )
+    return len(rows)
+
+
 def _find_supplier_table_row(
     session: Session,
     supplier_id: str,
@@ -953,6 +999,9 @@ class SupplierService:
                 validation_summary_json=validation_summary,
                 status=status,
             )
+            catalog_items_added = _sync_supplier_catalog_from_table(
+                session, supplier_id, tenant_id, table
+            )
 
             s.last_feed_at = _utcnow()
             s.last_sync_status = "synced"
@@ -971,6 +1020,7 @@ class SupplierService:
                     "artifact_id": artifact_id,
                     "filename": original_filename,
                     "rows": len(normalized_rows),
+                    "catalog_items_added": catalog_items_added,
                     "source_type": file_type,
                     "replace_table_id": replace_table_id,
                 },
@@ -1130,45 +1180,9 @@ class SupplierService:
             status=payload_data.get("status") or "active",
         )
 
-        session.exec(
-            delete(SupplierCatalogItem).where(
-                col(SupplierCatalogItem.supplier_id) == supplier_id,
-                col(SupplierCatalogItem.tenant_id) == tenant_id,
-            )
+        catalog_items_added = _sync_supplier_catalog_from_table(
+            session, supplier_id, tenant_id, new_table
         )
-
-        rows = session.exec(
-            select(SupplierTableRow).where(
-                SupplierTableRow.table_id == new_table.table_id,
-                SupplierTableRow.tenant_id == tenant_id,
-            )
-        ).all()
-
-        for index, row in enumerate(rows, start=1):
-            new_item = SupplierCatalogItem(
-                tenant_id=tenant_id,
-                catalog_id=f"ITEM-{new_table.table_id[:6]}-{index}",
-                supplier_id=supplier_id,
-                part_name=row.part_name,
-                oem_number=row.oem_number,
-                brand=row.brand,
-                price=row.price,
-                currency=row.currency,
-                stock_qty=row.stock_qty,
-                delivery_days=row.delivery_days,
-                category=row.category,
-            )
-            session.add(new_item)
-
-            session.add(
-                PriceHistoryLedger(
-                    tenant_id=tenant_id,
-                    catalog_id=new_item.catalog_id,
-                    price=row.price,
-                    currency=row.currency,
-                    recorded_at=_utcnow(),
-                )
-            )
 
         _append_supplier_log(
             session,
@@ -1176,7 +1190,7 @@ class SupplierService:
             tenant_id,
             "catalog_replaced_from_table",
             table_id=new_table.table_id,
-            payload={"items_added": len(rows), "previous_table_id": table_id},
+            payload={"items_added": catalog_items_added, "previous_table_id": table_id},
         )
         session.commit()
         session.refresh(new_table)

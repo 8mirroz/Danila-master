@@ -142,6 +142,44 @@ def test_approval_workflow_continues_pipeline():
     assert tickets[0]["status"] == "approved"
 
 
+def test_approval_issues_versioned_quote_before_delivery():
+    """A real approval must snapshot the selected offer and make a quote exportable."""
+    run_resp = client.post(
+        "/api/pipeline/run",
+        json={
+            "source": "telegram",
+            "text": "Тормозные колодки BMW X5",
+            "customer_name": "Quote buyer",
+            "customer_phone": "+7999222333",
+            "customer_email": "quote@example.com",
+            "metadata": {"source_metadata": {"message_id": 31, "chat_id": 3100, "user_id": 3100}},
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert run_resp.status_code == 200
+    request_id = run_resp.json()["request_id"]
+
+    approval = client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"action": "approve", "comment": "Quote approved"},
+        headers=AUTH_HEADERS,
+    )
+    assert approval.status_code == 200
+    quote = approval.json()["quote"]
+    assert quote["request_id"] == request_id
+    assert quote["version"] == 1
+    assert quote["selected_offers"]
+
+    assert client.get(
+        f"/api/quotes/{quote['quote_id']}/export/xlsx", headers=AUTH_HEADERS
+    ).headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument"
+    )
+    assert client.get(
+        f"/api/quotes/{quote['quote_id']}/export/pdf", headers=AUTH_HEADERS
+    ).headers["content-type"].startswith("application/pdf")
+
+
 def test_reject_workflow():
     """Rejecting a request should move to CLIENT_REJECTED."""
     run_resp = client.post(

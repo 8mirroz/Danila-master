@@ -933,6 +933,17 @@ def approve_request(
         )
         
         message = "Request approved successfully"
+
+        # The signed quote snapshot must be created while the request is in its
+        # approved state, before the delivery continuation advances it further.
+        from services.quotes import issue_quote
+
+        quote = issue_quote(
+            session,
+            organization_id=tenant_id,
+            request_id=request_id,
+            created_by=payload.actor_id,
+        )
         
         # Continue pipeline after approval (delivery + reporting)
         try:
@@ -987,6 +998,7 @@ def approve_request(
         "request_id": request_id,
         "new_status": request.status,
         "message": message,
+        **({"quote": quote} if payload.action == "approve" else {}),
     }
 
 
