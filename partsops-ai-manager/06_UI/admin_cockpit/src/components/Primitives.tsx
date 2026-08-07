@@ -1,38 +1,96 @@
 import React from 'react';
 import { gsap } from 'gsap';
 import {
+  Archive,
+  ArrowCounterClockwise,
   ArrowLeft,
   ArrowRight,
   ArrowsClockwise,
+  ArrowsOut,
+  Barcode,
   Bell,
   BookOpen,
+  Brain,
+  Bug,
+  Calculator,
+  Car,
   CaretDown,
   CaretLeft,
   CaretRight,
   CaretUp,
+  ChartLine,
+  ChartPie,
+  ChatCircle,
   Check,
   CheckCircle,
+  ClipboardText,
+  Clock,
   CloudArrowUp,
+  Columns,
+  Cpu,
+  Cube,
+  CurrencyDollar,
+  DownloadSimple,
   Envelope,
+  Eye,
   File as FileIcon,
+  FileCode,
+  FilePdf,
+  FileText,
+  FlowArrow,
+  Folder,
   FolderOpen,
+  Funnel,
+  Gauge,
+  Gear,
+  GitBranch,
+  Graph,
+  GridFour,
   Info,
+  Keyboard,
+  Lightning,
+  Link,
   List,
+  ListChecks,
+  Lock,
+  LockOpen,
+  MagicWand,
   MagnifyingGlass,
+  MicrosoftExcelLogo,
+  Minus,
+  Package,
   PaperPlaneRight,
   Paperclip,
+  Path,
+  Pause,
+  PenNib,
   PencilSimple,
   Phone,
+  Play,
   Plus,
+  Pulse,
+  Receipt,
   Robot,
+  Scales,
+  ShieldCheck,
+  ShoppingCart,
+  Shuffle,
   SpinnerGap,
   Stop,
-  ShieldCheck,
+  Table,
+  Terminal,
   Trash,
+  Tray,
+  TreeStructure,
+  Truck,
+  UploadSimple,
+  User,
+  UserCheck,
   Warning,
   WarningDiamond,
   Waveform,
   X,
+  XCircle,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
 import { getStatusBadgeClasses, getStatusLabel } from '../lib/workflow';
@@ -40,12 +98,14 @@ import { useFocusTrap, useKeydown } from '../lib/focus';
 import { LottieMotion } from './LottieMotion';
 
 // =========================================
-// 0. Icon system (typed, Phosphor)
+// 0. Icon system (typed, Phosphor + FA aliases)
 // =========================================
 const ICON_MAP = {
+  // Core / nav
   'wave-square': Waveform,
   'magnifying-glass': MagnifyingGlass,
   search: MagnifyingGlass,
+  'magnifying-glass-chart': MagnifyingGlass,
   'chevron-left': CaretLeft,
   'chevron-right': CaretRight,
   'chevron-up': CaretUp,
@@ -54,36 +114,130 @@ const ICON_MAP = {
   'arrow-right': ArrowRight,
   'arrow-rotate-right': ArrowsClockwise,
   rotate: ArrowsClockwise,
+  'arrows-rotate': ArrowsClockwise,
+  sync: ArrowsClockwise,
+  'sync-alt': ArrowsClockwise,
+  'rotate-left': ArrowCounterClockwise,
   spinner: SpinnerGap,
+  'circle-notch': SpinnerGap,
   stop: Stop,
+  play: Play,
+  pause: Pause,
+  clock: Clock,
+  minus: Minus,
+  plus: Plus,
+  list: List,
+  'list-ul': List,
+  'list-check': ListChecks,
+  'grip-horizontal': GridFour,
+  download: DownloadSimple,
+  upload: UploadSimple,
+  archive: Archive,
+  keyboard: Keyboard,
+  terminal: Terminal,
+  eye: Eye,
+  user: User,
+  'user-check': UserCheck,
+  'user-shield': ShieldCheck,
+  car: Car,
   robot: Robot,
-  car: FileIcon,
+  microchip: Cpu,
+  brain: Brain,
+  cpu: Cpu,
   envelope: Envelope,
   phone: Phone,
-  'cloud-arrow-up': CloudArrowUp,
-  'file-arrow-up': CloudArrowUp,
-  'file-import': CloudArrowUp,
   paperclip: Paperclip,
   'paper-plane': PaperPlaneRight,
   pencil: PencilSimple,
   trash: Trash,
+  'trash-can': Trash,
   check: Check,
+  'check-circle': CheckCircle,
   'square-check': CheckCircle,
   'circle-check': CheckCircle,
-  plus: Plus,
   'x-mark': X,
   times: X,
+  xmark: X,
+  'circle-xmark': XCircle,
   'exclamation-triangle': Warning,
+  'triangle-exclamation': Warning,
   warning: Warning,
   radiation: WarningDiamond,
   'circle-info': Info,
+  info: Info,
+  shield: ShieldCheck,
+  'shield-halved': ShieldCheck,
+  'shield-check': ShieldCheck,
+  'file-shield': ShieldCheck,
+  lock: Lock,
+  'lock-open': LockOpen,
+  link: Link,
+  barcode: Barcode,
+  table: Table,
+  'table-list': Table,
+  'table-columns': Columns,
+  folder: Folder,
   'folder-open': FolderOpen,
   'book-open': BookOpen,
   bell: Bell,
-  list: List,
-  'user-shield': Robot,
-  'file-shield': ShieldCheck,
-  'code-fork': ArrowsClockwise,
+  inbox: Tray,
+  tray: Tray,
+  funnel: Funnel,
+  // Files / docs
+  'cloud-arrow-up': CloudArrowUp,
+  'file-arrow-up': CloudArrowUp,
+  'file-import': CloudArrowUp,
+  'file-lines': FileText,
+  document: FileText,
+  'file-invoice': Receipt,
+  'file-invoice-dollar': Receipt,
+  'file-signature': PenNib,
+  'file-code': FileCode,
+  'file-pdf': FilePdf,
+  'file-excel': MicrosoftExcelLogo,
+  'file-csv': FileText,
+  receipt: Receipt,
+  // Commerce / ops
+  calculator: Calculator,
+  'clipboard-check': ClipboardText,
+  'money-bill-wave': CurrencyDollar,
+  'cart-shopping': ShoppingCart,
+  'box-check': Package,
+  package: Package,
+  truck: Truck,
+  'truck-field': Truck,
+  'truck-fast': Truck,
+  gears: Gear,
+  gear: Gear,
+  gauge: Gauge,
+  'gauge-high': Gauge,
+  route: Path,
+  path: Path,
+  sitemap: TreeStructure,
+  'tree-structure': TreeStructure,
+  'diagram-project': Graph,
+  graph: Graph,
+  'flow-arrow': FlowArrow,
+  shuffle: Shuffle,
+  'code-fork': GitBranch,
+  'git-branch': GitBranch,
+  'arrows-split-up-and-left': ArrowsOut,
+  'arrows-out': ArrowsOut,
+  cube: Cube,
+  lightning: Lightning,
+  pulse: Pulse,
+  scales: Scales,
+  'scale-balanced': Scales,
+  'bug-slash': Bug,
+  bug: Bug,
+  // Charts
+  'chart-pie': ChartPie,
+  'chart-line': ChartLine,
+  // AI / magic
+  'wand-magic-sparkles': MagicWand,
+  'magic-wand': MagicWand,
+  'comment-dots': ChatCircle,
+  chat: ChatCircle,
 } as const;
 
 export type IconName = keyof typeof ICON_MAP;
@@ -95,15 +249,20 @@ export interface IconProps {
   className?: string;
 }
 
-/** Normalizes legacy Font Awesome names (`fa-*`, `fas *`) to typed Phosphor icons. */
-const normalizeIconName = (raw: string): string =>
-  raw
+/** Normalizes legacy Font Awesome names (`fa-*`, `fas *`, `fa-solid *`) to Phosphor map keys. */
+const normalizeIconName = (raw: string): string => {
+  const cleaned = raw
     .trim()
-    .replace(/^fa[sr]?\s+/, '')
+    .replace(/^fa-(solid|regular|light|brands)\s+/i, '')
+    .replace(/^fa[srbld]?\s+/i, '')
     .replace(/^fa-/, '')
-    .replace(/\s+text-red-\d+$/, '')
-    .replace(/\s+text-\[.*?\]$/, '')
-    .split(/\s+/)[0];
+    .replace(/\s+fa-spin\b/g, '')
+    .replace(/\s+text-red-\d+/g, '')
+    .replace(/\s+text-\[.*?\]/g, '')
+    .split(/\s+/)[0]
+    ?.replace(/^fa-/, '') ?? '';
+  return cleaned;
+};
 
 export const Icon: React.FC<IconProps> = ({ name, size = 16, weight = 'regular', className }) => {
   const key = normalizeIconName(name) as IconName;
@@ -115,7 +274,7 @@ export const Icon: React.FC<IconProps> = ({ name, size = 16, weight = 'regular',
 // 1. AppFrame
 // =========================================
 export const AppFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="h-screen w-screen flex flex-col bg-[var(--bg-app)] text-[var(--text-primary)] overflow-hidden">
+  <div className="h-screen w-screen flex flex-col bg-app-bg text-ink-primary overflow-hidden">
     {children}
   </div>
 );
@@ -133,20 +292,20 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const getButtonVariantClass = (variant: ButtonVariant, disabled?: boolean): string => {
-  if (disabled) return 'cursor-not-allowed border-[var(--border-default)] bg-slate-100 text-slate-400';
+  if (disabled) return 'cursor-not-allowed border-line bg-surface-3 text-ink-muted';
   switch (variant) {
     case 'primary':
-      return 'border-transparent bg-[var(--accent-primary)] text-white shadow-[0_8px_20px_-8px_rgba(37,99,235,0.55)] hover:bg-[var(--accent-primary-strong)]';
+      return 'border-transparent bg-accent-primary text-white shadow-[0_8px_20px_-8px_rgba(37,99,235,0.55)] hover:bg-accent-strong';
     case 'danger':
-      return 'border-transparent bg-[var(--accent-danger)] text-white hover:bg-[#be123c]';
+      return 'border-transparent bg-[var(--accent-danger)] text-white hover:bg-accent-danger';
     case 'success':
-      return 'border-transparent bg-[var(--accent-success)] text-white hover:bg-[#0b815a]';
+      return 'border-transparent bg-[var(--accent-success)] text-white hover:bg-accent-success';
     case 'warning':
-      return 'border-transparent bg-[var(--accent-warning)] text-white hover:bg-[#b45309]';
+      return 'border-transparent bg-[var(--accent-warning)] text-white hover:bg-accent-warning';
     case 'ghost':
-      return 'border-transparent bg-transparent text-[var(--text-secondary)] hover:bg-[var(--state-hover)]';
+      return 'border-transparent bg-transparent text-ink-secondary hover:bg-state-hover';
     default:
-      return 'border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]';
+      return 'border-line bg-surface-1 text-ink-secondary hover:bg-surface-2 hover:text-ink-primary';
   }
 };
 
@@ -164,7 +323,7 @@ export const Button: React.FC<ButtonProps> = ({
   return (
     <button
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border font-semibold transition-all ${sizing} ${getButtonVariantClass(variant, disabled)} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-control border font-semibold transition-all ${sizing} ${getButtonVariantClass(variant, disabled)} ${className}`}
       {...props}
     >
       {loading ? <Icon name="spinner" size={14} className="animate-spin" /> : icon ? <Icon name={icon} size={14} /> : null}
@@ -198,14 +357,14 @@ export const IconButton: React.FC<IconButtonProps> = ({
     variant === 'onDark'
       ? 'border-white/15 bg-white/5 text-white/80 hover:bg-white/12 hover:text-white'
       : variant === 'ghost'
-        ? 'border-transparent bg-transparent text-[var(--text-muted)] hover:bg-[var(--state-hover)] hover:text-[var(--text-primary)]'
-        : 'border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]';
+        ? 'border-transparent bg-transparent text-ink-muted hover:bg-state-hover hover:text-ink-primary'
+        : 'border-line bg-surface-1 text-ink-secondary hover:bg-surface-2 hover:text-ink-primary';
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-control)] border transition-all ${variantClass} ${className}`}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-control border transition-all ${variantClass} ${className}`}
       {...props}
     >
       <Icon name={icon} size={size} />
@@ -235,10 +394,10 @@ export const Card: React.FC<CardProps> = ({
 }) => (
   <section className={`panel-card-tight overflow-hidden flex flex-col ${className}`}>
     {title && (
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--border-default)] px-5 py-4">
+      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
         <div className="flex items-center gap-2">
-          {icon && <Icon name={icon} size={14} className="text-[var(--accent-primary)]" />}
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)]">{title}</h3>
+          {icon && <Icon name={icon} size={14} className="text-accent-primary" />}
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-secondary">{title}</h3>
         </div>
         {headerActions && <div>{headerActions}</div>}
       </div>
@@ -274,7 +433,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
   onOpenNavDrawer,
   onOpenQueueDrawer,
 }) => (
-  <header className="col-span-full h-16 border-b border-[var(--border-default)] bg-[var(--surface-1)] px-4 flex items-center justify-between gap-3 z-50 shadow-[var(--shadow-sm)]">
+  <header className="col-span-full h-16 border-b border-line bg-surface-1 px-4 flex items-center justify-between gap-3 z-50 shadow-ds-sm">
     <div className="flex items-center gap-2 min-w-0">
       {onOpenNavDrawer && (
         <IconButton icon="list" label="Открыть меню навигации" className="lg:hidden" onClick={onOpenNavDrawer} />
@@ -285,35 +444,35 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
         </div>
         <LottieMotion />
         <div className="min-w-0">
-          <h1 className="text-sm font-bold tracking-tight text-[var(--text-primary)] truncate">PartsOps AI Manager</h1>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">Операционный пульт закупок</span>
+          <h1 className="text-sm font-bold tracking-tight text-ink-primary truncate">PartsOps AI Manager</h1>
+          <span className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold">Операционный пульт закупок</span>
         </div>
       </div>
     </div>
 
     <div className="flex-1 max-w-md hidden sm:block">
       <div className="relative">
-        <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" aria-hidden="true" />
+        <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
         <input
           type="text"
           placeholder="Глобальный поиск (CMD + K для действий)..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full bg-[var(--surface-2)] border border-[var(--border-default)] rounded-[var(--radius-control)] pl-9 pr-3 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none focus:border-[var(--accent-primary)] transition-all font-sans"
+          className="w-full bg-surface-2 border border-line rounded-control pl-9 pr-3 py-2 text-xs text-ink-primary placeholder-ink-muted outline-none focus:border-accent-primary transition-all font-sans"
         />
       </div>
     </div>
 
     <div className="flex items-center gap-3 text-xs shrink-0">
-      {roleSwitcherNode && <div className="hidden md:flex border-r border-[var(--border-default)] pr-3">{roleSwitcherNode}</div>}
-      <div className="hidden xl:flex flex-col text-right border-l border-[var(--border-default)] pl-3 shrink-0 whitespace-nowrap">
-        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Среда</span>
-        <span className="font-semibold text-[var(--text-secondary)]">{envName}</span>
+      {roleSwitcherNode && <div className="hidden md:flex border-r border-line pr-3">{roleSwitcherNode}</div>}
+      <div className="hidden xl:flex flex-col text-right border-l border-line pl-3 shrink-0 whitespace-nowrap">
+        <span className="text-[10px] text-ink-muted uppercase tracking-wider font-bold">Среда</span>
+        <span className="font-semibold text-ink-secondary">{envName}</span>
       </div>
       {erpSyncTime && (
-        <div className="hidden xl:flex flex-col text-right border-l border-[var(--border-default)] pl-3 shrink-0 whitespace-nowrap">
-          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">ERP Синхронизация</span>
-          <span className="font-semibold text-[var(--text-secondary)]">{erpSyncTime}</span>
+        <div className="hidden xl:flex flex-col text-right border-l border-line pl-3 shrink-0 whitespace-nowrap">
+          <span className="text-[10px] text-ink-muted uppercase tracking-wider font-bold">ERP Синхронизация</span>
+          <span className="font-semibold text-ink-secondary">{erpSyncTime}</span>
         </div>
       )}
       {onOpenQueueDrawer && (
@@ -389,7 +548,7 @@ export const LeftNavRail: React.FC<LeftNavRailProps> = ({
           <Icon name={item.icon} size={16} className={`shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-white' : 'text-[var(--sidebar-muted)] group-hover:text-white'}`} />
           {!collapsedView && <span className="animate-fadeIn truncate">{item.label}</span>}
           {collapsedView && (
-            <div className="absolute left-16 px-3 py-1.5 rounded-[10px] bg-[#0b1b33]/95 backdrop-blur-md text-white/90 text-[11px] font-bold tracking-wide border border-white/15 shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-2 group-hover:translate-x-0 whitespace-nowrap z-50 flex items-center gap-1.5">
+            <div className="absolute left-16 px-3 py-1.5 rounded-[10px] bg-ink-primary/95 backdrop-blur-md text-white/90 text-[11px] font-bold tracking-wide border border-white/15 shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-2 group-hover:translate-x-0 whitespace-nowrap z-50 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-300" />
               {item.label}
             </div>
@@ -547,7 +706,7 @@ export const RightQueueRail: React.FC<RightQueueRailProps> = ({ children, drawer
 
   return (
     <>
-      <aside className="queue-rail hidden xl:flex border-l border-[var(--border-default)] bg-[var(--surface-1)] flex-col h-full overflow-hidden w-[340px] flex-shrink-0">
+      <aside className="queue-rail hidden xl:flex border-l border-line bg-surface-1 flex-col h-full overflow-hidden w-[340px] flex-shrink-0">
         <div ref={contentRef} data-queue-rail-motion className="flex h-full min-h-0 min-w-0 flex-col">
           {children}
         </div>
@@ -565,7 +724,7 @@ export const RightQueueRail: React.FC<RightQueueRailProps> = ({ children, drawer
             }}
             className="queue-rail drawer-panel drawer-panel-right flex flex-col overflow-hidden"
           >
-            <div className="flex items-center justify-end px-4 py-2 border-b border-[var(--border-default)]">
+            <div className="flex items-center justify-end px-4 py-2 border-b border-line">
               <span className="sr-only">Очередь запросов</span>
               <IconButton icon="x-mark" label="Закрыть очередь" onClick={onCloseDrawer} />
             </div>
@@ -615,19 +774,19 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
     : `${requestId} · План закупки запчастей`;
 
   return (
-    <div className="mb-4 rounded-[var(--radius-panel)] border border-[var(--border-default)] bg-[var(--surface-1)] p-5 text-[var(--text-primary)] shadow-[var(--shadow-md)]">
+    <div className="mb-4 rounded-panel border border-line bg-surface-1 p-5 text-ink-primary shadow-ds-md">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 font-mono text-xs font-bold text-[var(--accent-primary)]">
+          <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 font-mono text-xs font-bold text-accent-primary">
             {requestId}
           </span>
-          <h2 className="max-w-[280px] truncate text-base font-bold text-[var(--text-primary)] md:max-w-[500px]">
+          <h2 className="max-w-[280px] truncate text-base font-bold text-ink-primary md:max-w-[500px]">
             {cleanTitle}
           </h2>
           <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider shrink-0 border ${
             isUrgent
               ? 'border-rose-200 bg-rose-50 text-rose-700'
-              : 'border-slate-200 bg-slate-100 text-slate-700'
+              : 'border-line bg-surface-3 text-ink-secondary'
           }`}>
             {isUrgent ? (priority.toLowerCase() === 'urgent' || priority === 'Срочный' ? 'Срочный' : 'Высокий') : 'Обычный'}
           </span>
@@ -642,7 +801,7 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
           {onBack && (
             <button
               onClick={onBack}
-              className="flex items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-1.5 text-xs font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text-primary)]"
+              className="flex items-center gap-1.5 rounded-control border border-line bg-surface-2 px-4 py-1.5 text-xs font-semibold text-ink-secondary transition hover:bg-surface-3 hover:text-ink-primary"
             >
               <Icon name="arrow-left" size={12} />
               Закрыть
@@ -652,11 +811,11 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
       </div>
 
       {(customerEmail || customerPhone || vin) && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-[var(--border-default)] pt-3 text-xs font-medium text-[var(--text-secondary)]">
-          {customerEmail && <span className="flex items-center gap-1.5"><Icon name="envelope" size={13} className="text-[var(--text-muted)]" />{customerEmail}</span>}
-          {customerPhone && <span className="flex items-center gap-1.5"><Icon name="phone" size={13} className="text-[var(--text-muted)]" />{customerPhone}</span>}
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-line pt-3 text-xs font-medium text-ink-secondary">
+          {customerEmail && <span className="flex items-center gap-1.5"><Icon name="envelope" size={13} className="text-ink-muted" />{customerEmail}</span>}
+          {customerPhone && <span className="flex items-center gap-1.5"><Icon name="phone" size={13} className="text-ink-muted" />{customerPhone}</span>}
           {vin && (
-            <span className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-2)] px-2 py-0.5 font-mono text-[11px] font-bold text-[var(--text-secondary)]">
+            <span className="rounded-lg border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] font-bold text-ink-secondary">
               VIN: {vin}
             </span>
           )}
@@ -676,18 +835,18 @@ interface SubnavPillsProps {
 }
 
 export const SubnavPills: React.FC<SubnavPillsProps> = ({ activeTab, onChangeTab, tabs }) => (
-  <div className="flex items-center border border-[var(--border-default)] bg-[var(--surface-1)] p-1 rounded-[var(--radius-control)] gap-1 shadow-[var(--shadow-sm)]">
+  <div className="flex items-center border border-line bg-surface-1 p-1 rounded-control gap-1 shadow-ds-sm">
     {tabs.map((tab) => {
       const isActive = activeTab === tab.id;
       return (
         <button
           key={tab.id}
           onClick={() => onChangeTab(tab.id)}
-          className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-[10px] text-xs font-semibold transition-all ${isActive ? 'bg-[var(--state-selected)] text-[var(--accent-primary)] border border-[rgba(37,99,235,0.25)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-2)] border border-transparent'}`}
+          className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-[10px] text-xs font-semibold transition-all ${isActive ? 'bg-[var(--state-selected)] text-accent-primary border border-[rgba(37,99,235,0.25)]' : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-2 border border-transparent'}`}
         >
           <Icon name={tab.icon} size={14} />
           <span>{tab.label}</span>
-          {tab.badge && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">{tab.badge}</span>}
+          {tab.badge && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-surface-4 text-ink-secondary">{tab.badge}</span>}
         </button>
       );
     })}
@@ -708,7 +867,7 @@ interface DataTableProps {
 export const DataTable: React.FC<DataTableProps> = ({ headers, columns, children }) => {
   const cols: TableColumn[] = columns ?? (headers ?? []).map((h, i) => ({ key: `h${i}`, label: h }));
   return (
-    <div className="w-full overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--surface-1)]">
+    <div className="w-full overflow-x-auto rounded-card border border-line bg-surface-1">
       <table className="table-base">
         <thead>
           <tr>
@@ -745,7 +904,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({ label, value, delta, ton
       case 'cyan': return 'bg-cyan-50 text-cyan-700 border-cyan-200';
       case 'violet': return 'bg-sky-50 text-sky-700 border-sky-200';
       case 'danger': return 'bg-red-50 text-red-700 border-red-200';
-      default: return 'bg-slate-50 text-slate-700 border-slate-200';
+      default: return 'bg-surface-2 text-ink-secondary border-line';
     }
   };
 
@@ -767,11 +926,11 @@ export const MetricTile: React.FC<MetricTileProps> = ({ label, value, delta, ton
   return (
     <div className="panel-card-tight min-h-[108px] overflow-hidden p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">{label}</span>
-        {icon && <Icon name={icon} size={16} className="text-[var(--accent-primary)]" />}
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-muted">{label}</span>
+        {icon && <Icon name={icon} size={16} className="text-accent-primary" />}
       </div>
       <div className="mt-4 flex items-end justify-between gap-2">
-        <strong className="text-[32px] font-bold tracking-[-0.04em] text-[var(--text-primary)]">{value}</strong>
+        <strong className="text-[32px] font-bold tracking-[-0.04em] text-ink-primary">{value}</strong>
         {delta && (
           <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getToneClasses()}`}>
             {delta}
@@ -805,11 +964,11 @@ export const Input: React.FC<InputProps> = ({ label, className = '', id, ...prop
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
       {label && (
-        <label htmlFor={inputId} className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">{label}</label>
+        <label htmlFor={inputId} className="text-[10px] text-ink-muted uppercase tracking-wider font-bold">{label}</label>
       )}
       <input
         id={inputId}
-        className="border border-[var(--border-default)] rounded-[var(--radius-control)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] bg-[var(--surface-1)] transition-all"
+        className="border border-line rounded-control px-3 py-2 text-xs text-ink-primary outline-none focus:border-accent-primary bg-surface-1 transition-all"
         {...props}
       />
     </div>
@@ -822,13 +981,13 @@ interface SearchFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 export const SearchField: React.FC<SearchFieldProps> = ({ placeholder = 'Поиск...', className = '', value, onChange, ...props }) => (
   <div className={`relative ${className}`}>
-    <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" aria-hidden="true" />
+    <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
     <input
       type="text"
       placeholder={placeholder}
       value={value}
       onChange={onChange}
-      className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] pl-9 pr-3 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none transition-all focus:border-[var(--accent-primary)] font-sans"
+      className="w-full rounded-control border border-line bg-surface-1 pl-9 pr-3 py-2 text-xs text-ink-primary placeholder-ink-muted outline-none transition-all focus:border-accent-primary font-sans"
       {...props}
     />
   </div>
@@ -864,15 +1023,15 @@ export const ModalShell: React.FC<ModalShellProps> = ({ open, onClose, title, su
         aria-label={title}
         className={`modal-panel relative z-[90] w-full ${widthClass} max-h-[88vh] flex flex-col overflow-hidden animate-fadeIn`}
       >
-        <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-4 border-b border-[var(--border-subtle)]">
+        <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-4 border-b border-line-subtle">
           <div>
-            <h2 className="text-base font-bold text-[var(--text-primary)]">{title}</h2>
-            {subtitle && <p className="text-[11px] text-[var(--text-muted)] mt-1">{subtitle}</p>}
+            <h2 className="text-base font-bold text-ink-primary">{title}</h2>
+            {subtitle && <p className="text-[11px] text-ink-muted mt-1">{subtitle}</p>}
           </div>
           <IconButton icon="x-mark" label="Закрыть диалог" variant="ghost" onClick={onClose} />
         </div>
         <div className="flex-1 overflow-y-auto px-7 py-5">{children}</div>
-        {footer && <div className="px-7 py-4 border-t border-[var(--border-subtle)] bg-[var(--surface-2)]">{footer}</div>}
+        {footer && <div className="px-7 py-4 border-t border-line-subtle bg-surface-2">{footer}</div>}
       </div>
     </div>
   );
@@ -925,35 +1084,35 @@ export const Dropzone: React.FC<DropzoneProps> = ({ title, description, onImport
         onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
         onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
         onDrop={async (e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) await handleFile(e.dataTransfer.files[0]); }}
-        className={`border-2 border-dashed rounded-[var(--radius-card)] p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${dragActive ? 'border-[var(--accent-primary)] bg-[var(--state-selected)]' : 'border-[var(--border-strong)] hover:border-[var(--accent-primary)]/50 bg-[var(--surface-2)]'}`}
+        className={`border-2 border-dashed rounded-card p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${dragActive ? 'border-accent-primary bg-[var(--state-selected)]' : 'border-line-strong hover:border-accent-primary/50 bg-surface-2'}`}
       >
-        <CloudArrowUp size={28} className="text-[var(--accent-primary)] mb-3" aria-hidden="true" />
-        <strong className="text-xs text-[var(--text-primary)] font-semibold block mb-1">{title}</strong>
-        <p className="text-[11px] text-[var(--text-secondary)] max-w-xs leading-relaxed">{description}</p>
-        <span className="text-[9px] text-[var(--text-muted)] font-mono mt-3 uppercase tracking-wider block">{acceptLabel}</span>
+        <CloudArrowUp size={28} className="text-accent-primary mb-3" aria-hidden="true" />
+        <strong className="text-xs text-ink-primary font-semibold block mb-1">{title}</strong>
+        <p className="text-[11px] text-ink-secondary max-w-xs leading-relaxed">{description}</p>
+        <span className="text-[9px] text-ink-muted font-mono mt-3 uppercase tracking-wider block">{acceptLabel}</span>
         <input type="file" className="hidden" id="dropzone-file-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.json,.csv" onChange={async (e) => { if (e.target.files?.[0]) await handleFile(e.target.files[0]); }} disabled={uploading} />
-        <label htmlFor="dropzone-file-input" className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-2)] cursor-pointer transition-all">
+        <label htmlFor="dropzone-file-input" className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-control border border-line bg-surface-1 text-xs font-medium text-ink-secondary hover:bg-surface-2 cursor-pointer transition-all">
           <Paperclip size={14} aria-hidden="true" /> Или выберите файл
         </label>
       </div>
 
       {uploading && (
         <div className="w-full">
-          <div className="flex justify-between text-[10px] text-[var(--text-muted)] mb-1"><span>Загрузка файла...</span><span>{uploadProgress}%</span></div>
-          <div className="w-full h-2 bg-[var(--surface-3)] rounded-full overflow-hidden">
-            <div className="h-full bg-[var(--accent-primary)] transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }} />
+          <div className="flex justify-between text-[10px] text-ink-muted mb-1"><span>Загрузка файла...</span><span>{uploadProgress}%</span></div>
+          <div className="w-full h-2 bg-surface-3 rounded-full overflow-hidden">
+            <div className="h-full bg-accent-primary transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }} />
           </div>
         </div>
       )}
 
       <div className="flex flex-col gap-2">
-        <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-extrabold block">Или вставьте сырой текст</label>
+        <label className="text-[10px] text-ink-muted uppercase tracking-wider font-extrabold block">Или вставьте сырой текст</label>
         <textarea
           rows={4}
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
           placeholder="Вставьте JSON поставщиков или текст запроса клиента..."
-          className="w-full border border-[var(--border-default)] rounded-[var(--radius-control)] p-3 bg-[var(--surface-1)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]/20 font-mono transition-all duration-200"
+          className="w-full border border-line rounded-control p-3 bg-surface-1 text-xs text-ink-primary outline-none focus:border-accent-primary focus:ring-1 focus:ring-[var(--accent-primary)]/20 font-mono transition-all duration-200"
           disabled={uploading}
         />
         <Button variant="primary" icon="paper-plane" disabled={!pasteText.trim() || uploading} onClick={() => { onImport(pasteText); setPasteText(''); }}>
@@ -985,27 +1144,27 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ items, onChange, onCon
 
   return (
     <div className="flex flex-col gap-4 text-xs">
-      <div className="border border-[var(--border-default)] rounded-[var(--radius-control)] overflow-hidden bg-[var(--surface-1)] shadow-[var(--shadow-sm)]">
-        <div className="bg-[var(--surface-2)] border-b border-[var(--border-default)] px-4 py-2 flex items-center justify-between font-bold text-[11px] text-[var(--text-secondary)] uppercase tracking-wider">
+      <div className="border border-line rounded-control overflow-hidden bg-surface-1 shadow-ds-sm">
+        <div className="bg-surface-2 border-b border-line px-4 py-2 flex items-center justify-between font-bold text-[11px] text-ink-secondary uppercase tracking-wider">
           <span>Список распознанных деталей</span><span>найдено {items.length} дет.</span>
         </div>
         {items.length === 0 ? (
-          <div className="p-6 text-center text-[var(--text-secondary)]">Детали не найдены. Пожалуйста, добавьте детали вручную.</div>
+          <div className="p-6 text-center text-ink-secondary">Детали не найдены. Пожалуйста, добавьте детали вручную.</div>
         ) : (
           <div className="divide-y divide-[var(--border-subtle)]">
             {items.map((item, idx) => {
               const isEditing = editingIndex === idx;
               return (
-                <div key={idx} className="p-3 flex items-center justify-between gap-3 hover:bg-[var(--surface-2)] transition-all">
+                <div key={idx} className="p-3 flex items-center justify-between gap-3 hover:bg-surface-2 transition-all">
                   {isEditing ? (
                     <div className="flex-1 flex gap-2">
-                      <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 border border-[var(--border-strong)] rounded px-2 py-1 text-xs" />
-                      <input type="number" min="1" value={editQty} onChange={(e) => setEditQty(Number(e.target.value))} className="w-16 border border-[var(--border-strong)] rounded px-2 py-1 text-xs" />
+                      <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 border border-line-strong rounded px-2 py-1 text-xs" />
+                      <input type="number" min="1" value={editQty} onChange={(e) => setEditQty(Number(e.target.value))} className="w-16 border border-line-strong rounded px-2 py-1 text-xs" />
                     </div>
                   ) : (
                     <div className="flex-1">
-                      <div className="font-semibold text-[var(--text-primary)] text-sm">{item.name}</div>
-                      <div className="text-[var(--text-secondary)] mt-0.5">Количество: <span className="font-semibold">{item.quantity}</span> шт.</div>
+                      <div className="font-semibold text-ink-primary text-sm">{item.name}</div>
+                      <div className="text-ink-secondary mt-0.5">Количество: <span className="font-semibold">{item.quantity}</span> шт.</div>
                     </div>
                   )}
                   <div className="flex items-center gap-1">
@@ -1023,19 +1182,19 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ items, onChange, onCon
         )}
       </div>
 
-      <div className="bg-[var(--surface-2)] border border-[var(--border-default)] rounded-[var(--radius-control)] p-3 flex flex-col md:flex-row gap-3 items-end">
+      <div className="bg-surface-2 border border-line rounded-control p-3 flex flex-col md:flex-row gap-3 items-end">
         <div className="flex-1 flex flex-col gap-1 w-full">
-          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Добавить деталь вручную</label>
-          <input type="text" placeholder="например, Передние тормозные колодки OEM 34116852253" value={newName} onChange={(e) => setNewName(e.target.value)} className="border border-[var(--border-default)] rounded-[var(--radius-control)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] bg-[var(--surface-1)]" />
+          <label className="text-[10px] text-ink-muted uppercase tracking-wider font-bold">Добавить деталь вручную</label>
+          <input type="text" placeholder="например, Передние тормозные колодки OEM 34116852253" value={newName} onChange={(e) => setNewName(e.target.value)} className="border border-line rounded-control px-2.5 py-1.5 text-xs text-ink-primary outline-none focus:border-accent-primary bg-surface-1" />
         </div>
         <div className="w-full md:w-20 flex flex-col gap-1">
-          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Кол-во</label>
-          <input type="number" min="1" value={newQty} onChange={(e) => setNewQty(Number(e.target.value))} className="border border-[var(--border-default)] rounded-[var(--radius-control)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] bg-[var(--surface-1)]" />
+          <label className="text-[10px] text-ink-muted uppercase tracking-wider font-bold">Кол-во</label>
+          <input type="number" min="1" value={newQty} onChange={(e) => setNewQty(Number(e.target.value))} className="border border-line rounded-control px-2.5 py-1.5 text-xs text-ink-primary outline-none focus:border-accent-primary bg-surface-1" />
         </div>
         <Button variant="secondary" icon="plus" disabled={!newName.trim()} onClick={addItem} className="w-full md:w-auto">Добавить</Button>
       </div>
 
-      <div className="flex justify-end pt-2 border-t border-[var(--border-subtle)]">
+      <div className="flex justify-end pt-2 border-t border-line-subtle">
         <Button variant="primary" icon="square-check" onClick={onConfirm}>Подтвердить проверку и перейти к подбору</Button>
       </div>
     </div>
@@ -1048,7 +1207,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ items, onChange, onCon
 export const SplitPane: React.FC<{ left: React.ReactNode; right: React.ReactNode }> = ({ left, right }) => (
   <div className="grid grid-cols-[1fr_340px] h-full overflow-hidden">
     <div className="overflow-y-auto p-4">{left}</div>
-    <div className="overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface-1)] p-4">{right}</div>
+    <div className="overflow-y-auto border-l border-line bg-surface-1 p-4">{right}</div>
   </div>
 );
 
@@ -1058,12 +1217,12 @@ export const SplitPane: React.FC<{ left: React.ReactNode; right: React.ReactNode
 interface EmptyStateProps { title: string; description: string; icon?: string; actionNode?: React.ReactNode; }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ title, description, icon = 'folder-open', actionNode }) => (
-  <div className="flex flex-col items-center justify-center text-center p-8 bg-[var(--surface-1)] border border-[var(--border-default)] rounded-[var(--radius-card)] min-h-[300px] shadow-[var(--shadow-sm)] select-none">
-    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-[var(--text-muted)] border border-slate-200">
+  <div className="flex flex-col items-center justify-center text-center p-8 bg-surface-1 border border-line rounded-card min-h-[300px] shadow-ds-sm select-none">
+    <div className="w-12 h-12 rounded-full bg-surface-3 flex items-center justify-center mb-4 text-ink-muted border border-line">
       <Icon name={icon} size={24} />
     </div>
-    <h3 className="text-sm font-bold text-[var(--text-primary)] block mb-1">{title}</h3>
-    <p className="text-[11px] text-[var(--text-secondary)] max-w-xs leading-relaxed mb-4">{description}</p>
+    <h3 className="text-sm font-bold text-ink-primary block mb-1">{title}</h3>
+    <p className="text-[11px] text-ink-secondary max-w-xs leading-relaxed mb-4">{description}</p>
     {actionNode && <div>{actionNode}</div>}
   </div>
 );
@@ -1084,7 +1243,7 @@ export const InlineAlert: React.FC<InlineAlertProps> = ({ message, type = 'info'
   };
   const { container, icon } = getAlertClasses();
   return (
-    <div className={`p-3 rounded-[var(--radius-control)] border text-xs flex items-start gap-2.5 mb-4 shadow-[var(--shadow-sm)] ${container}`}>
+    <div className={`p-3 rounded-control border text-xs flex items-start gap-2.5 mb-4 shadow-ds-sm ${container}`}>
       <Icon name={icon} size={16} className="mt-0.5 shrink-0" />
       <span className="leading-normal font-medium">{message}</span>
     </div>
@@ -1097,7 +1256,7 @@ export const InlineAlert: React.FC<InlineAlertProps> = ({ message, type = 'info'
 interface StepGateProps { currentStep: number; steps: string[]; onStepClick?: (idx: number) => void; }
 
 export const StepGate: React.FC<StepGateProps> = ({ currentStep, steps, onStepClick }) => (
-  <div className="flex items-center w-full justify-between border border-[var(--border-default)] bg-[var(--surface-1)] p-2.5 rounded-[var(--radius-control)] mb-4 shadow-[var(--shadow-sm)] select-none">
+  <div className="flex items-center w-full justify-between border border-line bg-surface-1 p-2.5 rounded-control mb-4 shadow-ds-sm select-none">
     {steps.map((step, idx) => {
       const isCompleted = idx < currentStep;
       const isCurrent = idx === currentStep;
@@ -1106,12 +1265,12 @@ export const StepGate: React.FC<StepGateProps> = ({ currentStep, steps, onStepCl
         <React.Fragment key={idx}>
           <div
             onClick={() => isClickable && onStepClick && onStepClick(idx)}
-            className={`flex items-center gap-2 px-2 py-1 rounded transition-all ${isClickable ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}
+            className={`flex items-center gap-2 px-2 py-1 rounded transition-all ${isClickable ? 'cursor-pointer hover:bg-surface-2' : 'cursor-default'}`}
           >
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all ${isCurrent ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)] shadow-sm' : isCompleted ? 'bg-green-500 text-white border-green-500' : 'bg-white text-[var(--text-muted)] border-[var(--border-strong)]'}`}>
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all ${isCurrent ? 'bg-accent-primary text-white border-accent-primary shadow-sm' : isCompleted ? 'bg-green-500 text-white border-green-500' : 'bg-surface-1 text-ink-muted border-line-strong'}`}>
               {isCompleted ? <Icon name="check" size={8} /> : idx + 1}
             </span>
-            <span className={`text-[11px] font-semibold transition-all ${isCurrent ? 'text-[var(--accent-primary)] font-bold' : isCompleted ? 'text-green-700' : 'text-[var(--text-muted)]'}`}>{step}</span>
+            <span className={`text-[11px] font-semibold transition-all ${isCurrent ? 'text-accent-primary font-bold' : isCompleted ? 'text-green-700' : 'text-ink-muted'}`}>{step}</span>
           </div>
           {idx < steps.length - 1 && <div className={`flex-1 h-[2px] mx-2 ${idx < currentStep ? 'bg-green-300' : 'bg-[var(--border-default)]'}`} />}
         </React.Fragment>
@@ -1124,7 +1283,7 @@ export const StepGate: React.FC<StepGateProps> = ({ currentStep, steps, onStepCl
 // 21. Skeleton
 // =========================================
 export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <div className={`skeleton rounded-[var(--radius-control)] ${className}`} />
+  <div className={`skeleton rounded-control ${className}`} />
 );
 
 // =========================================
@@ -1133,7 +1292,7 @@ export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) =
 interface ErrorStateProps { title?: string; message: string; onRetry?: () => void; }
 
 export const ErrorState: React.FC<ErrorStateProps> = ({ title = 'Ошибка загрузки данных', message, onRetry }) => (
-  <div className="flex flex-col items-center justify-center text-center p-8 bg-red-50/50 border border-red-200 rounded-[var(--radius-card)] min-h-[200px] select-none">
+  <div className="flex flex-col items-center justify-center text-center p-8 bg-red-50/50 border border-red-200 rounded-card min-h-[200px] select-none">
     <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4 text-red-500 border border-red-200">
       <Icon name="exclamation-triangle" size={24} />
     </div>

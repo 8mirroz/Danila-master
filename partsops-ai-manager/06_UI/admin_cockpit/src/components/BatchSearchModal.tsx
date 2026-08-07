@@ -102,10 +102,10 @@ export const BatchSearchModal: React.FC<BatchSearchModalProps> = ({
 
         <div>
           <div className="flex justify-between items-center mb-1">
-            <label className="block text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">
+            <label className="block text-[10px] text-ink-muted font-bold uppercase tracking-wider">
               Список артикулов (OEM) — по одному на строку
             </label>
-            <span className="text-[10px] font-mono text-[var(--accent-primary)] font-bold">
+            <span className="text-[10px] font-mono text-accent-primary font-bold">
               {articlesText.split('\n').filter((s) => s.trim().length > 0).length} шт.
             </span>
           </div>
@@ -115,19 +115,19 @@ export const BatchSearchModal: React.FC<BatchSearchModalProps> = ({
             rows={5}
             required
             placeholder={'34116858047\n11427953129\n31126855743'}
-            className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] p-3 text-xs text-[var(--text-primary)] font-mono placeholder-[var(--text-muted)] outline-none focus:border-[var(--accent-primary)] leading-relaxed"
+            className="w-full rounded-control border border-line bg-surface-1 p-3 text-xs text-ink-primary font-mono placeholder-ink-muted outline-none focus:border-accent-primary leading-relaxed"
           />
         </div>
 
         <div className="flex items-center justify-between pt-2">
           <div>
-            <label className="block text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-1">
+            <label className="block text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1">
               Приоритет
             </label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] font-sans"
+              className="rounded-control border border-line bg-surface-1 px-3 py-1.5 text-xs text-ink-primary outline-none focus:border-accent-primary font-sans"
             >
               <option value="normal">Обычный</option>
               <option value="urgent">Срочно</option>

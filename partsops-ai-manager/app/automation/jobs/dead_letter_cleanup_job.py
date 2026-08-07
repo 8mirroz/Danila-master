@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from sqlmodel import Session, select
@@ -33,7 +33,7 @@ def _dead_letter_rows(session: Session, tenant_id: str, cutoff: datetime) -> Lis
 
 def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
     retention_hours = int(context.payload.get("retention_hours", 72))
-    cutoff = datetime.utcnow() - timedelta(hours=retention_hours)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=retention_hours)
     candidates = _dead_letter_rows(session, context.tenant_id, cutoff)
     count = len(candidates)
 

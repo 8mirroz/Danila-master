@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatusBadge, ActionButton } from './Primitives';
+import { StatusBadge, ActionButton, Icon } from './Primitives';
 import { notify } from '../lib/notify';
 import { AnalogComparisonMatrix } from './AnalogComparisonMatrix';
 
@@ -25,8 +25,8 @@ interface JobReportViewProps {
 export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack }) => {
   if (!request) {
     return (
-      <div className="glass-panel-dark rounded-2xl p-8 text-center text-slate-400 space-y-4">
-        <i className="fas fa-file-invoice text-3xl text-slate-600" />
+      <div className="glass-panel-dark rounded-2xl p-8 text-center text-ink-muted space-y-4">
+        <Icon name="file-invoice" size={30} className="text-3xl text-ink-secondary" />
         <p className="text-xs">Запрос для формирования отчёта не выбран</p>
         <ActionButton onClick={onBack}>Вернуться в панель управления</ActionButton>
       </div>
@@ -86,14 +86,14 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header Bar */}
-      <div className="glass-panel-dark rounded-2xl p-5 border border-slate-800 shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="glass-panel-dark rounded-2xl p-5 border border-line shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-2">
             <button
               onClick={onBack}
-              className="text-slate-400 hover:text-white text-xs flex items-center gap-1 font-semibold transition-colors mr-2"
+              className="text-ink-muted hover:text-white text-xs flex items-center gap-1 font-semibold transition-colors mr-2"
             >
-              <i className="fas fa-arrow-left text-[10px]" />
+              <Icon name="arrow-left" size={10} className="text-[10px]" />
               <span>Назад</span>
             </button>
             <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
@@ -104,8 +104,8 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
           <h2 className="text-xl font-extrabold text-white tracking-tight mt-2">
             Итоговый Отчёт по Заданию и Смета Спецификации
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Заказчик: <strong className="text-slate-200">{request.customer_name || 'Не указан'}</strong> | Автомобиль: <strong className="text-slate-200">{request.vehicle_make || 'Уточняется'} {request.vehicle_model || ''}</strong>
+          <p className="text-xs text-ink-muted mt-0.5">
+            Заказчик: <strong className="text-ink-primary">{request.customer_name || 'Не указан'}</strong> | Автомобиль: <strong className="text-ink-primary">{request.vehicle_make || 'Уточняется'} {request.vehicle_model || ''}</strong>
           </p>
         </div>
 
@@ -115,12 +115,12 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
             onClick={handleDownloadExcel}
             className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
           >
-            <i className="fas fa-file-excel text-sm" />
+            <Icon name="file-excel" size={14} className="text-sm" />
             <span>Скачать Отчёт Excel (.xlsx)</span>
           </button>
           <ActionButton
             variant="secondary"
-            icon="fa-rotate"
+            icon="rotate"
             onClick={() => {
               void notify.erpSync();
             }}
@@ -133,48 +133,48 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
 
       {/* Summary KPI Strip — live fields only, no decorative fake % / delivery */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-panel-dark rounded-xl p-4 border border-slate-800">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+        <div className="glass-panel-dark rounded-xl p-4 border border-line">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
             Всего артикулов в задании
           </span>
           <span className="text-2xl font-black text-white font-mono block mt-1">
             {totalItems} шт.
           </span>
-          <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1 mt-1">
+          <span className="text-[10px] text-ink-muted font-semibold flex items-center gap-1 mt-1">
             {totalItems === 0
               ? 'позиций нет в request.parts_json'
               : `${pricedCount}/${totalItems} с ценой`}
           </span>
         </div>
 
-        <div className="glass-panel-dark rounded-xl p-4 border border-slate-800">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+        <div className="glass-panel-dark rounded-xl p-4 border border-line">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
             Сумма закупки (OEM)
           </span>
-          <span className="text-2xl font-black text-slate-200 font-mono block mt-1">
+          <span className="text-2xl font-black text-ink-primary font-mono block mt-1">
             {hasPricedLines ? `${totalPriceBuy.toLocaleString()} ₽` : 'н/д'}
           </span>
-          <span className="text-[10px] text-slate-400 font-semibold mt-1 block">
+          <span className="text-[10px] text-ink-muted font-semibold mt-1 block">
             {hasPricedLines ? 'по строкам с price/sale_price' : 'цены в parts_json отсутствуют'}
           </span>
         </div>
 
-        <div className="glass-panel-dark rounded-xl p-4 border border-slate-800">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+        <div className="glass-panel-dark rounded-xl p-4 border border-line">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
             Итого к оплате клиенту
           </span>
           <span className="text-2xl font-black text-emerald-400 font-mono block mt-1">
             {totalPriceClient != null ? `${Math.round(totalPriceClient).toLocaleString()} ₽` : 'н/д'}
           </span>
-          <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1 mt-1">
+          <span className="text-[10px] text-ink-muted font-semibold flex items-center gap-1 mt-1">
             {marginPct != null
               ? `Наценка из данных: ${marginPct > 1 ? marginPct.toFixed(1) : (marginPct * 100).toFixed(1)}%`
               : 'маржа не задана в parts_json'}
           </span>
         </div>
 
-        <div className="glass-panel-dark rounded-xl p-4 border border-slate-800">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+        <div className="glass-panel-dark rounded-xl p-4 border border-line">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
             Средний срок поставки
           </span>
           <span className="text-2xl font-black text-white font-mono block mt-1">
@@ -187,7 +187,7 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
               return `${avg.toFixed(1)} дн.`;
             })()}
           </span>
-          <span className="text-[10px] text-slate-400 font-semibold mt-1 block">
+          <span className="text-[10px] text-ink-muted font-semibold mt-1 block">
             из delivery_days в позициях
           </span>
         </div>
@@ -200,21 +200,21 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
       )}
 
       {/* Specification Table */}
-      <div className="glass-panel-dark rounded-2xl p-5 border border-slate-800 space-y-4">
-        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+      <div className="glass-panel-dark rounded-2xl p-5 border border-line space-y-4">
+        <div className="flex justify-between items-center border-b border-line pb-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
-            <i className="fas fa-table-list text-emerald-400" />
+            <Icon name="table-list" size={14} className="text-emerald-400" />
             <span>Детализированная спецификация деталей</span>
           </h3>
-          <span className="text-[10px] text-slate-400 font-mono">
+          <span className="text-[10px] text-ink-muted font-mono">
             Экспорт положен в шаблон `.xlsx` (openpyxl)
           </span>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-[var(--border-default)] bg-[var(--surface-1)]">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface-1">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-[var(--border-default)] bg-[var(--surface-2)] text-[var(--text-muted)] font-semibold uppercase text-[10px] tracking-wider">
+              <tr className="border-b border-line bg-surface-2 text-ink-muted font-semibold uppercase text-[10px] tracking-wider">
                 <th className="px-4 py-3">№</th>
                 <th className="px-4 py-3">Артикул OEM</th>
                 <th className="px-4 py-3">Наименование</th>
@@ -241,15 +241,15 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
                 const score = item.score ?? item.match_score;
 
                 return (
-                  <tr key={idx} className="transition-colors hover:bg-[var(--state-hover)]">
-                    <td className="px-4 py-3 font-mono text-slate-500">{idx + 1}</td>
+                  <tr key={idx} className="transition-colors hover:bg-state-hover">
+                    <td className="px-4 py-3 font-mono text-ink-muted">{idx + 1}</td>
                     <td className="px-4 py-3 font-mono font-bold text-emerald-700">{oem}</td>
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{name}</td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)]">{supplier}</td>
-                    <td className="px-4 py-3 text-center font-mono font-bold text-[var(--text-secondary)]">{qty ? `${qty} шт` : '—'}</td>
-                    <td className="px-4 py-3 text-center font-mono text-slate-400">{days ? `${days} дн` : '—'}</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-400">{hasBuyPrice ? `${buyPrice.toLocaleString()} ₽` : '—'}</td>
-                    <td className="px-4 py-3 text-right font-mono text-[var(--text-primary)]">{Number.isFinite(clientPrice) ? `${Math.round(clientPrice).toLocaleString()} ₽` : '—'}</td>
+                    <td className="px-4 py-3 font-medium text-ink-primary">{name}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{supplier}</td>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-ink-secondary">{qty ? `${qty} шт` : '—'}</td>
+                    <td className="px-4 py-3 text-center font-mono text-ink-muted">{days ? `${days} дн` : '—'}</td>
+                    <td className="px-4 py-3 text-right font-mono text-ink-muted">{hasBuyPrice ? `${buyPrice.toLocaleString()} ₽` : '—'}</td>
+                    <td className="px-4 py-3 text-right font-mono text-ink-primary">{Number.isFinite(clientPrice) ? `${Math.round(clientPrice).toLocaleString()} ₽` : '—'}</td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">{Number.isFinite(rowTotal) ? `${Math.round(rowTotal).toLocaleString()} ₽` : '—'}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
@@ -259,7 +259,7 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
                   </tr>
                 );
               }) : (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-500">Нет подтверждённых позиций — данные не подставляются.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-ink-muted">Нет подтверждённых позиций — данные не подставляются.</td></tr>
               )}
             </tbody>
           </table>
@@ -269,9 +269,9 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
         <AnalogComparisonMatrix requestId={request.request_id} />
 
         {/* Excel Download CTA footer */}
-        <div className="flex justify-between items-center pt-3 border-t border-slate-800 text-xs">
-          <div className="flex items-center gap-2 text-slate-400">
-            <i className="fas fa-file-excel text-emerald-400 text-base" />
+        <div className="flex justify-between items-center pt-3 border-t border-line text-xs">
+          <div className="flex items-center gap-2 text-ink-muted">
+            <Icon name="file-excel" size={16} className="text-emerald-400 text-base" />
             <span>Готов к загрузке документ <strong>partsops_report_{request.request_id}.xlsx</strong></span>
           </div>
 
@@ -279,7 +279,7 @@ export const JobReportView: React.FC<JobReportViewProps> = ({ request, onBack })
             onClick={handleDownloadExcel}
             className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 font-bold text-xs transition-all flex items-center gap-2"
           >
-            <i className="fas fa-download" />
+            <Icon name="download" size={14} />
             <span>Скачать `.xlsx`</span>
           </button>
         </div>

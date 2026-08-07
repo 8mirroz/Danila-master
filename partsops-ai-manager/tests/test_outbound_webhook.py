@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlmodel import SQLModel, Session, select
@@ -93,7 +93,7 @@ def test_outbox_dispatch_schedules_retry_then_dead_letters_failed_webhook():
         assert retried.status == "pending"
         assert retried.next_retry_at is not None
 
-        retried.next_retry_at = datetime.utcnow() - timedelta(seconds=1)
+        retried.next_retry_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=1)
         session.add(retried)
         session.commit()
         second = outbound_dispatch_job.run(session, context)

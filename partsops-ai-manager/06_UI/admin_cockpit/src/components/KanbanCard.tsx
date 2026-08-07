@@ -1,6 +1,5 @@
 import React from 'react';
-import { gsap } from 'gsap';
-import { StatusBadge } from './Primitives';
+import { StatusBadge, Icon } from './Primitives';
 
 type Request = {
   id: number;
@@ -50,84 +49,46 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
   isHighlighted = false,
 }) => {
   const [isDragging, setIsDragging] = React.useState(false);
-  const cardRef = React.useRef<HTMLDivElement>(null);
 
-  const getPriorityStripe = (priority?: string) => {
+  let partsCount = 0;
+  try {
+    const parsed = request.parts_json ? JSON.parse(request.parts_json) : [];
+    partsCount = Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    partsCount = 0;
+  }
+
+  const getPriorityBadge = (priority?: string) => {
     const p = (priority || '').toLowerCase();
-    if (p === 'urgent' || p === 'high') return 'border-l-4 border-l-[#FF5C7A]';
-    if (p === 'vip') return 'border-l-4 border-l-[#9B7CFF]';
-    return 'border-l-4 border-l-slate-700';
-  };
-
-  // GSAP micro-interaction: smooth card lift and premium shadow on hover
-  const handleMouseEnter = () => {
-    if (cardRef.current && !isDragging) {
-      gsap.to(cardRef.current, {
-        y: -5,
-        scale: 1.015,
-        boxShadow: '0 16px 36px -10px rgba(0, 0, 0, 0.7), 0 0 15px rgba(46, 230, 214, 0.2)',
-        borderColor: 'rgba(46, 230, 214, 0.4)',
-        duration: 0.3,
-        ease: 'power2.out'
-      });
+    if (p === 'urgent' || p === 'high') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-accent-danger">
+          <Icon name="exclamation-triangle" size={9} /> СРОЧНО
+        </span>
+      );
     }
-  };
-
-  const handleMouseLeave = () => {
-    if (cardRef.current && !isDragging) {
-      gsap.to(cardRef.current, {
-        y: 0,
-        scale: 1,
-        boxShadow: isHighlighted ? '0 0 25px rgba(46, 230, 214, 0.3)' : '0 4px 20px rgba(0, 0, 0, 0.35)',
-        borderColor: isHighlighted ? '#2EE6D6' : 'rgba(255, 255, 255, 0.08)',
-        duration: 0.3,
-        ease: 'power2.out'
-      });
+    if (p === 'vip') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">
+          <Icon name="user-shield" size={9} /> VIP
+        </span>
+      );
     }
+    return null;
   };
-
-  // Animate highlight state updates via GSAP
-  React.useEffect(() => {
-    if (cardRef.current) {
-      if (isHighlighted) {
-        gsap.to(cardRef.current, {
-          backgroundColor: 'rgba(46, 230, 214, 0.1)',
-          borderColor: '#2EE6D6',
-          boxShadow: '0 0 25px rgba(46, 230, 214, 0.35)',
-          scale: 1.02,
-          duration: 0.4,
-          ease: 'power2.out'
-        });
-      } else {
-        gsap.to(cardRef.current, {
-          backgroundColor: '#0D131E',
-          borderColor: 'rgba(255, 255, 255, 0.08)',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.35)',
-          scale: 1,
-          duration: 0.4,
-          ease: 'power2.out'
-        });
-      }
-    }
-  }, [isHighlighted]);
 
   return (
     <div
-      ref={cardRef}
       role="group"
       aria-label={`Запрос ${request.request_id}`}
       data-request-id={request.request_id}
       tabIndex={0}
-      draggable={true}
+      draggable
       onDragStart={(e) => {
         e.dataTransfer.setData('text/plain', request.request_id);
         setIsDragging(true);
       }}
-      onDragEnd={() => {
-        setIsDragging(false);
-      }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onDragEnd={() => setIsDragging(false)}
       onClick={() => onSelectRequest(request)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -135,78 +96,68 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
           onSelectRequest(request);
         }
       }}
-      className={`kanban-card group relative cursor-pointer rounded-[20px] border p-4 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/50 ${getPriorityStripe(
-        request.priority
-      )} ${
-        isDragging
-          ? 'border-dashed border-[var(--accent-primary)] bg-blue-50 opacity-30 shadow-none'
-          : isHighlighted
-            ? 'border-[var(--accent-primary)] bg-blue-50'
-            : 'border-[var(--border-default)] bg-[var(--surface-1)]'
+      className={`kanban-card ds-kanban-card focus:outline-none focus-visible:shadow-ds-focus ${
+        isDragging ? 'ds-kanban-card--dragging' : isHighlighted ? 'ds-kanban-card--highlight' : ''
       }`}
     >
-      {/* Top row: Client Name & Status Badge */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 truncate text-[13px] font-bold leading-snug tracking-tight text-[var(--text-primary)]">
-          {request.customer_name || 'Заказчик не указан'}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-[11px] font-bold text-accent-primary">
+            {request.request_id}
+          </span>
+          {getPriorityBadge(request.priority)}
         </div>
-        <div className="shrink-0 scale-90 origin-right">
+        <div className="origin-right scale-90 shrink-0">
           <StatusBadge status={request.status} />
         </div>
       </div>
 
-      {/* Info fields */}
-      <div className="space-y-1.5 pt-1.5">
-        {/* Request ID */}
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--accent-primary)]">
-          <i className="fas fa-hashtag text-[9px] text-blue-400" />
-          <span className="font-mono">{request.request_id}</span>
-        </div>
+      <div className="mb-2 truncate text-xs font-bold leading-snug text-ink-primary">
+        {request.customer_name || 'Заказчик не указан'}
+      </div>
 
-        {/* Vehicle */}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
         {request.vehicle_make && (
-          <div className="flex items-center gap-1.5 text-[11px] text-[#53B6FF] font-medium bg-[#182335] px-2.5 py-0.5 rounded-md w-fit border border-[#1F2D44]">
-            <i className="fas fa-car text-[10px] text-[#53B6FF]/70" />
-            <span>
+          <div className="ds-chip">
+            <Icon name="car" size={10} className="text-ink-muted" />
+            <span className="max-w-[140px] truncate">
               {request.vehicle_make} {request.vehicle_model || ''}
             </span>
           </div>
         )}
 
-        {/* Source */}
+        {partsCount > 0 && (
+          <span className="ds-chip ds-chip--accent">{partsCount} поз.</span>
+        )}
+
         {request.source && (
-          <div className="flex items-center gap-1.5 text-[11px] text-[#9AA6B2]">
-            <i className="fas fa-arrow-right-to-bracket text-[9px] text-[#5F6B78]" />
-            <span className="capitalize">{request.source}</span>
-          </div>
+          <span className="ds-chip uppercase tracking-wide">{request.source}</span>
         )}
       </div>
 
-      {/* Divider */}
-      <div className="h-px bg-white/5 my-2.5" />
-
-      {/* Footer: Date & Actions */}
-      <div className="flex items-center justify-between text-[10px] text-[#5F6B78] font-medium">
+      <div className="flex items-center justify-between border-t border-line-subtle pt-2.5 text-[10px] font-medium text-ink-muted">
         <div className="flex items-center gap-1 font-mono">
-          <i className="far fa-clock text-[9px]" />
+          <Icon name="clock" size={10} />
           <span>{formatRelativeTime(request.created_at)}</span>
         </div>
-        <div className="flex items-center gap-2">
-          {onRunPipeline && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRunPipeline(request);
-              }}
-              className="rounded-lg px-2.5 py-1 text-[10px] font-extrabold text-[#2EE6D6] bg-[#2EE6D6]/10 border border-[#2EE6D6]/30 transition-all hover:bg-[#2EE6D6]/20 focus:outline-none active:scale-95"
-              aria-label={`Запустить pipeline для ${request.request_id}`}
-            >
-              Запуск
-            </button>
-          )}
-        </div>
+
+        {onRunPipeline && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRunPipeline(request);
+            }}
+            className="inline-flex items-center gap-1 rounded-control border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-extrabold text-accent-primary transition-all hover:bg-blue-100 active:scale-95"
+            aria-label={`Запустить pipeline для ${request.request_id}`}
+          >
+            <Icon name="play" size={8} />
+            Запуск
+          </button>
+        )}
       </div>
     </div>
   );
 };
+
+export default KanbanCard;

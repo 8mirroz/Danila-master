@@ -47,3 +47,12 @@
 - При записи в TS/TSX-файлы: `npx tsc --noEmit -p tsconfig.app.json` после записи.
 - Порядок hot-patch процессов: `patch → validate → kill → start`. Никогда `kill → patch → start`.
 
+## 🌐 Multi-Worktree Dev Server Verification Rule
+When debugging hot-reload (HMR) failures or un-updated UI changes on running dev servers (e.g. Vite on port 5173):
+1. **Verify Running Process Cwd**: Run `lsof -i :<port>` and `ps aux | grep vite` (or dev server process) to check the EXACT working directory of the active process.
+2. **Worktree Sync**: If the running process is executing out of a parallel worktree (e.g., `.grok/worktrees/...`), copy/sync updated frontend components to both the main workspace and the active worktree path so HMR updates the live browser immediately.
+
+## 🎨 High-Contrast Theme & GSAP Guard Rule
+1. **No Hardcoded Single-Theme Hexes**: Do not hardcode dark mode hex colors (`#F4F7FB`, `#0D131E`) or dark glass borders (`border-white/10`) in reusable components. Use explicit dual-theme Tailwind classes (`text-slate-900 dark:text-slate-100`, `bg-slate-50/50 dark:bg-slate-900/50`).
+2. **GSAP Inline Cleanliness**: GSAP `handleMouseEnter` / `handleMouseLeave` callbacks must NEVER mutate `backgroundColor` or `borderColor` to hardcoded dark hex values on hover. Animate only transforms (`y`, `scale`) and theme-neutral shadow tokens.
+

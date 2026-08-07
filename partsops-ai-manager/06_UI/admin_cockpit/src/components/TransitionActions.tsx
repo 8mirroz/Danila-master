@@ -25,7 +25,7 @@ export const TransitionActions: React.FC<TransitionActionsProps> = ({
 
   if (allowed.length === 0) {
     return (
-      <span className="text-[11px] text-[var(--text-muted)] italic">
+      <span className="text-[11px] text-ink-muted italic">
         Нет подтверждённых действий ({status})
       </span>
     );
@@ -58,8 +58,8 @@ export const TransitionActions: React.FC<TransitionActionsProps> = ({
         {allowed.map((target) => {
           const meta = TRANSITION_META[target] || {
             label: target,
-            variant: 'secondary',
-            icon: 'fa-arrow-right',
+            variant: 'secondary' as const,
+            icon: 'arrow-right',
           };
 
           return (
@@ -68,9 +68,9 @@ export const TransitionActions: React.FC<TransitionActionsProps> = ({
               variant={meta.variant}
               disabled={loading}
               onClick={() => setActiveTarget(target)}
+              icon={meta.icon}
             >
-              <i className={`fas ${meta.icon} text-[10px]`} />
-              <span>{meta.label}</span>
+              {meta.label}
             </ActionButton>
           );
         })}

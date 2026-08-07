@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 from sqlmodel import Session, select
 
@@ -19,7 +19,7 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
     suppliers = session.exec(select(Supplier)).all()
     updated = 0
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     ninety_days_ago = now - timedelta(days=90)
 
     for supplier in suppliers:

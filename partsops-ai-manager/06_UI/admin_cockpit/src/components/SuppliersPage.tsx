@@ -277,20 +277,20 @@ export function SuppliersPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <p className="ui-eyebrow mb-1">Каталог</p>
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] md:text-[28px]">
+            <h1 className="text-2xl font-bold tracking-tight text-ink-primary md:text-[28px]">
               Поставщики
             </h1>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
+            <p className="mt-1 text-sm text-ink-muted">
               Каталог, фиды, рейтинги и журнал изменений
               {updatedLabel ? (
-                <span className="ml-2 tabular-nums text-[var(--text-muted)]">· обновлено {updatedLabel}</span>
+                <span className="ml-2 tabular-nums text-ink-muted">· обновлено {updatedLabel}</span>
               ) : null}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <div
-              className="inline-flex rounded-xl border border-[var(--border-default)] bg-[var(--surface-2)] p-1 shadow-xs"
+              className="inline-flex rounded-xl border border-line bg-surface-2 p-1 shadow-ds-sm"
               role="group"
               aria-label="Режим отображения"
             >
@@ -299,8 +299,8 @@ export function SuppliersPage() {
                 onClick={() => setViewMode('cards')}
                 className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                   viewMode === 'cards'
-                    ? 'bg-[var(--surface-1)] text-[var(--accent-primary)] shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    ? 'bg-surface-1 text-accent-primary shadow-ds-sm'
+                    : 'text-ink-secondary hover:text-ink-primary'
                 }`}
               >
                 <Icon name="grid-2" size={13} />
@@ -311,8 +311,8 @@ export function SuppliersPage() {
                 onClick={() => setViewMode('table')}
                 className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                   viewMode === 'table'
-                    ? 'bg-[var(--surface-1)] text-[var(--accent-primary)] shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    ? 'bg-surface-1 text-accent-primary shadow-ds-sm'
+                    : 'text-ink-secondary hover:text-ink-primary'
                 }`}
               >
                 <Icon name="table" size={13} />
@@ -324,7 +324,7 @@ export function SuppliersPage() {
               type="button"
               onClick={() => void fetchSuppliers()}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-primary)] hover:bg-[var(--surface-2)] transition shadow-xs disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border border-line bg-surface-1 text-ink-primary hover:bg-surface-2 transition shadow-ds-sm disabled:opacity-50"
             >
               <Icon name="arrow-rotate-right" size={13} className={loading ? 'animate-spin' : ''} />
               <span>Обновить</span>
@@ -333,7 +333,7 @@ export function SuppliersPage() {
             <button
               type="button"
               onClick={handleOpenCreate}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-xs hover:shadow-md transition-all active:scale-[0.98]"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-ds-sm hover:shadow-md transition-all active:scale-[0.98]"
             >
               <Icon name="plus" size={13} />
               <span>Добавить поставщика</span>
@@ -407,17 +407,17 @@ export function SuppliersPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold tabular-nums text-[var(--text-muted)] whitespace-nowrap hidden sm:inline">
+            <span className="text-xs font-semibold tabular-nums text-ink-muted whitespace-nowrap hidden sm:inline">
               Показано {filteredSuppliers.length} из {suppliers.length}
             </span>
 
             <button
               type="button"
               onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border ${
+              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-ds-sm border ${
                 isFiltersOpen || activeFilterChips.length > 0
-                  ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)]'
-                  : 'bg-[var(--surface-2)] text-[var(--text-primary)] border-[var(--border-default)] hover:bg-[var(--surface-1)]'
+                  ? 'bg-accent-primary text-white border-accent-primary'
+                  : 'bg-surface-2 text-ink-primary border-line hover:bg-surface-1'
               }`}
             >
               <Icon name="sliders" size={13} />
@@ -434,7 +434,7 @@ export function SuppliersPage() {
 
         {/* Collapsible Tray Panel */}
         {isFiltersOpen && (
-          <div className="mt-4 pt-4 border-t border-[var(--border-subtle)] space-y-3 animate-fadeIn">
+          <div className="mt-4 pt-4 border-t border-line-subtle space-y-3 animate-fadeIn">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
               <FilterSelect
                 label="Статус"
@@ -478,13 +478,13 @@ export function SuppliersPage() {
             </div>
 
             {activeFilterChips.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--border-subtle)]">
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line-subtle">
                 {activeFilterChips.map((chip) => (
                   <button
                     key={chip.id}
                     type="button"
                     onClick={chip.onClear}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(37,99,235,0.2)] bg-[var(--state-selected)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-primary)] transition hover:bg-[var(--state-active)]"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(37,99,235,0.2)] bg-[var(--state-selected)] px-2.5 py-1 text-[11px] font-semibold text-accent-primary transition hover:bg-[var(--state-active)]"
                   >
                     {chip.label}
                     <Icon name="x-mark" size={10} />
@@ -493,7 +493,7 @@ export function SuppliersPage() {
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="text-[11px] font-bold text-[var(--text-muted)] transition hover:text-[var(--text-primary)]"
+                  className="text-[11px] font-bold text-ink-muted transition hover:text-ink-primary"
                 >
                   Сбросить все
                 </button>
@@ -623,7 +623,7 @@ function KpiButton({
         ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
         : tone === 'danger'
           ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
-          : 'bg-slate-400';
+          : 'bg-surface-5';
 
   return (
     <button
@@ -633,20 +633,20 @@ function KpiButton({
       className={`group relative overflow-hidden rounded-2xl border p-3.5 md:p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
         selected
           ? 'border-blue-500/40 bg-blue-50/20 ring-2 ring-blue-500/20 dark:bg-blue-950/20'
-          : 'border-[var(--border-default)] bg-[var(--surface-1)] hover:border-slate-300 dark:hover:border-slate-700'
+          : 'border-line bg-surface-1 hover:border-line-strong dark:hover:border-line-strong'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
           {label}
         </span>
         <span className="flex items-center gap-1.5">
           <span className={`h-2 w-2 rounded-full ${toneDot}`} />
-          <Icon name={icon} size={15} className="text-[var(--accent-primary)] opacity-80 group-hover:opacity-100 transition-opacity" />
+          <Icon name={icon} size={15} className="text-accent-primary opacity-80 group-hover:opacity-100 transition-opacity" />
         </span>
       </div>
       <div className="mt-2 flex items-baseline justify-between">
-        <strong className="text-2xl md:text-3xl font-extrabold tracking-tight tabular-nums text-[var(--text-primary)]">
+        <strong className="text-2xl md:text-3xl font-extrabold tracking-tight tabular-nums text-ink-primary">
           {value}
         </strong>
         {selected && (
@@ -676,7 +676,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] outline-none transition-all focus:border-[var(--accent-primary)]"
+        className="w-full rounded-control border border-line bg-surface-1 px-3 py-2.5 text-xs font-semibold text-ink-primary outline-none transition-all focus:border-accent-primary"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -702,11 +702,11 @@ function SupplierTableMode({
   onArchive: (supplier: SupplierRecord) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--surface-1)] shadow-xs">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface-1 shadow-ds-sm">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="border-b border-[var(--border-default)] bg-[var(--surface-2)]/60 text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+            <tr className="border-b border-line bg-surface-2/60 text-[11px] font-bold uppercase tracking-wider text-ink-muted">
               <th scope="col" className="px-4 py-3 min-w-[220px]">Поставщик</th>
               <th scope="col" className="px-3 py-3 min-w-[130px]">Статус & Скрапер</th>
               <th scope="col" className="px-3 py-3 min-w-[160px]">Специализация</th>
@@ -740,15 +740,15 @@ function SupplierTableMode({
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div
-                        className={`flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-xl text-xs font-black ${brandMeta.avatarBg} shadow-xs`}
+                        className={`flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-xl text-xs font-black ${brandMeta.avatarBg} shadow-ds-sm`}
                       >
                         {initials}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-bold text-sm text-[var(--text-primary)] group-hover:text-blue-600 transition-colors truncate max-w-[200px]" title={supplier.name}>
+                        <div className="font-bold text-sm text-ink-primary group-hover:text-blue-600 transition-colors truncate max-w-[200px]" title={supplier.name}>
                           {supplier.name}
                         </div>
-                        <div className="text-[11px] text-[var(--text-muted)] truncate max-w-[200px]">
+                        <div className="text-[11px] text-ink-muted truncate max-w-[200px]">
                           {supplier.city || '—'} · {supplier.contact_person || 'нет контакта'}
                         </div>
                       </div>
@@ -777,13 +777,13 @@ function SupplierTableMode({
                       {categories.slice(0, 2).map((cat) => (
                         <span
                           key={cat}
-                          className="rounded-md border border-[var(--border-default)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)] truncate max-w-[110px]"
+                          className="rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-ink-secondary truncate max-w-[110px]"
                         >
                           {cat}
                         </span>
                       ))}
                       {categories.length > 2 && (
-                        <span className="text-[10px] font-bold text-[var(--text-muted)] self-center">
+                        <span className="text-[10px] font-bold text-ink-muted self-center">
                           +{categories.length - 2}
                         </span>
                       )}
@@ -806,7 +806,7 @@ function SupplierTableMode({
 
                   {/* Рейтинг */}
                   <td className="px-3 py-3 text-right whitespace-nowrap">
-                    <div className="font-extrabold text-sm tabular-nums text-[var(--text-primary)]">
+                    <div className="font-extrabold text-sm tabular-nums text-ink-primary">
                       {Math.round(supplier.reliability_score * 100)}%
                     </div>
                     {supplier.rating_manual != null && (
@@ -829,7 +829,7 @@ function SupplierTableMode({
                       <button
                         type="button"
                         onClick={() => onOpenTables(supplier)}
-                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)] text-[var(--text-secondary)] transition hover:text-blue-600"
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-line bg-surface-1 hover:bg-surface-2 text-ink-secondary transition hover:text-blue-600"
                         title="Таблицы прайсов"
                         aria-label="Таблицы прайсов"
                       >
@@ -838,7 +838,7 @@ function SupplierTableMode({
                       <button
                         type="button"
                         onClick={() => onEdit(supplier)}
-                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)] text-[var(--text-secondary)] transition hover:text-blue-600"
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-line bg-surface-1 hover:bg-surface-2 text-ink-secondary transition hover:text-blue-600"
                         title="Изменить"
                         aria-label="Изменить"
                       >

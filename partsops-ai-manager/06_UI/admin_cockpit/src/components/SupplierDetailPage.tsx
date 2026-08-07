@@ -711,15 +711,15 @@ export function SupplierDetailPage({
             </div>
             <div className="grid grid-cols-2 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-[var(--radius-control)]" />
+                <Skeleton key={i} className="h-20 w-full rounded-control" />
               ))}
             </div>
           </div>
         </div>
-        <Skeleton className="h-12 w-full rounded-[var(--radius-control)]" />
+        <Skeleton className="h-12 w-full rounded-control" />
         <div className="grid flex-1 gap-4 md:grid-cols-2">
-          <Skeleton className="h-48 w-full rounded-[var(--radius-card)]" />
-          <Skeleton className="h-48 w-full rounded-[var(--radius-card)]" />
+          <Skeleton className="h-48 w-full rounded-card" />
+          <Skeleton className="h-48 w-full rounded-card" />
         </div>
       </div>
     );
@@ -745,8 +745,8 @@ export function SupplierDetailPage({
   const initials = supplierInitials(supplier.name) || 'П';
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[var(--bg-app)]">
-      <div className="relative overflow-hidden border-b border-white/5 bg-[linear-gradient(135deg,#0b1b33_0%,#12306b_55%,#1d4ed8_145%)] p-5 text-white shadow-[var(--shadow-md)] md:p-6">
+    <div className="flex h-full flex-col overflow-hidden bg-app-bg">
+      <div className="relative overflow-hidden border-b border-white/5 bg-[linear-gradient(135deg,#0b1b33_0%,#12306b_55%,#1d4ed8_145%)] p-5 text-white shadow-ds-md md:p-6">
         <div className="pointer-events-none absolute left-[-10%] top-[-40%] h-[320px] w-[320px] rounded-full bg-blue-400/10 blur-[90px]" />
         <div className="pointer-events-none absolute bottom-[-40%] right-[-10%] h-[320px] w-[320px] rounded-full bg-indigo-400/10 blur-[90px]" />
 
@@ -755,7 +755,7 @@ export function SupplierDetailPage({
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/15"
+              className="inline-flex items-center gap-2 rounded-control border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/15"
             >
               <Icon name="arrow-left" size={12} />
               Назад к каталогу
@@ -764,7 +764,7 @@ export function SupplierDetailPage({
               <button
                 type="button"
                 onClick={() => onEditSupplier(supplier)}
-                className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/15"
+                className="inline-flex items-center gap-2 rounded-control border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/15"
               >
                 <Icon name="pencil" size={12} />
                 Редактировать
@@ -772,7 +772,7 @@ export function SupplierDetailPage({
               <button
                 type="button"
                 onClick={() => setConfirmArchive(true)}
-                className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-rose-400/30 bg-rose-500/15 px-4 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/25"
+                className="inline-flex items-center gap-2 rounded-control border border-rose-400/30 bg-rose-500/15 px-4 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/25"
               >
                 <Icon name="trash" size={12} />
                 Архивировать
@@ -828,13 +828,13 @@ export function SupplierDetailPage({
       </div>
 
       {(error || importMessage) && (
-        <div className="space-y-0 border-b border-[var(--border-default)] bg-[var(--surface-1)] px-5 pt-3 md:px-6">
+        <div className="space-y-0 border-b border-line bg-surface-1 px-5 pt-3 md:px-6">
           {error && <InlineAlert type="danger" message={error} />}
           {importMessage && <InlineAlert type="success" message={importMessage} />}
         </div>
       )}
 
-      <div className="border-b border-[var(--border-default)] bg-[var(--surface-1)] px-5 py-3 md:px-6">
+      <div className="border-b border-line bg-surface-1 px-5 py-3 md:px-6">
         <SubnavPills
           activeTab={activeTab}
           onChangeTab={(id) => setActiveTab(id as TabType)}
@@ -908,7 +908,7 @@ export function SupplierDetailPage({
               <DetailRow label="Статус" value={statusMeta.label} />
               <DetailRow label="Синхронизация" value={syncMeta.label} />
             </div>
-            <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+            <div className="mt-4 rounded-control border border-line bg-surface-2 px-4 py-3 text-sm text-ink-secondary">
               {supplier.notes_internal || 'Внутренние заметки не заполнены.'}
             </div>
           </Panel>
@@ -918,14 +918,14 @@ export function SupplierDetailPage({
           <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
             <Panel title="Таблицы поставщика">
               <div className="space-y-3">
-                <div className="space-y-4 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] p-4">
+                <div className="space-y-4 rounded-control border border-line bg-surface-2 p-4">
                   <div>
                     <label className="ui-eyebrow mb-1 block">Название таблицы</label>
                     <input
                       value={newTableName}
                       onChange={(event) => setNewTableName(event.target.value)}
                       placeholder="Например: Прайс OEM Q3"
-                      className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-4 py-2.5 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)]"
+                      className="w-full rounded-control border border-line bg-surface-1 px-4 py-2.5 text-sm text-ink-primary outline-none transition focus:border-accent-primary"
                     />
                   </div>
 
@@ -947,33 +947,33 @@ export function SupplierDetailPage({
                         onDragOver={handleDrag}
                         onDrop={handleDrop}
                         onClick={() => fileInputRef.current?.click()}
-                        className={`group relative flex cursor-pointer select-none flex-col items-center justify-center gap-2 rounded-[var(--radius-control)] border-2 border-dashed p-6 text-center transition-all duration-[var(--transition-base)] ${
+                        className={`group relative flex cursor-pointer select-none flex-col items-center justify-center gap-2 rounded-control border-2 border-dashed p-6 text-center transition-all duration-[var(--transition-base)] ${
                           dragActive
-                            ? 'scale-[1.01] border-[var(--accent-primary)] bg-[var(--state-selected)] shadow-[var(--shadow-sm)]'
-                            : 'border-[var(--border-default)] bg-[var(--surface-1)] hover:border-[var(--accent-primary)] hover:bg-[var(--surface-2)]'
+                            ? 'scale-[1.01] border-accent-primary bg-[var(--state-selected)] shadow-ds-sm'
+                            : 'border-line bg-surface-1 hover:border-accent-primary hover:bg-surface-2'
                         }`}
                       >
                         <Icon
                           name="cloud-arrow-up"
                           size={24}
                           className={`transition-colors ${
-                            dragActive ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)] group-hover:text-[var(--accent-primary)]'
+                            dragActive ? 'text-accent-primary' : 'text-ink-muted group-hover:text-accent-primary'
                           }`}
                         />
-                        <span className="text-[12px] font-bold text-[var(--text-primary)]">Перетащите файл сюда</span>
-                        <span className="text-[10px] font-medium text-[var(--text-muted)]">или кликните для выбора</span>
+                        <span className="text-[12px] font-bold text-ink-primary">Перетащите файл сюда</span>
+                        <span className="text-[10px] font-medium text-ink-muted">или кликните для выбора</span>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between gap-3 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] p-4">
+                      <div className="flex items-center justify-between gap-3 rounded-control border border-line bg-surface-1 p-4">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[rgba(37,99,235,0.2)] bg-[var(--state-selected)]">
-                            <Icon name="folder-open" size={16} className="text-[var(--accent-primary)]" />
+                            <Icon name="folder-open" size={16} className="text-accent-primary" />
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-[12px] font-bold text-[var(--text-primary)]" title={newTableFile.name}>
+                            <div className="truncate text-[12px] font-bold text-ink-primary" title={newTableFile.name}>
                               {newTableFile.name}
                             </div>
-                            <div className="text-[10px] font-semibold text-[var(--text-muted)]">
+                            <div className="text-[10px] font-semibold text-ink-muted">
                               {(newTableFile.size / 1024).toFixed(1)} KB
                             </div>
                           </div>
@@ -984,7 +984,7 @@ export function SupplierDetailPage({
                             e.stopPropagation();
                             setNewTableFile(null);
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-muted)] transition hover:text-[var(--text-primary)]"
+                          className="flex h-7 w-7 items-center justify-center rounded-[10px] border border-line bg-surface-1 text-ink-muted transition hover:text-ink-primary"
                           title="Удалить файл"
                           aria-label="Удалить файл"
                         >
@@ -1009,16 +1009,16 @@ export function SupplierDetailPage({
                     key={table.table_id}
                     type="button"
                     onClick={() => setSelectedTableId(table.table_id)}
-                    className={`w-full rounded-[var(--radius-control)] border p-3 text-left transition-all ${
+                    className={`w-full rounded-control border p-3 text-left transition-all ${
                       selectedTableId === table.table_id
                         ? 'border-[rgba(37,99,235,0.35)] bg-[var(--state-selected)] ring-2 ring-[rgba(37,99,235,0.12)]'
-                        : 'border-[var(--border-default)] bg-[var(--surface-1)] hover:border-[rgba(37,99,235,0.2)]'
+                        : 'border-line bg-surface-1 hover:border-[rgba(37,99,235,0.2)]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-bold text-[var(--text-primary)]">{table.name}</div>
-                        <div className="mt-1 text-xs text-[var(--text-muted)]">
+                        <div className="text-sm font-bold text-ink-primary">{table.name}</div>
+                        <div className="mt-1 text-xs text-ink-muted">
                           v{table.version} · {table.row_count} строк · {table.filename || table.source_type}
                         </div>
                         {Array.isArray(table.validation_summary_json.warnings) && table.validation_summary_json.warnings.length > 0 && (
@@ -1042,7 +1042,7 @@ export function SupplierDetailPage({
                           event.stopPropagation();
                           void handleActivateTable(table.table_id);
                         }}
-                        className="mt-3 rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                        className="mt-3 rounded-[10px] border border-line bg-surface-1 px-2.5 py-1.5 text-[11px] font-bold text-ink-secondary transition hover:text-ink-primary"
                       >
                         Сделать активной
                       </button>
@@ -1055,13 +1055,13 @@ export function SupplierDetailPage({
             <Panel title={selectedTable ? `Предпросмотр: ${selectedTable.name}` : 'Выберите таблицу'}>
               {selectedTable ? (
                 <>
-                  <div className="mb-4 grid gap-3 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] p-4 xl:grid-cols-[minmax(0,1.2fr)_180px_auto]">
+                  <div className="mb-4 grid gap-3 rounded-control border border-line bg-surface-2 p-4 xl:grid-cols-[minmax(0,1.2fr)_180px_auto]">
                     <label className="block">
                       <span className="ui-eyebrow mb-1 block">Название таблицы</span>
                       <input
                         value={tableEditorName}
                         onChange={(event) => setTableEditorName(event.target.value)}
-                        className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                        className="w-full rounded-control border border-line bg-surface-1 px-3 py-2 text-sm text-ink-primary outline-none focus:border-accent-primary"
                       />
                     </label>
                     <label className="block">
@@ -1069,7 +1069,7 @@ export function SupplierDetailPage({
                       <select
                         value={tableEditorStatus}
                         onChange={(event) => setTableEditorStatus(event.target.value)}
-                        className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                        className="w-full rounded-control border border-line bg-surface-1 px-3 py-2 text-sm text-ink-primary outline-none focus:border-accent-primary"
                       >
                         {TABLE_STATUS_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -1096,15 +1096,15 @@ export function SupplierDetailPage({
                     </div>
                   </div>
 
-                  <div className="mb-4 flex flex-col gap-3 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] p-4">
+                  <div className="mb-4 flex flex-col gap-3 rounded-control border border-line bg-surface-1 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-bold text-[var(--text-primary)]">Новая версия таблицы</div>
-                        <div className="text-xs text-[var(--text-muted)]">
+                        <div className="text-sm font-bold text-ink-primary">Новая версия таблицы</div>
+                        <div className="text-xs text-ink-muted">
                           Создайте версию из текущего предпросмотра или загрузите новый файл поверх выбранной.
                         </div>
                       </div>
-                      <span className="rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-bold tabular-nums text-[var(--text-secondary)]">
+                      <span className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-bold tabular-nums text-ink-secondary">
                         v{selectedTable.version}
                       </span>
                     </div>
@@ -1113,13 +1113,13 @@ export function SupplierDetailPage({
                         value={replacementVersionName}
                         onChange={(event) => setReplacementVersionName(event.target.value)}
                         placeholder="Имя новой версии"
-                        className="flex-1 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                        className="flex-1 rounded-control border border-line bg-surface-2 px-4 py-2.5 text-sm text-ink-primary outline-none focus:border-accent-primary"
                       />
                       <input
                         type="file"
                         accept=".csv,.xlsx,.json,.txt,.tsv"
                         onChange={(event) => setReplacementFile(event.target.files?.[0] ?? null)}
-                        className="block text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-control)] file:border-0 file:bg-[var(--surface-2)] file:px-3 file:py-2.5 file:font-bold file:text-[var(--text-secondary)]"
+                        className="block text-xs text-ink-secondary file:mr-3 file:rounded-control file:border-0 file:bg-surface-2 file:px-3 file:py-2.5 file:font-bold file:text-ink-secondary"
                       />
                       <Button
                         size="sm"
@@ -1160,11 +1160,11 @@ export function SupplierDetailPage({
                   {(selectedTableSummary.warnings.length > 0 ||
                     selectedTableSummary.artifactId ||
                     selectedTableSummary.replacedTableId) && (
-                    <div className="mb-4 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] p-4">
+                    <div className="mb-4 rounded-control border border-line bg-surface-2 p-4">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
-                          <div className="text-sm font-bold text-[var(--text-primary)]">Здоровье импорта</div>
-                          <div className="text-xs text-[var(--text-muted)]">
+                          <div className="text-sm font-bold text-ink-primary">Здоровье импорта</div>
+                          <div className="text-xs text-ink-muted">
                             Сводка последнего импорта и технические маркеры.
                           </div>
                         </div>
@@ -1185,17 +1185,17 @@ export function SupplierDetailPage({
                           <AlertChip key={warning} tone="amber" text={humanizeImportWarning(warning)} />
                         ))}
                         {selectedTableSummary.artifactId && (
-                          <div className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+                          <div className="rounded-control border border-line bg-surface-1 px-4 py-3 text-sm text-ink-secondary">
                             Артефакт:{' '}
-                            <span className="font-mono font-bold text-[var(--text-primary)]">
+                            <span className="font-mono font-bold text-ink-primary">
                               {selectedTableSummary.artifactId}
                             </span>
                           </div>
                         )}
                         {selectedTableSummary.replacedTableId && (
-                          <div className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+                          <div className="rounded-control border border-line bg-surface-1 px-4 py-3 text-sm text-ink-secondary">
                             Заменена таблица:{' '}
-                            <span className="font-mono font-bold text-[var(--text-primary)]">
+                            <span className="font-mono font-bold text-ink-primary">
                               {selectedTableSummary.replacedTableId}
                             </span>
                           </div>
@@ -1209,21 +1209,21 @@ export function SupplierDetailPage({
                       value={rowQuery}
                       onChange={(event) => setRowQuery(event.target.value)}
                       placeholder="Фильтр по OEM, бренду, детали"
-                      className="flex-1 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                      className="flex-1 rounded-control border border-line bg-surface-2 px-4 py-2.5 text-sm text-ink-primary outline-none focus:border-accent-primary"
                     />
-                    <div className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-2.5 text-sm font-bold tabular-nums text-[var(--text-secondary)]">
+                    <div className="rounded-control border border-line bg-surface-2 px-4 py-2.5 text-sm font-bold tabular-nums text-ink-secondary">
                       {selectedTable.row_count} строк
                     </div>
                   </div>
 
-                  <div className="mb-4 grid gap-3 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] p-4 xl:grid-cols-[minmax(0,1fr)_140px_140px_auto]">
+                  <div className="mb-4 grid gap-3 rounded-control border border-line bg-surface-2 p-4 xl:grid-cols-[minmax(0,1fr)_140px_140px_auto]">
                     <label className="block">
                       <span className="ui-eyebrow mb-1 block">Массовая категория</span>
                       <input
                         value={bulkDraft.category}
                         onChange={(event) => setBulkDraft((current) => ({ ...current, category: event.target.value }))}
                         placeholder="Например: тормоза"
-                        className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                        className="w-full rounded-control border border-line bg-surface-1 px-3 py-2 text-sm text-ink-primary outline-none focus:border-accent-primary"
                       />
                     </label>
                     <label className="block">
@@ -1235,7 +1235,7 @@ export function SupplierDetailPage({
                         }
                         type="number"
                         placeholder="4"
-                        className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-2 text-sm tabular-nums text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                        className="w-full rounded-control border border-line bg-surface-1 px-3 py-2 text-sm tabular-nums text-ink-primary outline-none focus:border-accent-primary"
                       />
                     </label>
                     <label className="block">
@@ -1245,7 +1245,7 @@ export function SupplierDetailPage({
                         onChange={(event) => setBulkDraft((current) => ({ ...current, stock_qty: event.target.value }))}
                         type="number"
                         placeholder="12"
-                        className="w-full rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-2 text-sm tabular-nums text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                        className="w-full rounded-control border border-line bg-surface-1 px-3 py-2 text-sm tabular-nums text-ink-primary outline-none focus:border-accent-primary"
                       />
                     </label>
                     <div className="flex items-end gap-2">
@@ -1269,9 +1269,9 @@ export function SupplierDetailPage({
                     </div>
                   </div>
 
-                  <div className="w-full overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--surface-1)]">
+                  <div className="w-full overflow-x-auto rounded-card border border-line bg-surface-1">
                     <table className="w-full text-left text-sm">
-                      <thead className="bg-[var(--surface-2)] text-[var(--text-muted)]">
+                      <thead className="bg-surface-2 text-ink-muted">
                         <tr>
                           <th className="px-4 py-3" scope="col">
                             <input
@@ -1304,7 +1304,7 @@ export function SupplierDetailPage({
                       <tbody className="divide-y divide-[var(--border-subtle)]">
                         {loadingRows ? (
                           <tr>
-                            <td className="px-4 py-4 text-[var(--text-muted)]" colSpan={7}>
+                            <td className="px-4 py-4 text-ink-muted" colSpan={7}>
                               Загрузка строк...
                             </td>
                           </tr>
@@ -1313,7 +1313,7 @@ export function SupplierDetailPage({
                             <tr
                               key={row.row_key}
                               onClick={() => setSelectedRow(row)}
-                              className={`cursor-pointer transition-colors hover:bg-[var(--state-hover)] ${
+                              className={`cursor-pointer transition-colors hover:bg-state-hover ${
                                 selectedRow?.row_key === row.row_key ? 'bg-[var(--state-selected)]' : ''
                               }`}
                             >
@@ -1325,15 +1325,15 @@ export function SupplierDetailPage({
                                   onChange={(event) => toggleRowSelection(row.row_key, event.target.checked)}
                                 />
                               </td>
-                              <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">{row.part_name}</td>
-                              <td className="px-4 py-3 font-mono text-xs text-[var(--text-secondary)]">
+                              <td className="px-4 py-3 font-semibold text-ink-primary">{row.part_name}</td>
+                              <td className="px-4 py-3 font-mono text-xs text-ink-secondary">
                                 {row.oem_number || '—'}
                               </td>
-                              <td className="px-4 py-3 text-[var(--text-secondary)]">{row.brand || '—'}</td>
-                              <td className="px-4 py-3 tabular-nums text-[var(--text-secondary)]">
+                              <td className="px-4 py-3 text-ink-secondary">{row.brand || '—'}</td>
+                              <td className="px-4 py-3 tabular-nums text-ink-secondary">
                                 {row.price.toLocaleString('ru-RU')} {row.currency}
                               </td>
-                              <td className="px-4 py-3 tabular-nums text-[var(--text-secondary)]">{row.stock_qty}</td>
+                              <td className="px-4 py-3 tabular-nums text-ink-secondary">{row.stock_qty}</td>
                               <td className="px-4 py-3">
                                 <RowHealthBadge warnings={getRowWarnings(row)} />
                               </td>
@@ -1341,7 +1341,7 @@ export function SupplierDetailPage({
                           ))
                         ) : (
                           <tr>
-                            <td className="px-4 py-4 text-[var(--text-muted)]" colSpan={7}>
+                            <td className="px-4 py-4 text-ink-muted" colSpan={7}>
                               В таблице пока нет строк для предпросмотра.
                             </td>
                           </tr>
@@ -1351,7 +1351,7 @@ export function SupplierDetailPage({
                   </div>
                 </>
               ) : (
-                <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] px-6 py-12 text-center text-sm text-[var(--text-muted)]">
+                <div className="rounded-card border border-dashed border-line-strong bg-surface-2 px-6 py-12 text-center text-sm text-ink-muted">
                   Слева выберите таблицу или создайте новую.
                 </div>
               )}
@@ -1421,15 +1421,15 @@ export function SupplierDetailPage({
                   >
                     Сохранить изменения строки
                   </Button>
-                  <div className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] p-4">
+                  <div className="rounded-control border border-line bg-surface-2 p-4">
                     <div className="ui-eyebrow mb-2">Сырой payload</div>
-                    <pre className="overflow-x-auto whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
+                    <pre className="overflow-x-auto whitespace-pre-wrap text-xs text-ink-secondary">
                       {JSON.stringify(selectedRow.raw_payload_json, null, 2)}
                     </pre>
                   </div>
                 </div>
               ) : (
-                <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] px-6 py-12 text-center text-sm text-[var(--text-muted)]">
+                <div className="rounded-card border border-dashed border-line-strong bg-surface-2 px-6 py-12 text-center text-sm text-ink-muted">
                   Выберите строку из предпросмотра.
                 </div>
               )}
@@ -1463,17 +1463,17 @@ export function SupplierDetailPage({
             <Panel title="Покрытие категорий">
               <div className="space-y-3">
                 {analytics.category_coverage.length === 0 && (
-                  <p className="text-sm text-[var(--text-muted)]">Нет данных по категориям.</p>
+                  <p className="text-sm text-ink-muted">Нет данных по категориям.</p>
                 )}
                 {analytics.category_coverage.map((entry) => (
                   <div key={entry.category}>
-                    <div className="mb-1 flex items-center justify-between text-xs font-semibold text-[var(--text-secondary)]">
+                    <div className="mb-1 flex items-center justify-between text-xs font-semibold text-ink-secondary">
                       <span>{entry.category}</span>
                       <span className="tabular-nums">{entry.count}</span>
                     </div>
-                    <div className="h-2 rounded-full bg-[var(--surface-3)]">
+                    <div className="h-2 rounded-full bg-surface-3">
                       <div
-                        className="h-2 rounded-full bg-[var(--accent-primary)]"
+                        className="h-2 rounded-full bg-accent-primary"
                         style={{ width: `${Math.max(8, (entry.count / Math.max(1, analytics.summary.catalog_item_count)) * 100)}%` }}
                       />
                     </div>
@@ -1487,18 +1487,18 @@ export function SupplierDetailPage({
                 {analytics.reliability_history.map((entry) => (
                   <div
                     key={`${entry.logged_at}-${entry.event_type}`}
-                    className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3"
+                    className="rounded-control border border-line bg-surface-2 px-4 py-3"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-bold tabular-nums text-[var(--text-primary)]">
+                      <span className="text-sm font-bold tabular-nums text-ink-primary">
                         {Math.round(entry.reliability_score * 100)}%
                       </span>
                       <span className="ui-eyebrow">{entry.event_type}</span>
                     </div>
-                    <div className="mt-1 text-xs text-[var(--text-muted)]">
+                    <div className="mt-1 text-xs text-ink-muted">
                       {new Date(entry.logged_at).toLocaleString('ru-RU')}
                     </div>
-                    <div className="mt-2 text-sm text-[var(--text-secondary)]">{entry.reason || '—'}</div>
+                    <div className="mt-2 text-sm text-ink-secondary">{entry.reason || '—'}</div>
                   </div>
                 ))}
               </div>
@@ -1509,15 +1509,15 @@ export function SupplierDetailPage({
                 {analytics.table_health.map((entry) => (
                   <div
                     key={entry.table_id}
-                    className="flex items-center justify-between rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3"
+                    className="flex items-center justify-between rounded-control border border-line bg-surface-2 px-4 py-3"
                   >
                     <div>
-                      <div className="text-sm font-bold text-[var(--text-primary)]">{entry.name}</div>
-                      <div className="text-xs text-[var(--text-muted)]">{entry.row_count} строк</div>
+                      <div className="text-sm font-bold text-ink-primary">{entry.name}</div>
+                      <div className="text-xs text-ink-muted">{entry.row_count} строк</div>
                     </div>
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
-                        entry.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                        entry.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-3 text-ink-secondary'
                       }`}
                     >
                       {entry.is_active ? getTableStatusLabel('active') : getTableStatusLabel(entry.status)}
@@ -1532,12 +1532,12 @@ export function SupplierDetailPage({
         {activeTab === 'logs' && (
           <Panel title="Журнал событий">
             <div className="mb-4 grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_auto]">
-              <label className="block rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3">
+              <label className="block rounded-control border border-line bg-surface-2 px-4 py-3">
                 <span className="ui-eyebrow mb-1 block">Тип события</span>
                 <select
                   value={logFilter}
                   onChange={(event) => setLogFilter(event.target.value)}
-                  className="w-full border-none bg-transparent text-sm font-semibold text-[var(--text-primary)] outline-none"
+                  className="w-full border-none bg-transparent text-sm font-semibold text-ink-primary outline-none"
                 >
                   <option value="all">Все события</option>
                   {logTypeOptions.map((eventType) => (
@@ -1547,18 +1547,18 @@ export function SupplierDetailPage({
                   ))}
                 </select>
               </label>
-              <label className="block rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3">
+              <label className="block rounded-control border border-line bg-surface-2 px-4 py-3">
                 <span className="ui-eyebrow mb-1 block">Поиск по логу</span>
                 <input
                   value={logQuery}
                   onChange={(event) => setLogQuery(event.target.value)}
                   placeholder="событие, актор, payload"
-                  className="w-full border-none bg-transparent text-sm font-semibold text-[var(--text-primary)] outline-none"
+                  className="w-full border-none bg-transparent text-sm font-semibold text-ink-primary outline-none"
                 />
               </label>
-              <div className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3">
+              <div className="rounded-control border border-line bg-surface-2 px-4 py-3">
                 <div className="ui-eyebrow">Найдено</div>
-                <div className="mt-1 text-2xl font-bold tabular-nums text-[var(--text-primary)]">{filteredLogs.length}</div>
+                <div className="mt-1 text-2xl font-bold tabular-nums text-ink-primary">{filteredLogs.length}</div>
               </div>
             </div>
             <div className="space-y-3">
@@ -1570,23 +1570,23 @@ export function SupplierDetailPage({
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className={`h-2.5 w-2.5 rounded-full ${getLogEventTone(log.event_type)}`} />
-                      <div className="text-sm font-bold text-[var(--text-primary)]">{log.event_type}</div>
+                      <div className="text-sm font-bold text-ink-primary">{log.event_type}</div>
                     </div>
-                    <div className="text-xs text-[var(--text-muted)]">
+                    <div className="text-xs text-ink-muted">
                       {new Date(log.created_at).toLocaleString('ru-RU')}
                     </div>
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-ink-muted">
                     <span>{log.actor_id}</span>
                     {log.table_id && <span className="font-mono">table {log.table_id}</span>}
                   </div>
-                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
+                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-ink-secondary">
                     {JSON.stringify(log.payload, null, 2)}
                   </pre>
                 </div>
               ))}
               {filteredLogs.length === 0 && (
-                <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] px-6 py-10 text-center text-sm text-[var(--text-muted)]">
+                <div className="rounded-card border border-dashed border-line-strong bg-surface-2 px-6 py-10 text-center text-sm text-ink-muted">
                   По текущим фильтрам события не найдены.
                 </div>
               )}
@@ -1648,7 +1648,7 @@ export function SupplierDetailPage({
                     }
                   />
                 </div>
-                <label className="block rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3">
+                <label className="block rounded-control border border-line bg-surface-2 px-4 py-3">
                   <span className="ui-eyebrow">Операционная заметка</span>
                   <textarea
                     value={settingsDraft.notes_internal}
@@ -1657,7 +1657,7 @@ export function SupplierDetailPage({
                         current ? { ...current, notes_internal: event.target.value } : current,
                       )
                     }
-                    className="mt-2 h-28 w-full resize-none border-none bg-transparent text-sm font-semibold text-[var(--text-primary)] outline-none"
+                    className="mt-2 h-28 w-full resize-none border-none bg-transparent text-sm font-semibold text-ink-primary outline-none"
                   />
                 </label>
                 <div className="flex justify-end">
@@ -1673,17 +1673,17 @@ export function SupplierDetailPage({
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] p-4">
-                  <div className="mb-3 text-sm font-bold text-[var(--text-primary)]">Ручной рейтинг</div>
+                <div className="rounded-control border border-line bg-surface-2 p-4">
+                  <div className="mb-3 text-sm font-bold text-ink-primary">Ручной рейтинг</div>
                   <div className="grid gap-3">
                     <EditableField label="Значение" value={ratingDraft} type="number" onChange={setRatingDraft} />
-                    <label className="block rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-1)] px-4 py-3">
+                    <label className="block rounded-control border border-line bg-surface-1 px-4 py-3">
                       <span className="ui-eyebrow">Причина изменения</span>
                       <textarea
                         value={ratingReason}
                         onChange={(event) => setRatingReason(event.target.value)}
                         placeholder="Например: задержки поставок"
-                        className="mt-2 h-24 w-full resize-none border-none bg-transparent text-sm font-semibold text-[var(--text-primary)] outline-none"
+                        className="mt-2 h-24 w-full resize-none border-none bg-transparent text-sm font-semibold text-ink-primary outline-none"
                       />
                     </label>
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -1704,9 +1704,9 @@ export function SupplierDetailPage({
                   </div>
                 </div>
 
-                <div className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+                <div className="rounded-control border border-line bg-surface-2 px-4 py-3 text-sm text-ink-secondary">
                   Для изменения имени, контактов и базового профиля используйте кнопку{' '}
-                  <strong className="text-[var(--text-primary)]">Редактировать</strong> в шапке карточки.
+                  <strong className="text-ink-primary">Редактировать</strong> в шапке карточки.
                 </div>
               </div>
             </div>
@@ -1733,7 +1733,7 @@ export function SupplierDetailPage({
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="panel-card-tight p-5 md:p-6">
-      <h3 className="mb-4 text-sm font-bold tracking-tight text-[var(--text-primary)] md:text-base">{title}</h3>
+      <h3 className="mb-4 text-sm font-bold tracking-tight text-ink-primary md:text-base">{title}</h3>
       {children}
     </section>
   );
@@ -1741,7 +1741,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function MetricBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[var(--radius-control)] border border-white/10 bg-white/5 p-4 transition-all duration-[var(--transition-base)] hover:border-white/20 hover:bg-white/10">
+    <div className="rounded-control border border-white/10 bg-white/5 p-4 transition-all duration-[var(--transition-base)] hover:border-white/20 hover:bg-white/10">
       <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/55">{label}</div>
       <div className="mt-1 text-2xl font-bold tabular-nums text-white">{value}</div>
     </div>
@@ -1760,17 +1760,17 @@ function DetailRow({
   linkType?: 'tel' | 'mailto';
 }) {
   return (
-    <div className="rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3 transition-shadow hover:shadow-[var(--shadow-sm)]">
+    <div className="rounded-control border border-line bg-surface-2 px-4 py-3 transition-shadow hover:shadow-ds-sm">
       <div className="ui-eyebrow">{label}</div>
       {isLink && value !== '—' ? (
         <a
           href={`${linkType}:${value}`}
-          className="mt-1 block text-sm font-semibold text-[var(--accent-primary)] hover:underline"
+          className="mt-1 block text-sm font-semibold text-accent-primary hover:underline"
         >
           {value}
         </a>
       ) : (
-        <div className="mt-1 text-sm font-semibold text-[var(--text-secondary)]">{value}</div>
+        <div className="mt-1 text-sm font-semibold text-ink-secondary">{value}</div>
       )}
     </div>
   );
@@ -1788,13 +1788,13 @@ function EditableField({
   type?: 'text' | 'number';
 }) {
   return (
-    <label className="block rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3">
+    <label className="block rounded-control border border-line bg-surface-2 px-4 py-3">
       <span className="ui-eyebrow">{label}</span>
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 w-full border-none bg-transparent text-sm font-semibold text-[var(--text-primary)] outline-none"
+        className="mt-2 w-full border-none bg-transparent text-sm font-semibold text-ink-primary outline-none"
       />
     </label>
   );
@@ -1812,12 +1812,12 @@ function SelectField({
   options: Array<{ value: string; label: string }>;
 }) {
   return (
-    <label className="block rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-3">
+    <label className="block rounded-control border border-line bg-surface-2 px-4 py-3">
       <span className="ui-eyebrow">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 w-full border-none bg-transparent text-sm font-semibold text-[var(--text-primary)] outline-none"
+        className="mt-2 w-full border-none bg-transparent text-sm font-semibold text-ink-primary outline-none"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -1836,7 +1836,7 @@ function AlertChip({ tone, text }: { tone: 'emerald' | 'amber' | 'rose'; text: s
     rose: 'border-rose-200 bg-rose-50 text-rose-700',
   };
   return (
-    <div className={`rounded-[var(--radius-control)] border px-4 py-3 text-sm font-semibold ${tones[tone]}`}>
+    <div className={`rounded-control border px-4 py-3 text-sm font-semibold ${tones[tone]}`}>
       {text}
     </div>
   );
@@ -1852,7 +1852,7 @@ function getLogEventTone(eventType: string): string {
   if (eventType.includes('created') || eventType.includes('imported') || eventType.includes('activated')) {
     return 'bg-emerald-500';
   }
-  return 'bg-slate-400';
+  return 'bg-surface-5';
 }
 
 function SummaryMetricCard({
@@ -1867,10 +1867,10 @@ function SummaryMetricCard({
   const tones = {
     emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     amber: 'border-amber-200 bg-amber-50 text-amber-700',
-    slate: 'border-[var(--border-default)] bg-[var(--surface-2)] text-[var(--text-secondary)]',
+    slate: 'border-line bg-surface-2 text-ink-secondary',
   };
   return (
-    <div className={`rounded-[var(--radius-control)] border px-4 py-3 ${tones[tone]}`}>
+    <div className={`rounded-control border px-4 py-3 ${tones[tone]}`}>
       <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-80">{label}</div>
       <div className="mt-1 text-2xl font-bold tabular-nums">{value}</div>
     </div>

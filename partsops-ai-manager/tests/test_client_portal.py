@@ -1,7 +1,7 @@
 """Tests for Client Portal MVP (Phase 9)."""
 import pytest
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlmodel import SQLModel, Session, select
 
 from database import engine
@@ -121,7 +121,7 @@ def test_public_view_rejects_expired_token():
             source="manual",
             status=RequestState.SENT_TO_CLIENT,
             tracking_token="token-expired-view",
-            tracking_token_expires_at=datetime.utcnow() - timedelta(hours=1),
+            tracking_token_expires_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1),
             customer_name="Expired Client",
         )
         session.add(req)
@@ -159,7 +159,7 @@ def test_verify_tracking_token_valid():
             source="manual",
             status=RequestState.SENT_TO_CLIENT,
             tracking_token="token-verify-ok",
-            tracking_token_expires_at=datetime.utcnow() + timedelta(hours=24),
+            tracking_token_expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=24),
             customer_name="Verify User",
         )
         session.add(req)
@@ -177,7 +177,7 @@ def test_verify_tracking_token_wrong_request_id():
             source="manual",
             status=RequestState.SENT_TO_CLIENT,
             tracking_token="token-verify-wrong-id",
-            tracking_token_expires_at=datetime.utcnow() + timedelta(hours=24),
+            tracking_token_expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=24),
             customer_name="Verify User",
         )
         session.add(req)
@@ -197,7 +197,7 @@ def test_verify_tracking_token_expired():
             source="manual",
             status=RequestState.SENT_TO_CLIENT,
             tracking_token="token-verify-expired",
-            tracking_token_expires_at=datetime.utcnow() - timedelta(hours=1),
+            tracking_token_expires_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1),
             customer_name="Verify User",
         )
         session.add(req)

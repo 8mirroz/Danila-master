@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from sqlmodel import Session, select
@@ -105,7 +105,7 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
             "deduped": True,
         }
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     subject = f"PartsOps: request {request_id} needs attention"
     body_text = _build_body(req)
 

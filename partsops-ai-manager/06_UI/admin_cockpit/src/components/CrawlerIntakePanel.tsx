@@ -313,7 +313,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
   return (
     <div className="space-y-6 animate-fadeIn select-none">
       {/* 1. Chevron Stepper Header */}
-      <div className="rounded-3xl border border-slate-200/90 bg-white p-5 shadow-xs">
+      <div className="rounded-3xl border border-line bg-surface-1 p-5 shadow-ds-sm">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
           {stepperItems.map((st, idx) => {
             const isActive = activeStep === idx;
@@ -324,14 +324,14 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                 onClick={() => setActiveStep(idx)}
                 className={`relative flex flex-col justify-between p-4 rounded-2xl text-left transition-all duration-300 ${
                   isActive
-                    ? 'bg-[#0F172A] text-white shadow-md scale-[1.01]'
+                    ? 'bg-ink-primary text-white shadow-md scale-[1.01]'
                     : isCompleted
                     ? 'bg-emerald-50/80 border border-emerald-200/80 text-emerald-950 hover:bg-emerald-100/70'
-                    : 'bg-slate-50 border border-slate-200/70 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'bg-surface-2 border border-line/70 text-ink-secondary hover:bg-surface-3 hover:text-ink-primary'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className={`text-[10px] font-black uppercase tracking-[0.16em] ${isActive ? 'text-blue-300' : isCompleted ? 'text-emerald-700' : 'text-slate-400'}`}>
+                  <span className={`text-[10px] font-black uppercase tracking-[0.16em] ${isActive ? 'text-blue-300' : isCompleted ? 'text-emerald-700' : 'text-ink-muted'}`}>
                     Шаг 0{idx + 1}
                   </span>
                   {isCompleted && (
@@ -343,7 +343,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                 <div className={`text-xs font-black truncate ${isActive ? 'text-white' : ''}`}>
                   {st.title}
                 </div>
-                <div className={`text-[10px] font-medium truncate mt-1 ${isActive ? 'text-slate-300' : isCompleted ? 'text-emerald-700' : 'text-slate-400'}`}>
+                <div className={`text-[10px] font-medium truncate mt-1 ${isActive ? 'text-ink-secondary' : isCompleted ? 'text-emerald-700' : 'text-ink-muted'}`}>
                   {st.sub}
                 </div>
               </button>
@@ -352,8 +352,8 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
         </div>
 
         {/* Step Guide Hint */}
-        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 border border-slate-200/80 px-4 py-3 text-xs text-slate-700 font-semibold">
-          <Icon name="circle-info" size={16} className="text-[#0F172A] shrink-0" />
+        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-surface-2 border border-line px-4 py-3 text-xs text-ink-secondary font-semibold">
+          <Icon name="circle-info" size={16} className="text-ink-primary shrink-0" />
           <span>
             {activeStep === 0 && 'Шаг 1: Загрузите реальный файл или вставьте спецификацию. После подтверждения система извлечёт позиции.'}
             {activeStep === 1 && 'Шаг 2: Управляйте подключенными поставщиками, проверяйте пинг API-каналов и редактируйте договора.'}
@@ -379,28 +379,28 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                 className={`relative flex flex-col items-center justify-center rounded-3xl border-2 border-dashed p-6 text-center transition-all duration-300 ${
                   dragActive
                     ? 'border-[#0F172A] bg-blue-50/50 scale-[1.01]'
-                    : 'border-slate-300 bg-slate-50/60 hover:border-slate-400 hover:bg-slate-50'
+                    : 'border-line-strong bg-surface-2/60 hover:border-line-strong hover:bg-surface-2'
                 }`}
               >
-                <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-center text-[#0F172A] mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-surface-1 border border-line shadow-ds-sm flex items-center justify-center text-ink-primary mb-3">
                   <Icon name="paperclip" size={22} />
                 </div>
-                <div className="text-xs font-black text-slate-900 mb-1">
+                <div className="text-xs font-black text-ink-primary mb-1">
                   Перетащите сюда файл с запросом (CSV, TXT, JSON, Excel)
                 </div>
-                <div className="text-[11px] font-semibold text-slate-400 mb-4">
+                <div className="text-[11px] font-semibold text-ink-muted mb-4">
                   или выберите файл на компьютере для автоматического распознавания
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border-2 border-slate-300 bg-white px-5 py-2.5 text-xs font-extrabold text-slate-800 transition hover:bg-slate-100 hover:border-slate-400 shadow-xs">
-                    <Icon name="paperclip" size={14} className="text-[#0F172A]" />
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border-2 border-line-strong bg-surface-1 px-5 py-2.5 text-xs font-extrabold text-ink-primary transition hover:bg-surface-3 hover:border-line-strong shadow-ds-sm">
+                    <Icon name="paperclip" size={14} className="text-ink-primary" />
                     Выбрать файл
                     <input className="hidden" type="file" accept=".csv,.txt,.json" onChange={handleFileChange} />
                   </label>
                   <button
                     onClick={() => triggerAutoParsing(rawText)}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-[#0F172A] px-6 py-2.5 text-xs font-black text-white transition hover:bg-[#1E293B] shadow-md active:scale-[0.98]"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-ink-primary px-6 py-2.5 text-xs font-black text-white transition hover:bg-ink-secondary shadow-md active:scale-[0.98]"
                   >
                     <Icon name="rotate" size={14} className="text-white" />
                     Распознать позиции
@@ -409,7 +409,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
 
                 {/* Preset samples */}
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Быстрый пример:</span>
+                  <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Быстрый пример:</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -443,7 +443,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
 
               {/* Text Area */}
               <div>
-                <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+                <label className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">
                   Редактирование сырого текста запроса
                 </label>
                 <textarea
@@ -451,7 +451,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   onChange={(e) => setRawText(e.target.value)}
                   rows={5}
                   placeholder="34116858047; Тормозной диск; 2&#10;OC90; Масляный фильтр; 1"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-xs text-slate-800 outline-none transition focus:border-[#0F172A] focus:bg-white focus:ring-2 focus:ring-[#0F172A]/10"
+                  className="w-full rounded-2xl border border-line bg-surface-2 p-3.5 font-mono text-xs text-ink-primary outline-none transition focus:border-[#0F172A] focus:bg-surface-1 focus:ring-2 focus:ring-[#0F172A]/10"
                 />
               </div>
 
@@ -467,7 +467,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   </div>
                   <div className="h-2 w-full rounded-full bg-blue-200 overflow-hidden">
                     <div
-                      className="h-full bg-[#0F172A] transition-all duration-300 ease-out rounded-full"
+                      className="h-full bg-ink-primary transition-all duration-300 ease-out rounded-full"
                       style={{ width: `${parseProgress}%` }}
                     />
                   </div>
@@ -481,14 +481,14 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
             {positions.length > 0 ? (
               <div className="space-y-3">
                 {positions.map((item, idx) => (
-                  <div key={`${item.part_number}-${idx}`} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-[0.8fr_1.4fr_100px] items-center">
-                    <div className="font-mono text-xs font-extrabold text-slate-900 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/80">
+                  <div key={`${item.part_number}-${idx}`} className="grid gap-3 rounded-2xl border border-line bg-surface-1 p-3 md:grid-cols-[0.8fr_1.4fr_100px] items-center">
+                    <div className="font-mono text-xs font-extrabold text-ink-primary bg-surface-2 px-3 py-2 rounded-xl border border-line">
                       {item.part_number}
                     </div>
-                    <div className="text-xs font-semibold text-slate-700 truncate">
+                    <div className="text-xs font-semibold text-ink-secondary truncate">
                       {item.description || '—'}
                     </div>
-                    <div className="text-xs font-bold text-slate-800 text-right pr-2">
+                    <div className="text-xs font-bold text-ink-primary text-right pr-2">
                       {item.quantity} шт.
                     </div>
                   </div>
@@ -496,7 +496,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                 <div className="flex justify-end pt-2">
                   <button
                     onClick={() => setActiveStep(1)}
-                    className="rounded-2xl bg-[#0F172A] px-6 py-2.5 text-xs font-black text-white transition hover:bg-[#1E293B] shadow-md flex items-center gap-2"
+                    className="rounded-2xl bg-ink-primary px-6 py-2.5 text-xs font-black text-white transition hover:bg-ink-secondary shadow-md flex items-center gap-2"
                   >
                     Перейти к выбору источников
                     <Icon name="chevron-right" size={12} />
@@ -504,7 +504,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                 </div>
               </div>
             ) : (
-              <div className="text-center p-6 text-xs font-semibold text-slate-400">
+              <div className="text-center p-6 text-xs font-semibold text-ink-muted">
                 Позиции не извлечены. Загрузите файл или вставьте спецификацию.
               </div>
             )}
@@ -518,15 +518,15 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
           {/* Browser Profile Sessions & Auth Card for 3 Suppliers */}
           <SectionCard title="Авторизация 3 ключевых скраперов (Exist, Autodoc, Rossko)" icon="lock">
             <div className="space-y-3">
-              <div className="flex justify-between items-center text-xs font-semibold text-slate-600">
-                <span>Персистентные профили браузеров хранятся в <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-bold text-slate-800">~/.partsops-browser-profiles/</code></span>
+              <div className="flex justify-between items-center text-xs font-semibold text-ink-secondary">
+                <span>Персистентные профили браузеров хранятся в <code className="font-mono bg-surface-3 px-1.5 py-0.5 rounded text-[11px] font-bold text-ink-primary">~/.partsops-browser-profiles/</code></span>
                 <button
                   type="button"
                   onClick={() => void fetchAuthStatusList()}
                   disabled={authLoading}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-800 hover:bg-slate-100 transition shadow-xs disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-line-strong bg-surface-1 px-3 py-1 text-xs font-bold text-ink-primary hover:bg-surface-3 transition shadow-ds-sm disabled:opacity-50"
                 >
-                  <Icon name="rotate" size={12} className={authLoading ? 'animate-spin text-blue-600' : 'text-slate-600'} />
+                  <Icon name="rotate" size={12} className={authLoading ? 'animate-spin text-blue-600' : 'text-ink-secondary'} />
                   Проверить сессии
                 </button>
               </div>
@@ -542,16 +542,16 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   const authDate = status?.auth_at ? new Date(status.auth_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
 
                   return (
-                    <div key={item.key} className="rounded-2xl border border-slate-200/90 bg-white p-4 space-y-2 shadow-xs">
+                    <div key={item.key} className="rounded-2xl border border-line bg-surface-1 p-4 space-y-2 shadow-ds-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-slate-900">{item.name}</span>
+                        <span className="text-xs font-black text-ink-primary">{item.name}</span>
                         <span className={`w-2.5 h-2.5 rounded-full ${hasProfile ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]' : 'bg-amber-400'}`} />
                       </div>
-                      <div className="text-[11px] font-medium text-slate-500">
+                      <div className="text-[11px] font-medium text-ink-muted">
                         {authDate ? `Авторизован: ${authDate}` : 'Сессия активна (cookie profile)'}
                       </div>
                       <div className="flex items-center justify-between text-[10px] pt-1">
-                        <span className="font-extrabold uppercase text-slate-400">Профиль:</span>
+                        <span className="font-extrabold uppercase text-ink-muted">Профиль:</span>
                         <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                           ГОТОВ K СКРАПИНГУ
                         </span>
@@ -566,9 +566,9 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
           <SectionCard title="2. Источники поставщиков" icon="wave-square">
             <div className="space-y-4">
               {/* Header Stats Bar & Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface-2 p-4">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-xs font-extrabold text-slate-900">
+                  <span className="text-xs font-extrabold text-ink-primary">
                     Активно в поиске: {activeSupplierIds.size} из {suppliers.length}
                   </span>
                   {averageSupplierDelivery != null && (
@@ -587,7 +587,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                     <button
                       type="button"
                       onClick={() => setActiveSupplierIds(new Set())}
-                      className="text-[10px] font-extrabold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-xl transition border border-slate-200"
+                      className="text-[10px] font-extrabold text-ink-secondary hover:text-ink-primary bg-surface-3 hover:bg-surface-4 px-2.5 py-1 rounded-xl transition border border-line"
                     >
                       Снять выбор
                     </button>
@@ -597,14 +597,14 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   <button
                     onClick={runPingCheck}
                     disabled={pinging}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 hover:bg-slate-100 transition shadow-xs disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-line-strong bg-surface-1 px-3 py-1.5 text-xs font-bold text-ink-primary hover:bg-surface-3 transition shadow-ds-sm disabled:opacity-50"
                   >
                     <Icon name="wave-square" size={12} className={pinging ? 'animate-spin' : 'text-emerald-600'} />
                     {pinging ? 'Проверка...' : 'Пинг API'}
                   </button>
                   <button
                     onClick={handleOpenCreateSupplier}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent-primary)] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[var(--accent-primary-strong)]"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-accent-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-ds-sm transition hover:bg-accent-strong"
                   >
                     <Icon name="plus" size={12} />
                     Новый поставщик
@@ -613,7 +613,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
               </div>
 
               {suppliersLoading && (
-                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-xs font-semibold text-slate-600">
+                <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface-1 p-5 text-xs font-semibold text-ink-secondary">
                   <Icon name="spinner" size={15} className="animate-spin text-blue-600" />
                   Загружаем live-список поставщиков…
                 </div>
@@ -628,15 +628,15 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
               {/* City Filter Chips */}
               {!suppliersLoading && !suppliersError && suppliers.length > 0 && (
                 <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Фильтр по городу:</span>
+                <span className="text-[10px] font-bold uppercase text-ink-muted">Фильтр по городу:</span>
                 {['all', 'Москва', 'Санкт-Петербург', 'Казань', 'Краснодар', 'Новосибирск'].map((city) => (
                   <button
                     key={city}
                     onClick={() => setCityFilter(city)}
                     className={`px-3 py-1 rounded-xl text-xs font-extrabold transition ${
                       cityFilter === city
-                        ? 'bg-[var(--accent-primary)] text-white shadow-xs'
-                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-accent-primary text-white shadow-ds-sm'
+                        : 'bg-surface-1 border border-line text-ink-secondary hover:bg-surface-3'
                     }`}
                   >
                     {city === 'all' ? 'Все города' : city}
@@ -647,8 +647,8 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
 
               {/* Full-width Grid of Supplier Cards */}
               {!suppliersLoading && !suppliersError && suppliers.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs text-slate-600">
-                  <p className="font-bold text-slate-900">Поставщики ещё не заведены</p>
+                <div className="rounded-2xl border border-dashed border-line-strong bg-surface-2 p-8 text-center text-xs text-ink-secondary">
+                  <p className="font-bold text-ink-primary">Поставщики ещё не заведены</p>
                   <p className="mt-1">Создайте первого поставщика или обновите live-список.</p>
                 </div>
               ) : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -666,8 +666,8 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                       onClick={() => toggleSupplierActive(supplier.supplier_id)}
                       className={`group relative flex cursor-pointer items-center justify-between rounded-2xl border p-4 transition-all duration-300 select-none ${
                         isActive
-                          ? 'border-[rgba(15,23,42,0.4)] bg-white ring-2 ring-[#0F172A]/10 shadow-md scale-[1.01]'
-                          : 'border-slate-200 bg-slate-50/60 opacity-60 hover:opacity-100 hover:bg-white'
+                          ? 'border-[rgba(15,23,42,0.4)] bg-surface-1 ring-2 ring-[#0F172A]/10 shadow-md scale-[1.01]'
+                          : 'border-line bg-surface-2/60 opacity-60 hover:opacity-100 hover:bg-surface-1'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -675,16 +675,16 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                         {isActive ? (
                           <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse shrink-0" />
                         ) : (
-                          <span className="w-3 h-3 rounded-full bg-slate-300 shrink-0" />
+                          <span className="w-3 h-3 rounded-full bg-surface-5 shrink-0" />
                         )}
 
-                        <div className="w-9 h-9 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-xs text-slate-800 shrink-0 uppercase">
+                        <div className="w-9 h-9 rounded-2xl bg-surface-3 border border-line flex items-center justify-center font-black text-xs text-ink-primary shrink-0 uppercase">
                           {initials || 'П'}
                         </div>
 
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <div className="text-xs font-black text-slate-900 truncate">
+                            <div className="text-xs font-black text-ink-primary truncate">
                               {supplier.name}
                             </div>
                             {pingResults[supplier.supplier_id] && (
@@ -693,19 +693,19 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] font-semibold text-slate-400 truncate">
+                          <div className="text-[10px] font-semibold text-ink-muted truncate">
                             {supplier.city} • {supplier.specialization}
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0 ml-2">
-                        <span className="text-[10px] font-black text-slate-700 bg-slate-100 px-2.5 py-1 rounded-xl">
+                        <span className="text-[10px] font-black text-ink-secondary bg-surface-3 px-2.5 py-1 rounded-xl">
                           {supplier.avg_delivery_days} дн.
                         </span>
                         <button
                           onClick={(e) => handleOpenEditSupplier(supplier, e)}
-                          className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-colors hover:bg-[var(--accent-primary)] hover:text-white"
+                          className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-3 text-ink-secondary transition-colors hover:bg-accent-primary hover:text-white"
                           title="Редактировать карточку поставщика"
                         >
                           <Icon name="pencil" size={13} />
@@ -719,7 +719,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
               <div className="flex justify-end pt-3">
                 <button
                   onClick={() => setActiveStep(2)}
-                  className="flex items-center gap-2 rounded-2xl bg-[var(--accent-primary)] px-6 py-2.5 text-xs font-semibold text-white shadow-md transition hover:bg-[var(--accent-primary-strong)]"
+                  className="flex items-center gap-2 rounded-2xl bg-accent-primary px-6 py-2.5 text-xs font-semibold text-white shadow-md transition hover:bg-accent-strong"
                 >
                   Перейти к валидации позиций
                   <Icon name="chevron-right" size={12} />
@@ -737,12 +737,12 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
             {positions.length ? (
               <div className="space-y-3">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-ink-muted">
                     Проверка артикулов и количеств перед ордерингом
                   </span>
                   <button
                     onClick={addEmptyPosition}
-                    className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-800 hover:bg-slate-100 shadow-xs"
+                    className="inline-flex items-center gap-1 rounded-xl border border-line-strong bg-surface-1 px-3 py-1.5 text-xs font-extrabold text-ink-primary hover:bg-surface-3 shadow-ds-sm"
                   >
                     <Icon name="plus" size={12} />
                     Добавить позицию
@@ -752,34 +752,34 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                 {positions.map((item, index) => (
                   <div
                     key={`${item.part_number}-${index}`}
-                    className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 md:grid-cols-[0.8fr_1.4fr_100px_40px] items-center shadow-xs"
+                    className="grid gap-3 rounded-2xl border border-line bg-surface-1 p-3.5 md:grid-cols-[0.8fr_1.4fr_100px_40px] items-center shadow-ds-sm"
                   >
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Артикул</label>
+                      <label className="text-[9px] font-bold uppercase text-ink-muted block mb-1">Артикул</label>
                       <input
                         value={item.part_number}
                         onChange={(event) => updatePosition(index, 'part_number', event.target.value)}
                         aria-label={`Артикул ${index + 1}`}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-900 font-extrabold outline-none focus:border-[#0F172A] focus:bg-white"
+                        className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 font-mono text-xs text-ink-primary font-extrabold outline-none focus:border-[#0F172A] focus:bg-surface-1"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Наименование / параметры</label>
+                      <label className="text-[9px] font-bold uppercase text-ink-muted block mb-1">Наименование / параметры</label>
                       <input
                         value={item.description ?? ''}
                         onChange={(event) => updatePosition(index, 'description', event.target.value)}
                         placeholder="Наименование / параметры"
                         aria-label={`Наименование ${index + 1}`}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 font-semibold outline-none focus:border-[#0F172A] focus:bg-white"
+                        className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink-primary font-semibold outline-none focus:border-[#0F172A] focus:bg-surface-1"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Кол-во</label>
+                      <label className="text-[9px] font-bold uppercase text-ink-muted block mb-1">Кол-во</label>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => updatePosition(index, 'quantity', String(Math.max(1, item.quantity - 1)))}
-                          className="w-7 h-7 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 font-black text-xs hover:bg-slate-200 active:scale-95 flex items-center justify-center shrink-0 transition"
+                          className="w-7 h-7 rounded-xl border border-line bg-surface-3 text-ink-secondary font-black text-xs hover:bg-surface-4 active:scale-95 flex items-center justify-center shrink-0 transition"
                           title="Уменьшить количество"
                         >
                           -
@@ -790,12 +790,12 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                           value={item.quantity}
                           onChange={(event) => updatePosition(index, 'quantity', event.target.value)}
                           aria-label={`Количество ${index + 1}`}
-                          className="w-full text-center rounded-xl border border-slate-200 bg-slate-50 py-1.5 text-xs font-black text-slate-900 outline-none focus:border-[#0F172A] focus:bg-white"
+                          className="w-full text-center rounded-xl border border-line bg-surface-2 py-1.5 text-xs font-black text-ink-primary outline-none focus:border-[#0F172A] focus:bg-surface-1"
                         />
                         <button
                           type="button"
                           onClick={() => updatePosition(index, 'quantity', String(item.quantity + 1))}
-                          className="w-7 h-7 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 font-black text-xs hover:bg-slate-200 active:scale-95 flex items-center justify-center shrink-0 transition"
+                          className="w-7 h-7 rounded-xl border border-line bg-surface-3 text-ink-secondary font-black text-xs hover:bg-surface-4 active:scale-95 flex items-center justify-center shrink-0 transition"
                           title="Увеличить количество"
                         >
                           +
@@ -805,7 +805,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                     <div className="flex justify-center pt-3 md:pt-0">
                       <button
                         onClick={() => deletePosition(index)}
-                        className="w-8 h-8 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors"
+                        className="w-8 h-8 rounded-xl hover:bg-rose-50 text-ink-muted hover:text-rose-600 flex items-center justify-center transition-colors"
                         title="Удалить позицию"
                       >
                         <Icon name="x-mark" size={14} />
@@ -814,11 +814,11 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                   </div>
                 ))}
 
-                <div className="flex justify-end border-t border-slate-200 pt-4">
+                <div className="flex justify-end border-t border-line pt-4">
                   <button
                     disabled={busy}
                     onClick={() => void createPackage()}
-                    className="flex items-center gap-2 rounded-2xl bg-[var(--accent-primary)] px-7 py-3 text-xs font-semibold text-white shadow-md transition-all hover:bg-[var(--accent-primary-strong)] active:scale-[0.98] disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-2xl bg-accent-primary px-7 py-3 text-xs font-semibold text-white shadow-md transition-all hover:bg-accent-strong active:scale-[0.98] disabled:opacity-50"
                   >
                     {busy && <Icon name="spinner" size={14} className="animate-spin" />}
                     {busy ? 'Создаём пакет…' : 'Сформировать пакет и запустить ИИ-сбор'}
@@ -826,7 +826,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs text-slate-500">
+              <div className="rounded-2xl border border-dashed border-line-strong bg-surface-2 p-8 text-center text-xs text-ink-muted">
                 Позиции отсутствуют. Перейдите на Шаг 1 для ввода данных.
               </div>
             )}
@@ -840,16 +840,16 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
           {/* Quality Gates & Validation Status */}
           <SectionCard title="Шлюзы контроля качества (Quality Gates & Evidence Audit)" icon="shield">
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface-2 p-4">
                 <div>
-                  <div className="text-xs font-black text-slate-900">Проверка целостности скриншотов и ценовых выбросов</div>
-                  <div className="text-[11px] font-semibold text-slate-500">Автоматический аудит по 4 шлюзам качества перед отправкой</div>
+                  <div className="text-xs font-black text-ink-primary">Проверка целостности скриншотов и ценовых выбросов</div>
+                  <div className="text-[11px] font-semibold text-ink-muted">Автоматический аудит по 4 шлюзам качества перед отправкой</div>
                 </div>
                 <button
                   type="button"
                   onClick={() => createdRequestId && void runValidation(createdRequestId)}
                   disabled={validating || !createdRequestId}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent-primary)] px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-[var(--accent-primary-strong)] disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-accent-primary px-4 py-2 text-xs font-semibold text-white shadow-ds-sm transition hover:bg-accent-strong disabled:opacity-50"
                 >
                   <Icon name="shield" size={13} className={validating ? 'animate-spin' : ''} />
                   {validating ? 'Аудит...' : 'Запустить Quality Gates'}
@@ -857,9 +857,9 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
               </div>
 
               {validationReport && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-xs">
+                <div className="rounded-2xl border border-line bg-surface-1 p-4 space-y-3 shadow-ds-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-900">Итоговый вердикт пакета:</span>
+                    <span className="text-xs font-black text-ink-primary">Итоговый вердикт пакета:</span>
                     <span className={`text-xs font-extrabold px-3 py-1 rounded-full ${validationReport.overall_passed ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-300'}`}>
                       {validationReport.overall_passed ? '✓ Валидация пройдена (0 критических ошибок)' : '⚠ Требует внимания оператора'}
                     </span>
@@ -875,8 +875,8 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                       const gateData = validationReport.gates?.find((item: any) => item.gate_name === g.gate);
                       const passed = gateData ? gateData.passed : true;
                       return (
-                        <div key={g.gate} className="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-left">
-                          <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">{g.title}</div>
+                        <div key={g.gate} className="rounded-xl border border-line bg-surface-2 p-3 text-left">
+                          <div className="text-[10px] font-extrabold text-ink-muted uppercase tracking-wider">{g.title}</div>
                           <div className="flex items-center gap-1.5 mt-1 font-bold text-xs">
                             <span className={`w-2 h-2 rounded-full ${passed ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                             <span className={passed ? 'text-emerald-950' : 'text-amber-950'}>
@@ -906,14 +906,14 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
 
               {/* Mode Selector Tabs */}
               <div className="pt-2 max-w-lg mx-auto">
-                <div className="flex items-center justify-center p-1 rounded-2xl bg-slate-200/80 border border-slate-300">
+                <div className="flex items-center justify-center p-1 rounded-2xl bg-surface-4/80 border border-line-strong">
                   <button
                     type="button"
                     onClick={() => setExportMode('light')}
                     className={`flex-1 py-2 px-4 rounded-xl text-xs font-extrabold transition ${
                       exportMode === 'light'
-                        ? 'bg-[var(--accent-primary)] text-white shadow-xs'
-                        : 'text-slate-700 hover:text-slate-900'
+                        ? 'bg-accent-primary text-white shadow-ds-sm'
+                        : 'text-ink-secondary hover:text-ink-primary'
                     }`}
                   >
                     Light (для клиента без скриншотов)
@@ -923,8 +923,8 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                     onClick={() => setExportMode('full')}
                     className={`flex-1 py-2 px-4 rounded-xl text-xs font-extrabold transition ${
                       exportMode === 'full'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-700 hover:text-slate-900'
+                        ? 'bg-emerald-600 text-white shadow-ds-sm'
+                        : 'text-ink-secondary hover:text-ink-primary'
                     }`}
                   >
                     Full (со скриншотами и доказательствами)
@@ -935,7 +935,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
               <div className="pt-2 space-y-3">
                 {exportMode === 'light' ? (
                   <div className="space-y-2 animate-fadeIn">
-                    <p className="text-[11px] font-semibold text-slate-600">Оптимизирован для отправки заказчику. Содержит наилучшие цены и сроки без тяжелых скриншотов.</p>
+                    <p className="text-[11px] font-semibold text-ink-secondary">Оптимизирован для отправки заказчику. Содержит наилучшие цены и сроки без тяжелых скриншотов.</p>
                     <div className="flex justify-center">
                       <button
                         onClick={() => {
@@ -944,7 +944,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                           window.open(`/api/contracts/${createdRequestId}/export-custom-excel?suppliers=${suppliersParam}&mode=simple`, '_blank');
                         }}
                         disabled={!createdRequestId}
-                        className="flex items-center gap-2 rounded-2xl bg-[var(--accent-primary)] px-7 py-3 text-xs font-semibold text-white shadow-md transition hover:bg-[var(--accent-primary-strong)] disabled:opacity-50"
+                        className="flex items-center gap-2 rounded-2xl bg-accent-primary px-7 py-3 text-xs font-semibold text-white shadow-md transition hover:bg-accent-strong disabled:opacity-50"
                       >
                         <Icon name="file-export" size={14} className="text-white" />
                         Скачать спецификацию для клиента (.xlsx)
@@ -973,9 +973,9 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                           window.open(`/api/contracts/${createdRequestId}/export-evidence-pack`, '_blank');
                         }}
                         disabled={!createdRequestId}
-                        className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-xs font-bold text-slate-800 hover:bg-slate-50 transition shadow-xs flex items-center gap-2 disabled:opacity-50"
+                        className="rounded-2xl border border-line-strong bg-surface-1 px-6 py-3 text-xs font-bold text-ink-primary hover:bg-surface-2 transition shadow-ds-sm flex items-center gap-2 disabled:opacity-50"
                       >
-                        <Icon name="box-archive" size={14} className="text-slate-600" />
+                        <Icon name="box-archive" size={14} className="text-ink-secondary" />
                         Скачать ZIP-архив скриншотов
                       </button>
                     </div>
@@ -988,7 +988,7 @@ export const CrawlerIntakePanel: React.FC<Props> = ({ onCreated }) => {
                       setCreatedRequestId(null);
                       setActiveStep(0);
                     }}
-                    className="rounded-2xl border border-slate-300 bg-white px-6 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition shadow-xs"
+                    className="rounded-2xl border border-line-strong bg-surface-1 px-6 py-2.5 text-xs font-bold text-ink-secondary hover:bg-surface-3 transition shadow-ds-sm"
                   >
                     Создать новый запрос
                   </button>

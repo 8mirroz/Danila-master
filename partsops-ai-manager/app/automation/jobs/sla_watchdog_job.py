@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 from sqlmodel import Session, select
 
@@ -16,7 +16,7 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
     if context.dry_run:
         return {"ok": True, "dry_run": True}
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     five_min_ago = (now - timedelta(minutes=5)).isoformat()
     two_hours_ago = (now - timedelta(hours=2)).isoformat()
 

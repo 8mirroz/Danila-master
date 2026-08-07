@@ -595,6 +595,193 @@
     padding: var(--space-3);
   }
 
+  /* ===== Canonical form / control surfaces (use across all pages) ===== */
+  .ds-input {
+    width: 100%;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border-default);
+    background: var(--surface-2);
+    padding: 0.625rem 0.875rem;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base);
+  }
+
+  .ds-input::placeholder {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .ds-input:hover {
+    border-color: var(--border-strong);
+  }
+
+  .ds-input:focus {
+    border-color: var(--accent-primary);
+    background: var(--surface-1);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+
+  .ds-input:disabled {
+    background: var(--state-disabled);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  .ds-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-default);
+    background: var(--surface-2);
+    padding: 0.125rem 0.5rem;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  .ds-chip--accent {
+    border-color: rgba(37, 99, 235, 0.25);
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--accent-primary);
+  }
+
+  .ds-segmented {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border-default);
+    background: var(--surface-3);
+    padding: 0.2rem;
+  }
+
+  .ds-segmented__item {
+    border-radius: calc(var(--radius-control) - 2px);
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 0.4rem 0.75rem;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    transition: all var(--transition-base);
+  }
+
+  .ds-segmented__item:hover {
+    color: var(--text-primary);
+    background: var(--state-hover);
+  }
+
+  .ds-segmented__item--active {
+    background: var(--surface-1);
+    color: var(--accent-primary);
+    border-color: var(--border-default);
+    box-shadow: var(--shadow-sm);
+    font-weight: 700;
+  }
+
+  .ds-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(11, 27, 51, 0.48);
+    backdrop-filter: blur(6px);
+  }
+
+  .ds-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-radius: var(--radius-control);
+    border: 2px dashed var(--border-default);
+    background: var(--surface-2);
+    padding: 2rem 1.25rem;
+    color: var(--text-muted);
+  }
+
+  .ds-empty__icon {
+    display: flex;
+    height: 2.25rem;
+    width: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid var(--border-default);
+    background: var(--surface-3);
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .ds-empty__title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+
+  .ds-empty__hint {
+    margin-top: 0.125rem;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .ds-kanban-column {
+    display: flex;
+    min-height: 520px;
+    flex-direction: column;
+    border-radius: 1rem;
+    border: 1px solid var(--border-default);
+    background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-base), border-color var(--transition-base), background-color var(--transition-base);
+  }
+
+  .ds-kanban-column--drop {
+    border-color: var(--accent-primary);
+    background: var(--state-selected);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.28);
+  }
+
+  .ds-kanban-card {
+    position: relative;
+    cursor: pointer;
+    border-radius: 0.75rem;
+    border: 1px solid var(--border-default);
+    background: var(--surface-1);
+    padding: 0.875rem;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  }
+
+  .ds-kanban-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .ds-kanban-card--dragging {
+    opacity: 0.4;
+    border-style: dashed;
+    border-color: var(--accent-primary);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .ds-kanban-card--highlight {
+    border-color: var(--accent-primary);
+    background: var(--state-selected);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18), var(--shadow-md);
+  }
+
   .tray-shell-left {
     border-radius: 30px;
     border: 1px solid rgba(255, 255, 255, 0.1);

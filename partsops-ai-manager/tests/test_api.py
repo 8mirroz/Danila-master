@@ -685,6 +685,78 @@ def test_invoice_requires_approval():
     assert resp2.status_code == 422
 
 
+def test_operator_invoice_draft_without_pre_stamped_quotation():
+    """Operator cockpit path: APPROVED + selected offers, no prior Q-ref / margin stamp.
+
+    generate_invoice must recompute pricing, stamp margin_policy_passed, assign
+    Q-DRAFT-*, and produce INVOICE_DRAFTED (see RequestService.generate_invoice).
+    """
+    payload = {
+        "source": "TEST_MOCK",
+        "text": "Нужны тормозные колодки на BMW X5",
+        "customer_name": "Operator Invoice Draft",
+    }
+    resp = client.post("/api/requests", json=payload)
+    assert resp.status_code == 200
+    request_id = resp.json()["request"]["request_id"]
+
+    transition_path = [
+        "MATCHING",
+        "SUPPLIER_SEARCH",
+        "OFFER_RANKING",
+        "PRICING_REVIEW",
+        "READY_FOR_APPROVAL",
+        "APPROVED",
+    ]
+    for target_state in transition_path:
+        step_response = client.post(
+            f"/api/requests/{request_id}/transition",
+            json={"target_state": target_state, "reason": f"test {target_state}"},
+            headers={"X-User-Role": "finance"} if target_state == "APPROVED" else {"X-User-Role": "admin"},
+        )
+        assert step_response.status_code == 200, step_response.text
+
+    with Session(engine) as session:
+        request = session.exec(select(PartRequest).where(PartRequest.request_id == request_id)).one()
+        # Explicitly clear pre-stamps that production agent pipeline may set.
+        request.margin_policy_passed = None
+        request.erp_quotation_ref = None
+        # Keep minimal pricing_evidence so optional reads don't NPE; invoice path recomputes.
+        request.pricing_evidence_json = None
+        parts = json.loads(request.parts_json or "[]")
+        request.match_evidence_json = json.dumps({
+            part["name"]: {
+                "item": {
+                    "catalog_id": (part.get("best_match") or {}).get("catalog_id") or "CAT-001",
+                    "price": (part.get("best_match") or {}).get("price") or 1000,
+                },
+                "supplier_id": (part.get("supplier") or {}).get("supplier_id") or "SUP-001",
+            }
+            for part in parts
+            if isinstance(part, dict) and part.get("name")
+        })
+        session.add(request)
+        session.commit()
+
+    invoice_resp = client.post(
+        f"/api/requests/{request_id}/actions/create_invoice",
+        json={},
+        headers={"X-User-Role": "admin"},
+    )
+    assert invoice_resp.status_code == 200, invoice_resp.text
+    body = invoice_resp.json()
+    assert body["request"]["status"] == "INVOICE_DRAFTED"
+
+    with Session(engine) as session:
+        request = session.exec(select(PartRequest).where(PartRequest.request_id == request_id)).one()
+        assert request.margin_policy_passed is True
+        assert request.erp_quotation_ref is not None
+        assert str(request.erp_quotation_ref).startswith("Q-DRAFT-")
+        assert request.erp_invoice_ref
+        evidence = json.loads(request.pricing_evidence_json or "{}")
+        assert evidence.get("approved_offer_snapshot")
+
+
 def test_tenant_isolation_for_requests_and_invoices():
     payload_a = {
         "source": "TEST_MOCK",

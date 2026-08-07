@@ -63,7 +63,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                 onSelectSupplier(s);
               }
             }}
-            className="group relative flex min-h-[260px] cursor-pointer flex-col overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--surface-1)] p-5 shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/40 hover:shadow-md focus-visible:outline-none"
+            className="group relative flex min-h-[260px] cursor-pointer flex-col overflow-hidden rounded-2xl border border-line bg-surface-1 p-5 shadow-ds-sm transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/40 hover:shadow-md focus-visible:outline-none"
           >
             {/* Top accent line */}
             <div
@@ -89,7 +89,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
 
               <div className="flex items-center gap-1.5 text-right">
                 {renderStars(s.reliability_score)}
-                <span className="text-xs font-bold tabular-nums text-[var(--text-primary)]">
+                <span className="text-xs font-bold tabular-nums text-ink-primary">
                   {Math.round(s.reliability_score * 100)}%
                 </span>
               </div>
@@ -98,16 +98,16 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
             {/* Main info row */}
             <div className="mb-3.5 flex items-start gap-3">
               <div
-                className={`flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-xl text-sm ${brandMeta.avatarBg} shadow-xs`}
+                className={`flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-xl text-sm ${brandMeta.avatarBg} shadow-ds-sm`}
               >
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="mb-0.5 line-clamp-1 text-base font-bold leading-tight text-[var(--text-primary)] group-hover:text-blue-600 transition-colors">
+                <h3 className="mb-0.5 line-clamp-1 text-base font-bold leading-tight text-ink-primary group-hover:text-blue-600 transition-colors">
                   {s.name}
                 </h3>
-                <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-                  <Icon name="location-dot" size={11} className="shrink-0 text-slate-400" />
+                <div className="flex items-center gap-1.5 text-xs text-ink-muted">
+                  <Icon name="location-dot" size={11} className="shrink-0 text-ink-muted" />
                   <span className="truncate">
                     {s.city || '—'}
                     {s.specialization ? ` · ${s.specialization}` : ''}
@@ -118,7 +118,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
 
             {/* Badges strip */}
             <div className="mb-3 flex flex-wrap gap-1.5">
-              <span className="rounded-lg bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-bold text-[var(--text-secondary)]">
+              <span className="rounded-lg bg-surface-2 px-2.5 py-1 text-[11px] font-bold text-ink-secondary">
                 {s.active_table_count}/{s.table_count} таблиц
               </span>
               <span className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${syncMeta.pillClass}`}>
@@ -134,21 +134,21 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
               {categories.slice(0, 3).map((spec) => (
                 <span
                   key={spec}
-                  className="rounded-md border border-[var(--border-default)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]"
+                  className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[10px] font-semibold text-ink-secondary"
                 >
                   {spec}
                 </span>
               ))}
               {categories.length > 3 && (
-                <span className="self-center pl-1 text-[10px] font-bold text-[var(--text-muted)]">
+                <span className="self-center pl-1 text-[10px] font-bold text-ink-muted">
                   +{categories.length - 3}
                 </span>
               )}
             </div>
 
             {/* Contacts & Notes */}
-            <div className="mt-auto border-t border-[var(--border-subtle)] pt-3 pb-2 text-xs">
-              <div className="flex items-center justify-between gap-2 text-[var(--text-muted)]">
+            <div className="mt-auto border-t border-line-subtle pt-3 pb-2 text-xs">
+              <div className="flex items-center justify-between gap-2 text-ink-muted">
                 <span className="truncate font-medium">
                   {s.contact_person || 'Отдел продаж'}
                 </span>
@@ -157,7 +157,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                     <a
                       href={`tel:${s.phone}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="p-1 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-blue-600 transition"
+                      className="p-1 rounded-md hover:bg-surface-2 text-ink-muted hover:text-blue-600 transition"
                       title={`Позвонить: ${s.phone}`}
                     >
                       <Icon name="phone" size={12} />
@@ -167,7 +167,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
                     <a
                       href={`mailto:${s.email}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="p-1 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-blue-600 transition"
+                      className="p-1 rounded-md hover:bg-surface-2 text-ink-muted hover:text-blue-600 transition"
                       title={`Написать: ${s.email}`}
                     >
                       <Icon name="envelope" size={12} />
@@ -179,7 +179,7 @@ export const SupplierCards: React.FC<SupplierCardsProps> = ({
 
             {/* Actions bar */}
             <div
-              className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3"
+              className="flex items-center justify-between gap-2 border-t border-line-subtle pt-3"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-1.5">

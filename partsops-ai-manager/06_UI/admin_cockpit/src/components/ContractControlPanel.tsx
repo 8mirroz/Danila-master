@@ -13,7 +13,7 @@ import type {
   ContractControlRequirement,
   ContractPositionDetail,
 } from '../lib/api';
-import { EmptyState, InlineAlert, SectionCard } from './Primitives';
+import { EmptyState, InlineAlert, SectionCard, Icon } from './Primitives';
 
 type ContractControlPanelProps = {
   requestId: string | null;
@@ -27,22 +27,22 @@ const statusClasses: Record<string, string> = {
   Conflict: 'bg-red-50 text-red-700 border-red-200',
   open: 'bg-rose-50 text-rose-700 border-rose-200',
   closed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  accepted: 'bg-slate-50 text-slate-700 border-slate-200',
+  accepted: 'bg-surface-2 text-ink-secondary border-line',
 };
 
 function MetricTile({ label, value, support }: { label: string; value: string; support: string }) {
   return (
-    <div className="border border-[var(--border-subtle)] rounded-md bg-[var(--surface-2)] p-3 min-h-20">
-      <div className="text-[10px] uppercase tracking-normal text-[var(--text-muted)] font-bold">{label}</div>
-      <div className="mt-2 text-xl font-black text-[var(--text-primary)] tabular-nums">{value}</div>
-      <div className="mt-1 text-[10px] text-[var(--text-secondary)] leading-snug">{support}</div>
+    <div className="border border-line-subtle rounded-md bg-surface-2 p-3 min-h-20">
+      <div className="text-[10px] uppercase tracking-normal text-ink-muted font-bold">{label}</div>
+      <div className="mt-2 text-xl font-black text-ink-primary tabular-nums">{value}</div>
+      <div className="mt-1 text-[10px] text-ink-secondary leading-snug">{support}</div>
     </div>
   );
 }
 
 function Badge({ value }: { value: string }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-extrabold ${statusClasses[value] ?? 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-extrabold ${statusClasses[value] ?? 'bg-surface-2 text-ink-secondary border-line'}`}>
       {value}
     </span>
   );
@@ -51,13 +51,13 @@ function Badge({ value }: { value: string }) {
 function RequirementRow({ requirement }: { requirement: ContractControlRequirement }) {
   const coverage = requirement.coverage;
   return (
-    <tr className="border-b border-[var(--border-subtle)] align-top">
-      <td className="py-2 pr-3 font-mono text-[10px] text-[var(--text-secondary)]">{requirement.clause}</td>
+    <tr className="border-b border-line-subtle align-top">
+      <td className="py-2 pr-3 font-mono text-[10px] text-ink-secondary">{requirement.clause}</td>
       <td className="py-2 pr-3">
-        <div className="text-xs font-bold text-[var(--text-primary)] leading-snug">{requirement.summary}</div>
-        <div className="mt-1 text-[10px] text-[var(--text-muted)]">{requirement.implementation_element}</div>
+        <div className="text-xs font-bold text-ink-primary leading-snug">{requirement.summary}</div>
+        <div className="mt-1 text-[10px] text-ink-muted">{requirement.implementation_element}</div>
       </td>
-      <td className="py-2 pr-3 text-[10px] text-[var(--text-secondary)]">{requirement.object_scope}</td>
+      <td className="py-2 pr-3 text-[10px] text-ink-secondary">{requirement.object_scope}</td>
       <td className="py-2 pr-3"><Badge value={requirement.coverage_status} /></td>
       <td className="py-2">
         <div className="grid grid-cols-3 gap-1 min-w-36">
@@ -73,7 +73,7 @@ function RequirementRow({ requirement }: { requirement: ContractControlRequireme
               key={String(label)}
               title={String(label)}
               className={`h-5 rounded border flex items-center justify-center text-[9px] font-black ${
-                ok ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-400'
+                ok ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-surface-2 border-line text-ink-muted'
               }`}
             >
               {label}
@@ -87,20 +87,20 @@ function RequirementRow({ requirement }: { requirement: ContractControlRequireme
 
 function GapRow({ gap }: { gap: ContractControlGap }) {
   return (
-    <div className="border border-[var(--border-default)] rounded-md p-3 bg-[var(--surface-2)]">
+    <div className="border border-line rounded-md p-3 bg-surface-2">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-mono text-[10px] text-[var(--text-muted)]">{gap.gap_id}</div>
-          <div className="text-xs font-bold text-[var(--text-primary)] mt-1 leading-snug">{gap.description}</div>
+          <div className="font-mono text-[10px] text-ink-muted">{gap.gap_id}</div>
+          <div className="text-xs font-bold text-ink-primary mt-1 leading-snug">{gap.description}</div>
         </div>
         <Badge value={gap.status} />
       </div>
-      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-[var(--text-secondary)]">
-        <span className="px-2 py-0.5 border border-[var(--border-subtle)] rounded">{gap.category}</span>
-        <span className="px-2 py-0.5 border border-[var(--border-subtle)] rounded">{gap.risk}</span>
-        <span className="px-2 py-0.5 border border-[var(--border-subtle)] rounded">{gap.priority}</span>
+      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-ink-secondary">
+        <span className="px-2 py-0.5 border border-line-subtle rounded">{gap.category}</span>
+        <span className="px-2 py-0.5 border border-line-subtle rounded">{gap.risk}</span>
+        <span className="px-2 py-0.5 border border-line-subtle rounded">{gap.priority}</span>
       </div>
-      <p className="mt-2 text-[10px] text-[var(--text-muted)] leading-relaxed">{gap.closure_criteria}</p>
+      <p className="mt-2 text-[10px] text-ink-muted leading-relaxed">{gap.closure_criteria}</p>
     </div>
   );
 }
@@ -168,22 +168,22 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
       <EmptyState
         title="Запрос не выбран"
         description="Выберите contract request, чтобы увидеть аудит требований, матрицу покрытия, gaps и ADR."
-        icon="fa-file-shield"
+        icon="file-shield"
       />
     );
   }
 
   if (loading && !data) {
     return (
-      <SectionCard title="Договорный контроль" icon="fa-file-shield">
-        <div className="text-xs text-[var(--text-secondary)]">Загрузка матрицы покрытия...</div>
+      <SectionCard title="Договорный контроль" icon="file-shield">
+        <div className="text-xs text-ink-secondary">Загрузка матрицы покрытия...</div>
       </SectionCard>
     );
   }
 
   if (error) {
     return (
-      <SectionCard title="Договорный контроль" icon="fa-file-shield">
+      <SectionCard title="Договорный контроль" icon="file-shield">
         <InlineAlert type="danger" message={error} />
       </SectionCard>
     );
@@ -252,29 +252,29 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SectionCard title="Аудит" icon="fa-magnifying-glass-chart">
-          <div className="text-2xl font-black text-[var(--text-primary)]">{data.audits.length}</div>
-          <div className="text-[10px] text-[var(--text-secondary)] mt-1">audit run</div>
+        <SectionCard title="Аудит" icon="magnifying-glass-chart">
+          <div className="text-2xl font-black text-ink-primary">{data.audits.length}</div>
+          <div className="text-[10px] text-ink-secondary mt-1">audit run</div>
         </SectionCard>
-        <SectionCard title="Покрытие" icon="fa-list-check">
-          <div className="text-2xl font-black text-[var(--text-primary)]">{coveredCount}/{data.requirements.length}</div>
-          <div className="text-[10px] text-[var(--text-secondary)] mt-1">требований закрыто</div>
+        <SectionCard title="Покрытие" icon="list-check">
+          <div className="text-2xl font-black text-ink-primary">{coveredCount}/{data.requirements.length}</div>
+          <div className="text-[10px] text-ink-secondary mt-1">требований закрыто</div>
         </SectionCard>
-        <SectionCard title="Открытые gaps" icon="fa-triangle-exclamation">
-          <div className="text-2xl font-black text-[var(--text-primary)]">{openGaps.length}</div>
-          <div className="text-[10px] text-[var(--text-secondary)] mt-1">блокировки и контроль</div>
+        <SectionCard title="Открытые gaps" icon="triangle-exclamation">
+          <div className="text-2xl font-black text-ink-primary">{openGaps.length}</div>
+          <div className="text-[10px] text-ink-secondary mt-1">блокировки и контроль</div>
         </SectionCard>
-        <SectionCard title="Закупочный lock" icon="fa-lock">
-          <div className="text-sm font-black text-[var(--text-primary)]">
+        <SectionCard title="Закупочный lock" icon="lock">
+          <div className="text-sm font-black text-ink-primary">
             {data.purchase_authorizations.length ? 'Разрешена' : 'Заблокирована'}
           </div>
-          <div className="text-[10px] text-[var(--text-secondary)] mt-1">
+          <div className="text-[10px] text-ink-secondary mt-1">
             approvals: {data.client_approvals.length}
           </div>
         </SectionCard>
       </div>
 
-      <SectionCard title="Метрики договора" icon="fa-gauge-high">
+      <SectionCard title="Метрики договора" icon="gauge-high">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <MetricTile
             label="Quality"
@@ -319,11 +319,11 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
         </div>
       </SectionCard>
 
-      <SectionCard title="Workflow v2" icon="fa-route">
+      <SectionCard title="Workflow v2" icon="route">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <div className="font-mono text-xs font-black text-[var(--text-primary)]">{data.workflow.current_stage}</div>
-            <div className="text-[10px] text-[var(--text-secondary)] mt-1">
+            <div className="font-mono text-xs font-black text-ink-primary">{data.workflow.current_stage}</div>
+            <div className="text-[10px] text-ink-secondary mt-1">
               stage {data.workflow.current_stage_index + 1} / {data.workflow.stages.length}
             </div>
           </div>
@@ -342,7 +342,7 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
               className={`h-7 rounded border flex items-center justify-center font-mono text-[9px] font-black ${
                 index <= data.workflow.current_stage_index
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                  : 'bg-slate-50 border-slate-200 text-slate-400'
+                  : 'bg-surface-2 border-line text-ink-muted'
               }`}
             >
               {String(index).padStart(2, '0')}
@@ -351,10 +351,10 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
         </div>
         <div className="mt-4 space-y-2 max-h-52 overflow-y-auto">
           {data.workflow.events.slice(-8).reverse().map((event) => (
-            <div key={event.workflow_event_id} className="flex items-start justify-between gap-3 border border-[var(--border-subtle)] rounded-md p-2 bg-[var(--surface-2)]">
+            <div key={event.workflow_event_id} className="flex items-start justify-between gap-3 border border-line-subtle rounded-md p-2 bg-surface-2">
               <div>
-                <div className="font-mono text-[10px] text-[var(--text-primary)]">{event.to_stage}</div>
-                <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">{event.reason}</div>
+                <div className="font-mono text-[10px] text-ink-primary">{event.to_stage}</div>
+                <div className="text-[10px] text-ink-secondary mt-0.5">{event.reason}</div>
                 {event.violations.length > 0 && (
                   <div className="text-[10px] text-rose-700 mt-1">{event.violations.join('; ')}</div>
                 )}
@@ -374,7 +374,7 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
 
       {actionError && <InlineAlert type="danger" message={actionError} />}
 
-      <SectionCard title="OEM / Analog candidates" icon="fa-sitemap">
+      <SectionCard title="OEM / Analog candidates" icon="sitemap">
         <div className="space-y-3">
           {positions.map((position) => {
             const candidateState = candidatesByPosition[position.position_id];
@@ -382,23 +382,23 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
             const approvedAnalogs = candidateState?.analog_candidates.filter((candidate) => candidate.manual_review_status === 'approved') ?? [];
             const saving = savingPositionId === position.position_id;
             return (
-              <div key={position.position_id} className="border border-[var(--border-default)] rounded-md bg-[var(--surface-2)] p-3">
+              <div key={position.position_id} className="border border-line rounded-md bg-surface-2 p-3">
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
                   <div>
-                    <div className="font-mono text-[10px] text-[var(--text-muted)]">#{position.line_no} {position.position_id}</div>
-                    <div className="text-sm font-black text-[var(--text-primary)] mt-1">{position.part_number}</div>
-                    <div className="text-[10px] text-[var(--text-secondary)] mt-1">{position.description || 'Без описания'} · qty {position.quantity}</div>
+                    <div className="font-mono text-[10px] text-ink-muted">#{position.line_no} {position.position_id}</div>
+                    <div className="text-sm font-black text-ink-primary mt-1">{position.part_number}</div>
+                    <div className="text-[10px] text-ink-secondary mt-1">{position.description || 'Без описания'} · qty {position.quantity}</div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Badge value={verifiedOems.length ? 'closed' : 'open'} />
-                    <span className="text-[10px] text-[var(--text-secondary)]">OEM {verifiedOems.length}</span>
-                    <span className="text-[10px] text-[var(--text-secondary)]">Analog {approvedAnalogs.length}</span>
+                    <span className="text-[10px] text-ink-secondary">OEM {verifiedOems.length}</span>
+                    <span className="text-[10px] text-ink-secondary">Analog {approvedAnalogs.length}</span>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <div className="flex gap-2">
                     <input
-                      className="min-w-0 flex-1 border border-[var(--border-default)] rounded-md bg-[var(--surface-1)] px-3 py-2 text-xs"
+                      className="min-w-0 flex-1 border border-line rounded-md bg-surface-1 px-3 py-2 text-xs"
                       value={oemInputs[position.position_id] ?? ''}
                       placeholder={`OEM ${position.part_number}`}
                       onChange={(event) => setOemInputs((prev) => ({ ...prev, [position.position_id]: event.target.value }))}
@@ -409,13 +409,13 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
                       onClick={() => void submitOem(position)}
                       className="px-3 py-2 rounded-md bg-[var(--accent)] text-white text-xs font-black disabled:opacity-50 inline-flex items-center gap-2"
                     >
-                      <i className="fa-solid fa-barcode" aria-hidden="true" />
+                      <Icon name="barcode" size={14} />
                       OEM
                     </button>
                   </div>
                   <div className="flex gap-2">
                     <input
-                      className="min-w-0 flex-1 border border-[var(--border-default)] rounded-md bg-[var(--surface-1)] px-3 py-2 text-xs"
+                      className="min-w-0 flex-1 border border-line rounded-md bg-surface-1 px-3 py-2 text-xs"
                       value={analogInputs[position.position_id] ?? ''}
                       placeholder={`Analog ${position.part_number}`}
                       onChange={(event) => setAnalogInputs((prev) => ({ ...prev, [position.position_id]: event.target.value }))}
@@ -426,15 +426,15 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
                       onClick={() => void submitAnalog(position)}
                       className="px-3 py-2 rounded-md bg-[var(--accent)] text-white text-xs font-black disabled:opacity-50 inline-flex items-center gap-2"
                     >
-                      <i className="fa-solid fa-link" aria-hidden="true" />
+                      <Icon name="link" size={14} />
                       Analog
                     </button>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-2 text-[10px] text-[var(--text-secondary)]">
+                <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-2 text-[10px] text-ink-secondary">
                   <div>
                     {(candidateState?.oem_candidates ?? []).slice(-3).map((candidate) => (
-                      <div key={candidate.candidate_id} className="flex justify-between gap-2 border-t border-[var(--border-subtle)] py-1">
+                      <div key={candidate.candidate_id} className="flex justify-between gap-2 border-t border-line-subtle py-1">
                         <span>{candidate.oem_number}</span>
                         <span>{candidate.verification_status}</span>
                       </div>
@@ -442,7 +442,7 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
                   </div>
                   <div>
                     {(candidateState?.analog_candidates ?? []).slice(-3).map((candidate) => (
-                      <div key={candidate.candidate_id} className="flex justify-between gap-2 border-t border-[var(--border-subtle)] py-1">
+                      <div key={candidate.candidate_id} className="flex justify-between gap-2 border-t border-line-subtle py-1">
                         <span>{candidate.brand} {candidate.article}</span>
                         <span>{candidate.manual_review_status}</span>
                       </div>
@@ -455,11 +455,11 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
         </div>
       </SectionCard>
 
-      <SectionCard title="Матрица покрытия требований" icon="fa-table">
+      <SectionCard title="Матрица покрытия требований" icon="table">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-[var(--border-default)] text-[10px] uppercase text-[var(--text-muted)]">
+              <tr className="border-b border-line text-[10px] uppercase text-ink-muted">
                 <th className="py-2 pr-3">ID</th>
                 <th className="py-2 pr-3">Требование</th>
                 <th className="py-2 pr-3">Объект</th>
@@ -477,22 +477,22 @@ export const ContractControlPanel: React.FC<ContractControlPanelProps> = ({ requ
       </SectionCard>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SectionCard title="Gap Analysis" icon="fa-bug-slash">
+        <SectionCard title="Gap Analysis" icon="bug-slash">
           <div className="space-y-3">
             {data.gaps.length === 0 ? (
-              <div className="text-xs text-[var(--text-secondary)]">Пробелы не зарегистрированы.</div>
+              <div className="text-xs text-ink-secondary">Пробелы не зарегистрированы.</div>
             ) : (
               data.gaps.map((gap) => <GapRow key={gap.gap_id} gap={gap} />)
             )}
           </div>
         </SectionCard>
-        <SectionCard title="ADR" icon="fa-scale-balanced">
+        <SectionCard title="ADR" icon="scale-balanced">
           <div className="space-y-3">
             {data.adrs.map((adr) => (
-              <div key={adr.adr_id} className="border border-[var(--border-default)] rounded-md p-3 bg-[var(--surface-2)]">
-                <div className="font-mono text-[10px] text-[var(--text-muted)]">{adr.adr_id}</div>
-                <div className="text-xs font-bold text-[var(--text-primary)] mt-1">{adr.problem}</div>
-                <p className="mt-2 text-[10px] text-[var(--text-secondary)] leading-relaxed">{adr.decision}</p>
+              <div key={adr.adr_id} className="border border-line rounded-md p-3 bg-surface-2">
+                <div className="font-mono text-[10px] text-ink-muted">{adr.adr_id}</div>
+                <div className="text-xs font-bold text-ink-primary mt-1">{adr.problem}</div>
+                <p className="mt-2 text-[10px] text-ink-secondary leading-relaxed">{adr.decision}</p>
               </div>
             ))}
           </div>

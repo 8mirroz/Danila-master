@@ -187,34 +187,34 @@ export function PipelineRunDialog({
       ) : undefined}
     >
       {request && <div className="space-y-5">
-        <div className="rounded-[20px] border border-[var(--border-default)] bg-[var(--surface-2)] p-4">
+        <div className="rounded-[20px] border border-line bg-surface-2 p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-xs font-bold text-[var(--text-primary)]">{request.request_id}</p>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">{request.customer_name || 'Клиент не указан'}</p>
+              <p className="font-mono text-xs font-bold text-ink-primary">{request.request_id}</p>
+              <p className="mt-1 text-xs text-ink-secondary">{request.customer_name || 'Клиент не указан'}</p>
             </div>
             <StatusBadge status={request.status} />
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-[var(--border-default)] pt-3 sm:grid-cols-2">
-            <div><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Запрошенная зона</p><p className="mt-1 text-xs font-semibold text-[var(--text-primary)]">{targetLane}</p></div>
-            <div><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Точка старта</p><p className="mt-1 text-xs font-semibold text-[var(--text-primary)]">{run ? PHASE_LABELS[run.start_from] ?? run.start_from : 'Сервер определит после проверки'}</p></div>
+          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-3 sm:grid-cols-2">
+            <div><p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">Запрошенная зона</p><p className="mt-1 text-xs font-semibold text-ink-primary">{targetLane}</p></div>
+            <div><p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">Точка старта</p><p className="mt-1 text-xs font-semibold text-ink-primary">{run ? PHASE_LABELS[run.start_from] ?? run.start_from : 'Сервер определит после проверки'}</p></div>
           </div>
         </div>
 
-        {run && <div className="rounded-[20px] border border-[var(--border-default)] bg-white p-4">
-          <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold text-[var(--text-primary)]">Ход выполнения</span><span className="font-mono text-[10px] text-[var(--text-muted)]">{run.run_id}</span></div>
+        {run && <div className="rounded-[20px] border border-line bg-surface-1 p-4">
+          <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold text-ink-primary">Ход выполнения</span><span className="font-mono text-[10px] text-ink-muted">{run.run_id}</span></div>
           <div className="mt-4 space-y-2">
             {phaseRows.map(({ phase, state, message }) => {
               const done = state === 'phase.completed';
               const failed = state === 'phase.failed';
               const active = state === 'phase.started';
-              return <div key={phase} className="flex items-center gap-3 rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
-                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] ${failed ? 'bg-rose-100 text-rose-700' : done ? 'bg-emerald-100 text-emerald-700' : active ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-500'}`}><Icon name={failed ? 'x-mark' : done ? 'circle-check' : active ? 'rotate' : 'minus'} size={12} /></span>
-                <div className="min-w-0"><p className="text-xs font-semibold text-[var(--text-primary)]">{PHASE_LABELS[phase]}</p>{message && <p className="truncate text-[10px] text-[var(--text-muted)]">{message}</p>}</div>
+              return <div key={phase} className="flex items-center gap-3 rounded-xl bg-surface-2 px-3 py-2.5">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] ${failed ? 'bg-rose-100 text-rose-700' : done ? 'bg-emerald-100 text-emerald-700' : active ? 'bg-blue-100 text-blue-700' : 'bg-surface-4 text-ink-muted'}`}><Icon name={failed ? 'x-mark' : done ? 'circle-check' : active ? 'rotate' : 'minus'} size={12} /></span>
+                <div className="min-w-0"><p className="text-xs font-semibold text-ink-primary">{PHASE_LABELS[phase]}</p>{message && <p className="truncate text-[10px] text-ink-muted">{message}</p>}</div>
               </div>;
             })}
           </div>
-          <div className="mt-4 rounded-xl border border-[var(--border-default)] bg-[var(--surface-2)] px-3 py-2 text-[10px] text-[var(--text-muted)]">Correlation ID: <span className="font-mono text-[var(--text-secondary)]">{run.correlation_id}</span></div>
+          <div className="mt-4 rounded-xl border border-line bg-surface-2 px-3 py-2 text-[10px] text-ink-muted">Correlation ID: <span className="font-mono text-ink-secondary">{run.correlation_id}</span></div>
         </div>}
 
         {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{error}</div>}

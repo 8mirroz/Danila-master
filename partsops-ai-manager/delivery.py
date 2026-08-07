@@ -15,7 +15,7 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -194,8 +194,8 @@ class EmailAdapter:
             idempotency_key=idempotency_key,
             status="pending",
             attempts=0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         session.add(message)
         session.flush()
@@ -245,12 +245,12 @@ class EmailAdapter:
         message.attempts += 1
         if success:
             message.status = "sent"
-            message.sent_at = datetime.utcnow()
+            message.sent_at = datetime.now(timezone.utc).replace(tzinfo=None)
         else:
             message.status = "failed"
             message.last_error = error_msg
             
-        message.updated_at = datetime.utcnow()
+        message.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         session.add(message)
         
         # Emit event
@@ -330,8 +330,8 @@ class TelegramAdapter:
             idempotency_key=idempotency_key,
             status="pending",
             attempts=0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         session.add(message)
         session.flush()
@@ -376,12 +376,12 @@ class TelegramAdapter:
         message.attempts += 1
         if success:
             message.status = "sent"
-            message.sent_at = datetime.utcnow()
+            message.sent_at = datetime.now(timezone.utc).replace(tzinfo=None)
         else:
             message.status = "failed"
             message.last_error = error_msg
             
-        message.updated_at = datetime.utcnow()
+        message.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         session.add(message)
         session.commit()
         return message

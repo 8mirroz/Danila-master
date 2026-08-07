@@ -3,8 +3,7 @@ import { apiFetch } from '../lib/api';
 import {
   SectionCard,
   ActionButton,
-  InlineAlert,
-} from './Primitives';
+  InlineAlert, Icon } from './Primitives';
 
 interface PipelinePhase {
   name: string;
@@ -41,10 +40,10 @@ interface PipelineMonitorProps {
 }
 
 const AGENT_LABELS: Record<string, { label: string; icon: string; desc: string }> = {
-  intake: { label: 'Прием', icon: 'fa-file-import', desc: 'Сбор и структурирование данных' },
-  processing: { label: 'Подбор', icon: 'fa-brain', desc: 'Подбор аналогов и расчет цен' },
-  delivery: { label: 'Доставка', icon: 'fa-truck-fast', desc: 'Отправка документов клиенту' },
-  reporting: { label: 'Отчет', icon: 'fa-chart-pie', desc: 'Уведомления и аналитика' },
+  intake: { label: 'Прием', icon: 'file-import', desc: 'Сбор и структурирование данных' },
+  processing: { label: 'Подбор', icon: 'brain', desc: 'Подбор аналогов и расчет цен' },
+  delivery: { label: 'Доставка', icon: 'truck-fast', desc: 'Отправка документов клиенту' },
+  reporting: { label: 'Отчет', icon: 'chart-pie', desc: 'Уведомления и аналитика' },
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -57,7 +56,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const BADGE_COLORS: Record<string, string> = {
-  pending: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+  pending: 'bg-surface-3 text-ink-secondary dark:bg-surface-2 dark:text-ink-secondary border-line dark:border-line',
   running: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200 dark:border-amber-900 animate-pulse',
   completed: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900',
   failed: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 border-rose-200 dark:border-rose-900',
@@ -87,9 +86,9 @@ const PHASE_STATUS_STYLES: Record<string, { border: string; bg: string; text: st
     text: 'text-indigo-600 dark:text-indigo-400',
   },
   pending: {
-    border: 'border-slate-200 dark:border-slate-800',
-    bg: 'bg-slate-50 dark:bg-slate-900/50',
-    text: 'text-slate-400 dark:text-slate-600',
+    border: 'border-line dark:border-line',
+    bg: 'bg-surface-2 dark:bg-surface-1/50',
+    text: 'text-ink-muted dark:text-ink-secondary',
   },
 };
 
@@ -173,14 +172,14 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Мультиагентный пайплайн" icon="fa-robot" className="w-full">
-        <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
+      <SectionCard title="Мультиагентный пайплайн" icon="robot" className="w-full">
+        <p className="text-xs text-ink-secondary mb-4 leading-relaxed">
           Визуализация статусов работы ИИ-агентов. Кликните на карточку для выбора заказа в системе, либо нажмите стрелку справа для развертывания подробностей.
         </p>
 
         {requests.length === 0 && (
-          <div className="text-center py-6 text-[var(--text-secondary)]">
-            <i className="fas fa-robot text-2xl mb-2 opacity-30" />
+          <div className="text-center py-6 text-ink-secondary">
+            <Icon name="robot" size={24} className="text-2xl mb-2 opacity-30" />
             <p>Нет активных запросов в пайплайне</p>
           </div>
         )}
@@ -206,20 +205,20 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
               <div
                 key={request.request_id}
                 onClick={() => handleCardClick(request)}
-                className={`bg-[var(--surface-2)] border rounded-xl p-3 hover:shadow-md transition-all duration-200 cursor-pointer ${
+                className={`bg-surface-2 border rounded-xl p-3 hover:shadow-md transition-all duration-200 cursor-pointer ${
                   isSelected 
                     ? 'border-teal-500 dark:border-teal-400 ring-1 ring-teal-500/20 shadow-sm' 
-                    : 'border-[var(--border-default)] hover:border-slate-300 dark:hover:border-slate-700'
+                    : 'border-line hover:border-line-strong dark:hover:border-line-strong'
                 }`}
               >
                 {/* Header */}
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    <span className="font-mono font-bold text-xs text-[var(--text-primary)]">{request.request_id}</span>
+                    <span className="font-mono font-bold text-xs text-ink-primary">{request.request_id}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${BADGE_COLORS[overallStatus]}`}>
                       {STATUS_LABELS[overallStatus]?.toUpperCase() || overallStatus.toUpperCase()}
                     </span>
-                    <span className="text-[9px] text-[var(--text-secondary)] bg-[var(--surface-3)] px-1.5 py-0.5 rounded font-medium">
+                    <span className="text-[9px] text-ink-secondary bg-surface-3 px-1.5 py-0.5 rounded font-medium">
                       {request.source.toUpperCase()}
                     </span>
                     {request.priority === 'urgent' && (
@@ -240,20 +239,20 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
                     )}
                     <button
                       onClick={(e) => toggleExpand(e, request.request_id)}
-                      className="text-[var(--text-secondary)] hover:text-teal-500 p-1 rounded-lg hover:bg-[var(--surface-3)] transition-colors duration-150"
+                      className="text-ink-secondary hover:text-teal-500 p-1 rounded-lg hover:bg-surface-3 transition-colors duration-150"
                       aria-label="Подробнее"
                     >
-                      <i className={`fas ${isExpanded ? 'fa-chevron-up' : 'fa-chevron-down'} text-xs`} />
+                      <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
                     </button>
                   </div>
                 </div>
 
                 {/* Subheader */}
-                <div className="text-xs text-[var(--text-secondary)] mb-3 flex items-center gap-1.5 flex-wrap">
-                  <span className="font-semibold text-[var(--text-primary)]">{request.customer_name}</span>
+                <div className="text-xs text-ink-secondary mb-3 flex items-center gap-1.5 flex-wrap">
+                  <span className="font-semibold text-ink-primary">{request.customer_name}</span>
                   {request.vehicle_make && (
                     <>
-                      <span className="text-slate-300 dark:text-slate-700">•</span>
+                      <span className="text-ink-secondary dark:text-ink-secondary">•</span>
                       <span>{request.vehicle_make} {request.vehicle_model || ''} {request.vehicle_year ? `(${request.vehicle_year})` : ''}</span>
                     </>
                   )}
@@ -262,7 +261,7 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
                 {/* Pipeline phases visualization */}
                 <div className="relative py-2">
                   {/* Connector line */}
-                  <div className="absolute left-[12.5%] right-[12.5%] top-[24px] h-[2px] bg-slate-100 dark:bg-slate-800" />
+                  <div className="absolute left-[12.5%] right-[12.5%] top-[24px] h-[2px] bg-surface-3 dark:bg-surface-2" />
                   
                   <div className="flex justify-between relative z-10">
                     {phases.map((phaseName) => {
@@ -276,31 +275,31 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
                           {/* Phase Circle */}
                           <div className="relative">
                             <div className={`w-8 h-8 rounded-full border-2 ${styles.border} ${styles.bg} ${styles.text} flex items-center justify-center transition-all duration-200`}>
-                              <i className={`fas ${agentInfo.icon} text-xs`} />
+                              <Icon name={agentInfo.icon} size={12} />
                               
                               {/* Corner status indicator badge */}
                               {phaseStatus === 'completed' && (
-                                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[7px] border border-white dark:border-slate-900">
-                                  <i className="fas fa-check" />
+                                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[7px] border border-white dark:border-line">
+                                  <Icon name="check" size={8} weight="bold" />
                                 </span>
                               )}
                               {phaseStatus === 'failed' && (
-                                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[7px] border border-white dark:border-slate-900">
-                                  <i className="fas fa-times" />
+                                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[7px] border border-white dark:border-line">
+                                  <Icon name="times" size={8} weight="bold" />
                                 </span>
                               )}
                               {phaseStatus === 'awaiting_approval' && (
-                                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[7px] border border-white dark:border-slate-900">
-                                  <i className="fas fa-clock" />
+                                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[7px] border border-white dark:border-line">
+                                  <Icon name="clock" size={8} weight="bold" />
                                 </span>
                               )}
                             </div>
                             
                             {/* Hover tooltip */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-950 text-white rounded-lg text-[9px] shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-20 border border-slate-700/30">
-                              <p className="font-semibold text-slate-200">{agentInfo.desc}</p>
-                              <p className="text-slate-400 mt-0.5">
-                                Статус: <span className="font-medium text-slate-300">{STATUS_LABELS[phaseStatus]}</span>
+                            <div className="absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/15 bg-ink-primary/95 px-2.5 py-1.5 text-[9px] text-white opacity-0 shadow-lg transition-all duration-200 pointer-events-none group-hover:opacity-100">
+                              <p className="font-semibold text-white">{agentInfo.desc}</p>
+                              <p className="mt-0.5 text-white/70">
+                                Статус: <span className="font-medium text-white/90">{STATUS_LABELS[phaseStatus]}</span>
                                 {phaseData?.execution_time_ms ? ` • ${formatDuration(phaseData.execution_time_ms)}` : ''}
                               </p>
                             </div>
@@ -308,7 +307,7 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
                           
                           {/* Phase Label */}
                           <div className="mt-1.5 text-center">
-                            <span className="text-[10px] font-semibold text-[var(--text-secondary)]">{agentInfo.label}</span>
+                            <span className="text-[10px] font-semibold text-ink-secondary">{agentInfo.label}</span>
                           </div>
                         </div>
                       );
@@ -318,26 +317,26 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
 
                 {/* Collapsible Details */}
                 {isExpanded && (
-                  <div className="mt-4 pt-3 border-t border-[var(--border-default)] space-y-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="mt-4 pt-3 border-t border-line space-y-3" onClick={(e) => e.stopPropagation()}>
                     {/* Parts list */}
                     {parts.length > 0 && (
                       <div>
-                        <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 tracking-wider">Список запчастей</h4>
-                        <div className="bg-[var(--surface-3)] rounded-lg overflow-hidden border border-[var(--border-default)]">
+                        <h4 className="text-[10px] uppercase font-bold text-ink-muted mb-1.5 tracking-wider">Список запчастей</h4>
+                        <div className="bg-surface-3 rounded-lg overflow-hidden border border-line">
                           <table className="min-w-full text-[11px]">
                             <thead>
-                              <tr className="border-b border-[var(--border-default)] bg-slate-50 dark:bg-slate-900/30">
-                                <th className="py-1 px-2 text-left font-semibold text-[var(--text-secondary)]">Название</th>
-                                <th className="py-1 px-2 text-left font-semibold text-[var(--text-secondary)]">Артикул</th>
-                                <th className="py-1 px-2 text-center font-semibold text-[var(--text-secondary)]">Кол-во</th>
+                              <tr className="border-b border-line bg-surface-2 dark:bg-surface-1">
+                                <th className="py-1 px-2 text-left font-semibold text-ink-secondary">Название</th>
+                                <th className="py-1 px-2 text-left font-semibold text-ink-secondary">Артикул</th>
+                                <th className="py-1 px-2 text-center font-semibold text-ink-secondary">Кол-во</th>
                               </tr>
                             </thead>
                             <tbody>
                               {parts.map((p: any, idx: number) => (
-                                <tr key={idx} className="border-b border-[var(--border-default)] last:border-0 hover:bg-slate-100/30 dark:hover:bg-slate-800/10">
-                                  <td className="py-1 px-2 font-medium text-[var(--text-primary)]">{p.part_name || p.name || 'Неизвестно'}</td>
-                                  <td className="py-1 px-2 font-mono text-[var(--text-secondary)]">{p.part_number || p.oem || '—'}</td>
-                                  <td className="py-1 px-2 text-center text-[var(--text-secondary)]">{p.quantity || p.qty || 1} шт.</td>
+                                <tr key={idx} className="border-b border-line last:border-0 hover:bg-surface-3/30 dark:hover:bg-ink-primary/10">
+                                  <td className="py-1 px-2 font-medium text-ink-primary">{p.part_name || p.name || 'Неизвестно'}</td>
+                                  <td className="py-1 px-2 font-mono text-ink-secondary">{p.part_number || p.oem || '—'}</td>
+                                  <td className="py-1 px-2 text-center text-ink-secondary">{p.quantity || p.qty || 1} шт.</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -347,20 +346,20 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
                     )}
 
                     {/* Metadata and Times */}
-                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-[var(--surface-3)] p-2 rounded-lg border border-[var(--border-default)] font-mono text-[var(--text-secondary)]">
+                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-surface-3 p-2 rounded-lg border border-line font-mono text-ink-secondary">
                       <div>
-                        <span className="text-[var(--text-muted)]">Время запуска:</span>{' '}
+                        <span className="text-ink-muted">Время запуска:</span>{' '}
                         <span>{request.created_at ? new Date(request.created_at).toLocaleString('ru-RU') : '—'}</span>
                       </div>
                       {detail?.total_time_ms ? (
                         <div>
-                          <span className="text-[var(--text-muted)]">Длительность:</span>{' '}
-                          <span className="text-[var(--text-primary)] font-bold">{formatDuration(detail.total_time_ms)}</span>
+                          <span className="text-ink-muted">Длительность:</span>{' '}
+                          <span className="text-ink-primary font-bold">{formatDuration(detail.total_time_ms)}</span>
                         </div>
                       ) : null}
                       {request.correlation_id && (
                         <div className="col-span-2 break-all">
-                          <span className="text-[var(--text-muted)]">Correlation ID:</span>{' '}
+                          <span className="text-ink-muted">Correlation ID:</span>{' '}
                           <span>{request.correlation_id}</span>
                         </div>
                       )}
@@ -391,7 +390,7 @@ export function PipelineMonitor({ requests, fetchTrigger, selectedRequestId, onS
                     />
                     <ActionButton
                       variant="primary"
-                      icon="fa-circle-check"
+                      icon="circle-check"
                       className="mt-2 text-xs py-1 px-3"
                       onClick={(e) => {
                         e.stopPropagation();

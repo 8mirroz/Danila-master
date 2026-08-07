@@ -8,7 +8,7 @@ transaction themselves — they commit their own changes only when
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from sqlmodel import Session, select, func
 
@@ -24,7 +24,7 @@ from models import (
 
 
 def _now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _today_range() -> tuple[datetime, datetime]:

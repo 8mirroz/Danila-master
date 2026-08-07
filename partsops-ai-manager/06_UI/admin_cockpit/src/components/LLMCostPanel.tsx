@@ -81,17 +81,17 @@ export const LLMCostPanel = () => {
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left Column: LLM Spend & Budget */}
-        <div className="space-y-4 rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--surface-2)] p-4">
+        <div className="space-y-4 rounded-card border border-line bg-surface-2 p-4">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
                 Расход за сутки (LLM Daily Spend)
               </span>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-bold font-mono text-[var(--text-primary)] tracking-tight">
+                <span className="text-2xl font-bold font-mono text-ink-primary tracking-tight">
                   ${totalCost.toFixed(3)}
                 </span>
-                <span className="text-xs text-[var(--text-muted)] font-mono">
+                <span className="text-xs text-ink-muted font-mono">
                   / ${dailyLimit.toFixed(2)} лимит
                 </span>
               </div>
@@ -102,26 +102,26 @@ export const LLMCostPanel = () => {
           </div>
 
           {/* Progress bar */}
-          <div className="w-full bg-[var(--surface-3)] rounded-full h-2 overflow-hidden border border-[var(--border-subtle)]">
+          <div className="w-full bg-surface-3 rounded-full h-2 overflow-hidden border border-line-subtle">
             <div
-              className="h-full rounded-full bg-[var(--accent-primary)] transition-all duration-500"
+              className="h-full rounded-full bg-accent-primary transition-all duration-500"
               style={{ width: `${Math.max(2, budgetUtilization)}%` }}
             />
           </div>
 
-          <div className="text-[11px] text-[var(--text-secondary)] font-medium">
-            Всего запросов к LLM: <strong className="font-mono text-[var(--text-primary)]">{data?.count ?? 0}</strong>
+          <div className="text-[11px] text-ink-secondary font-medium">
+            Всего запросов к LLM: <strong className="font-mono text-ink-primary">{data?.count ?? 0}</strong>
           </div>
         </div>
 
         {/* Right Column: Dynamic Provider breakdown */}
-        <div className="space-y-3 rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--surface-2)] p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+        <div className="space-y-3 rounded-card border border-line bg-surface-2 p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
             Распределение затрат по провайдерам
           </span>
 
           {providers.length === 0 ? (
-            <div className="text-xs text-[var(--text-muted)] p-4 text-center">
+            <div className="text-xs text-ink-muted p-4 text-center">
               Запросы к LLM отсутствуют в текущей сессии
             </div>
           ) : (
@@ -153,7 +153,7 @@ export const LLMCostPanel = () => {
                     );
                   })}
                 </svg>
-                <span className="absolute text-[10px] font-bold text-[var(--text-primary)] font-mono">
+                <span className="absolute text-[10px] font-bold text-ink-primary font-mono">
                   {data?.count ?? 0}
                 </span>
               </div>
@@ -161,7 +161,7 @@ export const LLMCostPanel = () => {
               {/* Provider list */}
               <div className="space-y-1.5 flex-1 text-[11px]">
                 {providers.map((p, idx) => (
-                  <div key={p.name} className="flex justify-between items-center text-[var(--text-secondary)]">
+                  <div key={p.name} className="flex justify-between items-center text-ink-secondary">
                     <span className="flex items-center gap-1.5 capitalize">
                       <span
                         className="h-2 w-2 rounded-full shrink-0"
@@ -170,8 +170,8 @@ export const LLMCostPanel = () => {
                       <span className="truncate max-w-[120px] font-medium">{p.name}</span>
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[var(--text-primary)] font-bold">${p.cost.toFixed(3)}</span>
-                      <span className="text-[10px] font-mono text-[var(--text-muted)]">({p.percentage}%)</span>
+                      <span className="font-mono text-ink-primary font-bold">${p.cost.toFixed(3)}</span>
+                      <span className="text-[10px] font-mono text-ink-muted">({p.percentage}%)</span>
                     </div>
                   </div>
                 ))}

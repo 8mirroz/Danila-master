@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { notify } from '../lib/notify';
+import { Icon } from './Primitives';
+
 
 type Command = {
   id: string;
@@ -40,7 +42,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'nav-dashboard',
         label: 'Панель управления',
         description: 'Обзор метрик и KPI',
-        icon: 'fa-chart-pie',
+        icon: 'chart-pie',
         shortcut: 'G D',
         action: () => onNavigate('dashboard'),
         category: 'Навигация',
@@ -49,7 +51,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'nav-kanban',
         label: 'Канбан-доска',
         description: 'Перетаскивание заказов между этапами',
-        icon: 'fa-table-columns',
+        icon: 'table-columns',
         shortcut: 'G K',
         action: () => onNavigate('kanban'),
         category: 'Навигация',
@@ -58,7 +60,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'nav-suppliers',
         label: 'Каталог поставщиков',
         description: 'Управление поставщиками и прайс-листами',
-        icon: 'fa-truck-field',
+        icon: 'truck-field',
         shortcut: 'G S',
         action: () => onNavigate('suppliers'),
         category: 'Навигация',
@@ -67,7 +69,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'nav-orders',
         label: 'Кастом',
         description: 'Загрузка файлов и создание новых запросов',
-        icon: 'fa-file-arrow-up',
+        icon: 'file-arrow-up',
         shortcut: 'G O',
         action: () => onNavigate('orders'),
         category: 'Навигация',
@@ -76,7 +78,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'nav-matching',
         label: 'Матрица подбора и цен',
         description: 'Сравнение офферов поставщиков, расчет маржи и калькуляция',
-        icon: 'fa-arrows-split-up-and-left',
+        icon: 'arrows-split-up-and-left',
         shortcut: 'G M',
         action: () => onNavigate('matching'),
         category: 'Навигация',
@@ -85,7 +87,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'nav-audit',
         label: 'Аудит и логи',
         description: 'История изменений и цепочка событий',
-        icon: 'fa-shield-halved',
+        icon: 'shield-halved',
         shortcut: 'G A',
         action: () => onNavigate('audit'),
         category: 'Навигация',
@@ -96,7 +98,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'action-new-request',
         label: 'Новый запрос',
         description: 'Создать запрос на закупку вручную',
-        icon: 'fa-plus',
+        icon: 'plus',
         shortcut: '⌘ N',
         action: () => onNavigate('orders'),
         category: 'Действия',
@@ -105,7 +107,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'action-refresh',
         label: 'Обновить данные',
         description: 'Принудительно обновить очередь и метрики',
-        icon: 'fa-rotate',
+        icon: 'rotate',
         shortcut: '⌘ R',
         action: () => window.location.reload(),
         category: 'Действия',
@@ -114,7 +116,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'action-sync-erp',
         label: 'Статус ERP',
         description: 'Проверить health ERP (полный push — не one-click job)',
-        icon: 'fa-rotate',
+        icon: 'rotate',
         shortcut: '⌘ E',
         action: async () => {
           try {
@@ -148,7 +150,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: `req-${req.request_id}`,
         label: `Запрос: ${req.request_id}`,
         description: `${req.customer_name} • ${req.status} • ${req.parts_json?.length || 0} позиций`,
-        icon: 'fa-file-lines',
+        icon: 'file-lines',
         action: () => onNavigate('matching'), // will select request
         category: 'Запросы',
       })),
@@ -158,7 +160,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: `sup-${sup.supplier_id}`,
         label: `Поставщик: ${sup.name}`,
         description: `${sup.city} • ${sup.status} • Надежность: ${Math.round(sup.reliability_score * 100)}%`,
-        icon: 'fa-truck-field',
+        icon: 'truck-field',
         action: () => onNavigate('suppliers'),
         category: 'Поставщики',
       })),
@@ -168,7 +170,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'help-shortcuts',
         label: 'Клавиатурные сокращения',
         description: 'Показать список всех горячих клавиш',
-        icon: 'fa-keyboard',
+        icon: 'keyboard',
         shortcut: '⌘ ?',
         action: () =>
           alert(`
@@ -245,10 +247,10 @@ Esc — Закрыть палитру
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl bg-[var(--surface-1)] border border-[var(--border-default)] rounded-2xl shadow-2xl overflow-hidden animate-slide-down">
+      <div className="relative w-full max-w-2xl bg-surface-1 border border-line rounded-2xl shadow-2xl overflow-hidden animate-slide-down">
         <div className="relative">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
-            <i className="fas fa-magnifying-glass text-xl" />
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-muted">
+            <Icon name="magnifying-glass" size={20} className="text-xl" />
           </div>
           <input
             ref={inputRef}
@@ -260,18 +262,18 @@ Esc — Закрыть палитру
             }}
             onKeyDown={handleKeyDown}
             placeholder="Введите команду или поиск... (⌘K для открытия)"
-            className="w-full px-12 py-4 text-base text-[var(--text-primary)] bg-transparent border-none outline-none font-sans placeholder-[var(--text-muted)]"
+            className="w-full px-12 py-4 text-base text-ink-primary bg-transparent border-none outline-none font-sans placeholder-ink-muted"
             autoComplete="off"
           />
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--surface-2)] px-2 py-0.5 rounded">
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-mono text-ink-muted bg-surface-2 px-2 py-0.5 rounded">
             ⌘K
           </div>
         </div>
 
         <div className="max-h-[500px] overflow-y-auto">
           {filteredCommands.length === 0 ? (
-            <div className="p-8 text-center text-[var(--text-muted)]">
-              <i className="fas fa-search text-2xl mb-2 opacity-50" />
+            <div className="p-8 text-center text-ink-muted">
+              <Icon name="search" size={24} className="text-2xl mb-2 opacity-50" />
               <p>Ничего не найдено для «{query}»</p>
               <p className="text-[11px] mt-1">Попробуйте другие ключевые слова</p>
             </div>
@@ -281,8 +283,8 @@ Esc — Закрыть палитру
                 const categoryCommands = filteredCommands.filter((c) => c.category === category);
                 if (categoryCommands.length === 0) return null;
                 return (
-                  <div key={category} className="p-3 bg-[var(--surface-2)]">
-                    <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)] mb-2">{category}</h4>
+                  <div key={category} className="p-3 bg-surface-2">
+                    <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-muted mb-2">{category}</h4>
                     <div className="space-y-1">
                       {categoryCommands.map((cmd, _idx) => {
                         const isSelected = filteredCommands.indexOf(cmd) === selectedIndex;
@@ -296,25 +298,27 @@ Esc — Закрыть палитру
                             onMouseEnter={() => setSelectedIndex(filteredCommands.indexOf(cmd))}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
                               isSelected
-                                ? 'bg-[var(--state-selected)] text-[var(--text-primary)]'
-                                : 'hover:bg-[var(--surface-3)] text-[var(--text-secondary)]'
+                                ? 'bg-[var(--state-selected)] text-ink-primary'
+                                : 'hover:bg-surface-3 text-ink-secondary'
                             }`}
                           >
-                            <i
-                              className={`fas ${cmd.icon} text-lg w-6 text-center ${
-                                isSelected ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'
+                            <Icon
+                              name={cmd.icon}
+                              size={18}
+                              className={`w-6 shrink-0 ${
+                                isSelected ? 'text-accent-primary' : 'text-ink-muted'
                               }`}
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium truncate">{cmd.label}</span>
                                 {cmd.shortcut && (
-                                  <span className="ml-auto text-[10px] font-mono text-[var(--text-muted)] bg-[var(--surface-2)] px-1.5 py-0.5 rounded">
+                                  <span className="ml-auto text-[10px] font-mono text-ink-muted bg-surface-2 px-1.5 py-0.5 rounded">
                                     {cmd.shortcut}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[11px] truncate text-[var(--text-muted)]">{cmd.description}</p>
+                              <p className="text-[11px] truncate text-ink-muted">{cmd.description}</p>
                             </div>
                           </button>
                         );

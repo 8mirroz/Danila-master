@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
-import { StatusBadge } from './Primitives';
+import { StatusBadge, Icon } from './Primitives';
 
 type Request = {
   id: number;
@@ -77,17 +77,17 @@ export const CompletedOrdersHistory = ({
 
   return (
     <div className="panel-card-tight p-5 flex flex-col h-[650px]">
-      <h3 className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)] border-b border-[var(--border-subtle)] pb-3">
-        <i className="fas fa-archive text-[var(--accent-primary)]"></i> История завершенных заказов
+      <h3 className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink-secondary border-b border-line-subtle pb-3">
+        <Icon name="archive" size={14} className="text-accent-primary" /> История завершенных заказов
       </h3>
 
       {loading ? (
-        <div className="text-xs text-[var(--text-secondary)] py-12 text-center flex-1 flex flex-col items-center justify-center gap-2">
-          <i className="fas fa-spinner animate-spin text-lg text-[var(--accent-primary)]"></i>
+        <div className="text-xs text-ink-secondary py-12 text-center flex-1 flex flex-col items-center justify-center gap-2">
+          <Icon name="spinner" size={18} className="animate-spin text-lg text-accent-primary" />
           <span>Загрузка истории...</span>
         </div>
       ) : completedOrders.length === 0 ? (
-        <div className="text-xs text-[var(--text-muted)] py-12 text-center flex-1 flex items-center justify-center">
+        <div className="text-xs text-ink-muted py-12 text-center flex-1 flex items-center justify-center">
           История завершенных заказов пуста.
         </div>
       ) : (
@@ -105,16 +105,16 @@ export const CompletedOrdersHistory = ({
                   <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider">
                     {dateDisplay.split(' ')[1]}
                   </span>
-                  <span className="text-2xl font-black text-slate-800 leading-none my-0.5">
+                  <span className="text-2xl font-black text-ink-primary leading-none my-0.5">
                     {dateDisplay.split(' ')[0]}
                   </span>
-                  <span className="text-[9px] font-semibold text-slate-400">
+                  <span className="text-[9px] font-semibold text-ink-muted">
                     {yearDisplay}
                   </span>
                 </div>
 
                 {/* Vertical connecting line inside timeline */}
-                <div className="absolute left-[35px] top-[74px] bottom-[-24px] w-[2px] bg-slate-200/60 z-0 hidden last:hidden sm:block"></div>
+                <div className="absolute left-[35px] top-[74px] bottom-[-24px] w-[2px] bg-surface-4/60 z-0 hidden last:hidden sm:block"></div>
 
                 {/* Compact orders list for this date */}
                 <div className="space-y-3 z-10">
@@ -134,23 +134,23 @@ export const CompletedOrdersHistory = ({
                         onClick={() => onSelectRequest(order)}
                         className={`border rounded-xl p-3.5 cursor-pointer transition-all shadow-sm flex flex-col gap-2 ${
                           isSelected
-                            ? 'bg-[var(--surface-3)] border-[var(--accent-primary)] ring-1 ring-[var(--accent-primary)]'
-                            : 'bg-[var(--surface-1)] border-[var(--border-default)] hover:border-[var(--text-muted)] hover:shadow-md'
+                            ? 'bg-surface-3 border-accent-primary ring-1 ring-[var(--accent-primary)]'
+                            : 'bg-surface-1 border-line hover:border-[var(--text-muted)] hover:shadow-md'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <h4 className="text-xs font-bold text-[var(--text-primary)] truncate">
+                            <h4 className="text-xs font-bold text-ink-primary truncate">
                               {order.customer_name}
                             </h4>
-                            <p className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5 font-medium leading-relaxed">
+                            <p className="text-[11px] text-ink-secondary truncate mt-0.5 font-medium leading-relaxed">
                               {partsList}
                             </p>
                           </div>
                           <StatusBadge status={order.status} />
                         </div>
 
-                        <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2 font-mono mt-1">
+                        <div className="flex items-center justify-between text-[10px] text-ink-muted border-t border-line-subtle pt-2 font-mono mt-1">
                           <span className="font-semibold">ID: {order.request_id}</span>
                           <span>
                             {new Date(order.created_at).toLocaleTimeString([], {

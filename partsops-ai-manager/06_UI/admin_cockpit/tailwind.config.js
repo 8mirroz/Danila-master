@@ -1,26 +1,78 @@
+/** @type {import('tailwindcss').Config} */
+/**
+ * Admin Cockpit theme — maps Tailwind utilities to CSS design tokens
+ * defined in src/index.css. Prefer token classes over hard-coded slate/hex.
+ */
 export default {
   content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {
       colors: {
-        'bg-primary': '#0a0e1a',
-        'bg-secondary': '#111827',
-        'bg-tertiary': '#1a2235',
-        'bg-card': '#1e293b',
-        'accent-blue': '#3b82f6',
-        'accent-purple': '#8b5cf6',
-        'accent-green': '#10b981',
-        'accent-orange': '#f59e0b',
-        'accent-red': '#ef4444',
-        'accent-cyan': '#06b6d4',
-        'text-primary': '#f1f5f9',
-        'text-secondary': '#94a3b8',
-        'border-color': '#2d3a4f',
-      }
+        /* Surfaces */
+        surface: {
+          1: 'var(--surface-1)',
+          2: 'var(--surface-2)',
+          3: 'var(--surface-3)',
+          4: 'var(--surface-4)',
+          5: 'var(--surface-5)',
+        },
+        app: {
+          bg: 'var(--bg-app)',
+          canvas: 'var(--bg-canvas)',
+          shell: 'var(--bg-shell)',
+        },
+        /* Text — use as text-ink-primary (avoids clashing with text-* utilities) */
+        ink: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
+        },
+        /* Borders */
+        line: {
+          DEFAULT: 'var(--border-default)',
+          subtle: 'var(--border-subtle)',
+          strong: 'var(--border-strong)',
+        },
+        /* Accents */
+        accent: {
+          primary: 'var(--accent-primary)',
+          strong: 'var(--accent-primary-strong)',
+          success: 'var(--accent-success)',
+          warning: 'var(--accent-warning)',
+          danger: 'var(--accent-danger)',
+          info: 'var(--accent-info)',
+        },
+        /* State fills */
+        state: {
+          hover: 'var(--state-hover)',
+          selected: 'var(--state-selected)',
+          active: 'var(--state-active)',
+          disabled: 'var(--state-disabled)',
+        },
+      },
+      borderRadius: {
+        panel: 'var(--radius-panel)',
+        card: 'var(--radius-card)',
+        control: 'var(--radius-control)',
+        modal: 'var(--radius-modal)',
+      },
+      boxShadow: {
+        'ds-sm': 'var(--shadow-sm)',
+        'ds-md': 'var(--shadow-md)',
+        'ds-lg': 'var(--shadow-lg)',
+        'ds-modal': 'var(--shadow-modal)',
+        'ds-focus': 'var(--focus-ring)',
+      },
+      transitionDuration: {
+        ds: '220ms',
+      },
+      transitionTimingFunction: {
+        ds: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      },
     },
   },
   plugins: [],
-}
+};

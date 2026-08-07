@@ -15,7 +15,7 @@ import re
 import json
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 
 from app.agents.base_agent import BaseAgent, AgentContext, AgentResult, AgentType, AgentStatus
@@ -380,7 +380,7 @@ class IntakeAgent(BaseAgent):
         elif source_input.source == "api":
             return f"api:req:{meta.get('request_id')}"
         else:
-            return f"manual:{datetime.utcnow().isoformat()}"
+            return f"manual:{datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}"
     
     def _validate_and_forward(self, context: AgentContext) -> AgentResult:
         """Validate existing context and forward to processing"""

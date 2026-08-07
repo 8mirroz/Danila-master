@@ -277,9 +277,9 @@ class RequestService:
             "candidates": {
                 "selected_offers": selections if isinstance(selections, dict) else {},
                 "oem": [{"candidate_id": item.candidate_id, "position_id": item.position_id,
-                         "verification_status": item.verification_status} for item in oem_candidates],
+                         "verification_status": getattr(item, "verification_status", "pending")} for item in oem_candidates],
                 "analogs": [{"candidate_id": item.candidate_id, "position_id": item.position_id,
-                             "verification_status": item.verification_status} for item in analog_candidates],
+                             "verification_status": getattr(item, "verification_status", getattr(item, "manual_review_status", "pending"))} for item in analog_candidates],
             },
             "pricing": {"evidence_available": bool(req.pricing_evidence_json),
                         "evidence": _json_load(req.pricing_evidence_json, None),
@@ -700,6 +700,16 @@ class RequestService:
         tenant_id: str,
         body: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
+        """Create an invoice draft for an APPROVED request (operator cockpit path).
+
+        Contract (intentional, 2026-08):
+        - Requires APPROVED status and selected offers for every part.
+        - Recomputes pricing; blocks if margin policy fails at compute time.
+        - Stamps `margin_policy_passed` + pricing evidence from that computation
+          (does not require a prior agent pipeline to have pre-written them).
+        - If ERP has not issued a quotation yet, assigns local `Q-DRAFT-*` ref
+          so the operator can draft an invoice before ERP sync.
+        """
         req = _find_request_by_tenant(session, request_id, tenant_id)
         if not req:
             raise HTTPException(status_code=404, detail="Request not found")
@@ -771,11 +781,6 @@ class RequestService:
         if req.status != RequestState.APPROVED:
             raise HTTPException(status_code=422, detail="Invoice generation requires APPROVED request status")
 
-        if not req.pricing_evidence_json or req.margin_policy_passed is not True:
-            raise HTTPException(status_code=422, detail="Invoice generation requires approved pricing evidence")
-        if not req.erp_quotation_ref:
-            raise HTTPException(status_code=422, detail="Invoice generation requires an ERP quotation reference")
-
         selected_offers = _json_load(req.match_evidence_json, {})
         required_part_names = {
             str(part.get("name", "")).strip()
@@ -790,6 +795,29 @@ class RequestService:
         line_items, pricing_result, margin_violations = _build_pricing_context(req, session)
         if margin_violations or not pricing_result.margin_policy_passed:
             raise HTTPException(status_code=422, detail="Invoice generation blocked by pricing policy")
+
+        # Persist pricing gate from computed context so operator path does not depend
+        # on a prior agent pipeline having stamped margin_policy_passed.
+        req.margin_policy_passed = True
+        pricing_evidence = _json_load(req.pricing_evidence_json, {})
+        if not isinstance(pricing_evidence, dict):
+            pricing_evidence = {}
+        pricing_evidence.update(
+            {
+                "line_items": line_items,
+                "client_price": pricing_result.client_price,
+                "margin_rate": pricing_result.margin_rate,
+                "margin_policy_passed": True,
+                "approved_offer_snapshot": selected_offers,
+                "approved_at": _utcnow().isoformat(),
+            }
+        )
+        req.pricing_evidence_json = json.dumps(pricing_evidence, ensure_ascii=False, default=str)
+
+        # Local draft quotation when ERP has not issued one yet (operator cockpit path).
+        if not req.erp_quotation_ref:
+            req.erp_quotation_ref = f"Q-DRAFT-{request_id[-8:].upper()}"
+
         subtotal = round(sum(item["line_total"] for item in line_items), 2)
         invoice = Invoice(
             tenant_id=tenant_id,
@@ -804,12 +832,6 @@ class RequestService:
             status="DRAFT",
             created_at=_utcnow(),
         )
-        pricing_evidence = _json_load(req.pricing_evidence_json, {})
-        if not isinstance(pricing_evidence, dict):
-            pricing_evidence = {}
-        pricing_evidence["approved_offer_snapshot"] = selected_offers
-        pricing_evidence["approved_at"] = _utcnow().isoformat()
-        req.pricing_evidence_json = json.dumps(pricing_evidence, ensure_ascii=False, default=str)
         session.add(invoice)
         req.erp_invoice_ref = invoice.invoice_number
         session.add(req)

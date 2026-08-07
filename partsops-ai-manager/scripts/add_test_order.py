@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add the parent directory of this script to the python path
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,8 +37,8 @@ def main():
             vehicle_model="X5",
             vehicle_year=2016,
             parts_json='[{"name": "Тормозные колодки передние BMW X5 (E70)", "quantity": 1}, {"name": "Масляный фильтр BMW N55/N57", "quantity": 2}]',
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            updated_at=datetime.now(timezone.utc).replace(tzinfo=None)
         )
 
         session.add(test_request)

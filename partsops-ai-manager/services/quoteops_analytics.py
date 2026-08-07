@@ -64,12 +64,18 @@ def quoteops_metrics(session: Session, organization_id: str) -> dict[str, int | 
         total += count
         if request.status in READY_STATES:
             ready_requests += 1
-            sample = session.exec(
-                select(GoldenSample).where(
-                    GoldenSample.request_id == request.request_id,
-                    GoldenSample.tenant_id == organization_id,
-                )
-            ).first()
+            sample = None
+            try:
+                sample = session.exec(
+                    select(GoldenSample).where(
+                        GoldenSample.request_id == request.request_id,
+                        GoldenSample.tenant_id == organization_id,
+                    )
+                ).first()
+            except Exception:
+                # Schema drift (missing golden-sample columns) must not 500 the commercial panel.
+                session.rollback()
+                sample = None
             corrected, unattributed = _corrected_positions(sample, count)
             manually_corrected += corrected
             unattributed_manual_corrections += int(unattributed)

@@ -17,7 +17,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import func
@@ -118,7 +118,7 @@ def enforce_state(
         )
 
     req.status = target_state
-    req.updated_at = datetime.utcnow()
+    req.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     session.add(req)
     session.commit()
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from sqlmodel import Session
@@ -48,7 +48,7 @@ def _update_job_run(
 ):
     job_run.status = status
     if finished:
-        job_run.finished_at = datetime.utcnow()
+        job_run.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
     if result is not None:
         import json
         try:
@@ -81,7 +81,7 @@ def run_job(
         job_id=job_id,
         job_name=name,
         status="running",
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc).replace(tzinfo=None),
         dry_run=context.dry_run,
         correlation_id=context.correlation_id,
         idempotency_key=context.idempotency_key,

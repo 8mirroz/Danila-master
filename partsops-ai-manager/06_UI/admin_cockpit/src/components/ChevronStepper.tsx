@@ -1,4 +1,6 @@
 import React from 'react';
+import { Icon } from './Primitives';
+
 
 interface ChevronStepperProps {
   status: string;
@@ -9,14 +11,14 @@ interface ChevronStepperProps {
 
 export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status, activeIndex, onStepClick, canOpenStep }) => {
   const stages = [
-    { id: 'INTAKE', label: 'Входящая', icon: 'fa-inbox' },
-    { id: 'AI_PARSE', label: 'ИИ Разбор', icon: 'fa-robot' },
-    { id: 'VERIFICATION', label: 'Проверка', icon: 'fa-user-check' },
-    { id: 'MATCHING', label: 'Метчинг', icon: 'fa-shuffle' },
-    { id: 'PRICING', label: 'Прайсинг', icon: 'fa-calculator' },
-    { id: 'APPROVAL', label: 'Согласование', icon: 'fa-file-signature' },
-    { id: 'INVOICE', label: 'Счет', icon: 'fa-file-invoice-dollar' },
-    { id: 'FULFILLED', label: 'Исполнено', icon: 'fa-circle-check' },
+    { id: 'INTAKE', label: 'Входящая', icon: 'inbox' },
+    { id: 'AI_PARSE', label: 'ИИ Разбор', icon: 'robot' },
+    { id: 'VERIFICATION', label: 'Проверка', icon: 'user-check' },
+    { id: 'MATCHING', label: 'Метчинг', icon: 'shuffle' },
+    { id: 'PRICING', label: 'Прайсинг', icon: 'calculator' },
+    { id: 'APPROVAL', label: 'Согласование', icon: 'file-signature' },
+    { id: 'INVOICE', label: 'Счет', icon: 'file-invoice-dollar' },
+    { id: 'FULFILLED', label: 'Исполнено', icon: 'circle-check' },
   ];
 
   const getChevronStepIndex = (statusStr: string): number => {
@@ -38,8 +40,8 @@ export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status, activeIn
 
   if (isCancelled) {
     return (
-      <div className="w-full bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-2xl flex items-center gap-3 mb-4 shadow-xs">
-        <i className="fas fa-circle-xmark text-lg text-rose-600"></i>
+      <div className="w-full bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-2xl flex items-center gap-3 mb-4 shadow-ds-sm">
+        <Icon name="circle-xmark" size={18} className="text-lg text-rose-600" />
         <div>
           <span className="font-extrabold text-xs uppercase tracking-wider block">Заявка отменена или отклонена</span>
           <span className="text-[11px] font-medium opacity-90">Текущий статус: {status}</span>
@@ -49,7 +51,7 @@ export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status, activeIn
   }
 
   return (
-    <div className="w-full mb-4 rounded-3xl border border-slate-200 bg-white p-2.5 shadow-xs select-none">
+    <div className="w-full mb-4 rounded-3xl border border-line bg-surface-1 p-2.5 shadow-ds-sm select-none">
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5">
         {stages.map((stage, idx) => {
           const isCompleted = idx < currentIndex;
@@ -66,24 +68,24 @@ export const ChevronStepper: React.FC<ChevronStepperProps> = ({ status, activeIn
               onClick={() => onStepClick?.(idx)}
               className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-2xl text-[10px] font-extrabold uppercase tracking-wider transition-all ${
                 isCurrent
-                  ? 'bg-[var(--accent-primary)] text-white shadow-sm scale-[1.02]'
+                  ? 'bg-accent-primary text-white shadow-sm scale-[1.02]'
                   : isCompleted
                   ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/80'
                   : isStepError
                   ? 'bg-rose-600 text-white'
-                  : 'bg-slate-50 text-slate-500 border border-slate-200/60'
+                  : 'bg-surface-2 text-ink-muted border border-line'
               } ${onStepClick && (!canOpenStep || canOpenStep(idx)) ? 'cursor-pointer hover:-translate-y-px hover:border-blue-300' : 'cursor-default'} disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {isStepError ? (
-                <i className="fas fa-triangle-exclamation text-white animate-pulse" />
+                <Icon name="triangle-exclamation" size={14} className="text-white animate-pulse" />
               ) : isCompleted ? (
                 <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-bold">
                   ✓
                 </span>
               ) : isCurrent ? (
-                <i className={`fas ${stage.icon} text-blue-300`} />
+                <Icon name={stage.icon} size={12} className="text-blue-200" />
               ) : (
-                <span className="w-3.5 h-3.5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[8px] font-bold">
+                <span className="w-3.5 h-3.5 rounded-full bg-surface-4 text-ink-muted flex items-center justify-center text-[8px] font-bold">
                   {idx + 1}
                 </span>
               )}

@@ -31,6 +31,8 @@ dist/
 *.bak
 *.bak[0-9]
 *.bak[0-9][0-9]
+*.db.bak*
+database.db.bak*
 *.backup
 *.backup[0-9]
 *.backup[0-9][0-9]
@@ -38,6 +40,11 @@ dist/
 *.tmp
 *.swp
 *~
+
+# ─── Local session / smoke / audit artifacts (not product source) ─────────────
+*SMOKE_REPORT*.md
+*FULL_AUDIT_REPORT*.md
+PROJECT_STATUS_REPORT_*.md
 
 # ─── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store

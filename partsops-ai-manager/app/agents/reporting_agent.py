@@ -14,7 +14,7 @@ import json
 import logging
 import uuid
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from app.agents.base_agent import BaseAgent, AgentContext, AgentResult, AgentType
@@ -308,7 +308,7 @@ class ReportingAgent(BaseAgent):
             "phases": list(context.previous_results.keys()),
             "correlation_id": context.correlation_id,
             "total_agents": len(context.previous_results),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
         
         self.emit_event(

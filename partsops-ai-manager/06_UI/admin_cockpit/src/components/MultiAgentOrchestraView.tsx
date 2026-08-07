@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
-import { SectionCard } from './Primitives';
+import { SectionCard, Icon } from './Primitives';
 
 type NodeStatus = 'idle' | 'active' | 'success' | 'error';
 
@@ -50,10 +50,10 @@ type PipelineRun = {
 
 const GRAPH: PipelineGraph = {
   nodes: [
-    { id: 'intake', label: 'Intake Agent', icon: 'fa-inbox', color: '#3b82f6', description: 'Сбор и структурирование заказа' },
-    { id: 'processing', label: 'Processing Agent', icon: 'fa-microchip', color: '#a855f7', description: 'Подбор, цены, генерация документов' },
-    { id: 'delivery', label: 'Delivery Agent', icon: 'fa-paper-plane', color: '#22c55e', description: 'Клиентская коммуникация' },
-    { id: 'reporting', label: 'Reporting Agent', icon: 'fa-chart-line', color: '#f97316', description: 'Отчетность и уведомления' },
+    { id: 'intake', label: 'Intake Agent', icon: 'inbox', color: '#3b82f6', description: 'Сбор и структурирование заказа' },
+    { id: 'processing', label: 'Processing Agent', icon: 'microchip', color: '#a855f7', description: 'Подбор, цены, генерация документов' },
+    { id: 'delivery', label: 'Delivery Agent', icon: 'paper-plane', color: '#22c55e', description: 'Клиентская коммуникация' },
+    { id: 'reporting', label: 'Reporting Agent', icon: 'chart-line', color: '#f97316', description: 'Отчетность и уведомления' },
   ],
   edges: [
     { from: 'intake', to: 'processing' },
@@ -182,34 +182,34 @@ export function MultiAgentOrchestraView() {
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Мультиагентный оркестр (Multi-Agent DAG)" icon="fa-diagram-project">
+      <SectionCard title="Мультиагентный оркестр (Multi-Agent DAG)" icon="diagram-project">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+          <p className="text-xs text-ink-secondary leading-relaxed">
             Визуализация состояния мультиагентного конвейера PartsOps. Каждый узел — отдельный LLM-агент (Intake → Processing → Delivery → Reporting).
             Цвет индикатора отражает статус: <span className="text-emerald-700 font-bold">success</span> / <span className="text-blue-700 font-bold">running</span> / <span className="text-rose-700 font-bold">failed</span> /
-            <span className="text-slate-500 font-bold"> idle</span>. Клик на запуске раскрывает детали.
+            <span className="text-ink-muted font-bold"> idle</span>. Клик на запуске раскрывает детали.
           </p>
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--text-secondary)] cursor-pointer">
+            <label className="flex items-center gap-1.5 text-[10px] font-medium text-ink-secondary cursor-pointer">
               <input
                 type="checkbox"
                 checked={liveMode}
                 onChange={(e) => setLiveMode(e.target.checked)}
-                className="w-4 h-4 accent-emerald-600 rounded border-[var(--border-default)]"
+                className="w-4 h-4 accent-emerald-600 rounded border-line"
               />
               Live (auto-refresh 8s)
             </label>
             {loading && <span className="text-[10px] text-blue-600 animate-pulse">⟳ обновление...</span>}
-            {lastUpdate && <span className="text-[9px] text-[var(--text-muted)]">Last: {new Date(lastUpdate).toLocaleTimeString()}</span>}
-            <span className="text-[9px] font-mono text-slate-500">|</span>
-            <span className="text-[9px] font-mono text-slate-600">Vault: </span>
+            {lastUpdate && <span className="text-[9px] text-ink-muted">Last: {new Date(lastUpdate).toLocaleTimeString()}</span>}
+            <span className="text-[9px] font-mono text-ink-muted">|</span>
+            <span className="text-[9px] font-mono text-ink-secondary">Vault: </span>
             <span className="text-[9px] font-mono text-amber-700">bridge-ready</span>
           </div>
         </div>
         <div className="space-y-3">
           {runs.length === 0 && (
-            <div className="text-center py-6 text-[var(--text-muted)]">
-              <i className="fas fa-robot text-3xl mb-2 opacity-30" />
+            <div className="text-center py-6 text-ink-muted">
+              <Icon name="robot" size={30} className="text-3xl mb-2 opacity-30" />
               <p className="text-xs font-semibold">Активные запуски не обнаружены</p>
             </div>
           )}
@@ -217,33 +217,33 @@ export function MultiAgentOrchestraView() {
             const statuses = GRAPH.nodes.map((n) => ({ node: n, status: getNodeStatus(run, n.id) }));
             const isExpanded = expandedRun === run.request_id;
             return (
-              <div key={run.request_id} className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-2)] overflow-hidden">
+              <div key={run.request_id} className="rounded-xl border border-line bg-surface-2 overflow-hidden">
                 <div className="flex items-center justify-between p-3 cursor-pointer" onClick={() => expandRun(run)}>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-[10px] font-mono font-bold text-[var(--text-primary)]">{run.request_id}</span>
+                    <span className="text-[10px] font-mono font-bold text-ink-primary">{run.request_id}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
                       run.status === 'completed' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
                       run.status === 'failed' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
                       'bg-blue-100 text-blue-700 border border-blue-200'
                     }`}>{run.status}</span>
                     {run.correlation_id && (
-                      <span className="text-[9px] text-[var(--text-muted)] font-mono">cid: {run.correlation_id.slice(0, 8)}...</span>
+                      <span className="text-[9px] text-ink-muted font-mono">cid: {run.correlation_id.slice(0, 8)}...</span>
                     )}
                     {run.total_time_ms && (
-                      <span className="text-[9px] font-mono text-[var(--text-secondary)]">{run.total_time_ms}ms</span>
+                      <span className="text-[9px] font-mono text-ink-secondary">{run.total_time_ms}ms</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="text-[9px] px-2 py-1 rounded border border-[var(--border-default)] bg-[var(--surface-1)] text-[var(--text-secondary)] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 disabled:opacity-50"
+                      className="text-[9px] px-2 py-1 rounded border border-line bg-surface-1 text-ink-secondary hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 disabled:opacity-50"
                       onClick={(e) => { e.stopPropagation(); triggerVaultSync(run); }}
                       disabled={!run.correlation_id}
                       title="Sync to Obsidian vault"
                     >
                       ⬇ Vault
                     </button>
-                    <i className={`fas fa-chevron-down text-[10px] text-[var(--text-muted)] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    <Icon name="chevron-down" size={10} className={`text-ink-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
 
@@ -260,7 +260,7 @@ export function MultiAgentOrchestraView() {
                   )}
 
                   {/* SVG DAG Visualization */}
-                  <div className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] p-4 overflow-x-auto">
+                  <div className="rounded-lg border border-line bg-surface-1 p-4 overflow-x-auto">
                     <svg viewBox="0 0 900 220" className="w-full h-auto select-none" style={{ minWidth: 700 }}>
                       {/* Edges */}
                       {GRAPH.edges.map((edge) => {
@@ -322,7 +322,7 @@ export function MultiAgentOrchestraView() {
                               {node.label}
                             </text>
                             <text x={80 + GRAPH.nodes.indexOf(node) * 180} y={52} textAnchor="middle" className="text-[9px] pointer-events-none" fill={style.text} opacity="0.9">
-                              <tspan x={80 + GRAPH.nodes.indexOf(node) * 180} dy="0">{node.icon}</tspan>
+                              <tspan x={80 + GRAPH.nodes.indexOf(node) * 180} dy="0">{node.id}</tspan>
                             </text>
                             {status === 'success' && (
                               <text x={80 + GRAPH.nodes.indexOf(node) * 180} y={68} textAnchor="middle" className="text-[9px] pointer-events-none" fill="#15803d">✓ OK</text>
@@ -342,29 +342,29 @@ export function MultiAgentOrchestraView() {
 
                 {/* Expanded Details */}
                 {isExpanded && (
-                  <div className="px-4 pb-4 space-y-2 border-t border-[var(--border-subtle)] pt-3 mt-1">
-                    <p className="text-[9px] text-[var(--text-muted)] font-mono">
-                      Correlation: <strong className="text-[var(--text-secondary)]">{run.correlation_id}</strong>
+                  <div className="px-4 pb-4 space-y-2 border-t border-line-subtle pt-3 mt-1">
+                    <p className="text-[9px] text-ink-muted font-mono">
+                      Correlation: <strong className="text-ink-secondary">{run.correlation_id}</strong>
                     </p>
                     {GRAPH.nodes.map((node) => {
                       const phase = Object.values(run.phases).find(
                         (p) => p.agent_type?.toLowerCase().includes(node.id) || p.model?.toLowerCase().includes(node.id)
                       );
                       return (
-                        <div key={`d-${node.id}`} className="flex items-start gap-3 p-2 rounded-lg bg-[var(--surface-1)] border border-[var(--border-default)]">
+                        <div key={`d-${node.id}`} className="flex items-start gap-3 p-2 rounded-lg bg-surface-1 border border-line">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[10px] font-mono font-bold text-[var(--text-primary)]">{node.label}</span>
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-mono ${phase ? (phase.success ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200') : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                              <span className="text-[10px] font-mono font-bold text-ink-primary">{node.label}</span>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-mono ${phase ? (phase.success ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200') : 'bg-surface-2 text-ink-muted border-line'}`}>
                                 {phase ? (phase.success ? 'SUCCESS' : 'ERROR') : 'PENDING'}
                               </span>
-                              {phase?.provider && <span className="text-[9px] text-[var(--text-muted)]">Provider: <strong>{phase.provider}</strong></span>}
-                              {phase?.model && <span className="text-[9px] text-[var(--text-muted)]">Model: <strong className="font-mono">{phase.model.split('/').pop()?.slice(0, 24)}</strong></span>}
+                              {phase?.provider && <span className="text-[9px] text-ink-muted">Provider: <strong>{phase.provider}</strong></span>}
+                              {phase?.model && <span className="text-[9px] text-ink-muted">Model: <strong className="font-mono">{phase.model.split('/').pop()?.slice(0, 24)}</strong></span>}
                             </div>
-                            <div className="mt-1 flex items-center gap-3 text-[9px] text-[var(--text-muted)]">
-                              {phase?.latency_ms && <span>Latency: <strong className="text-[var(--text-secondary)]">{phase.latency_ms}ms</strong></span>}
-                              {phase?.total_tokens && <span>Tokens: <strong className="text-[var(--text-secondary)]">{phase.total_tokens}</strong></span>}
-                              {phase?.cost_usd && <span>Cost: <strong className="text-[var(--text-secondary)]">${phase.cost_usd.toFixed(6)}</strong></span>}
+                            <div className="mt-1 flex items-center gap-3 text-[9px] text-ink-muted">
+                              {phase?.latency_ms && <span>Latency: <strong className="text-ink-secondary">{phase.latency_ms}ms</strong></span>}
+                              {phase?.total_tokens && <span>Tokens: <strong className="text-ink-secondary">{phase.total_tokens}</strong></span>}
+                              {phase?.cost_usd && <span>Cost: <strong className="text-ink-secondary">${phase.cost_usd.toFixed(6)}</strong></span>}
                             </div>
                             {phase?.errors && phase.errors.length > 0 && (
                               <div className="mt-1 text-[9px] text-rose-600 font-mono">⚠ {phase.errors.join('; ')}</div>

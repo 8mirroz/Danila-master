@@ -8,7 +8,7 @@ Seeder: Contract № 2026.170160 reference data.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from sqlmodel import Session, select
@@ -211,7 +211,7 @@ def seed_fleet_and_tariffs(session: Session, *, dry_run: bool = True) -> dict:
             "year": row["year"],
             "contract_ref": "2026.170160",
             "status": "active",
-            "updated_at": datetime.utcnow(),
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
         }
 
         if not existing:
@@ -219,7 +219,7 @@ def seed_fleet_and_tariffs(session: Session, *, dry_run: bool = True) -> dict:
                 tenant_id=tenant_id,
                 vin=row["vin"],
                 **defaults,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
             ))
             added_fleet += 1
         else:
@@ -253,8 +253,8 @@ def seed_fleet_and_tariffs(session: Session, *, dry_run: bool = True) -> dict:
                 penalty_rate_per_day_pct=row["penalty_rate_per_day_pct"],
                 contract_ref="2026.170160",
                 is_active=True,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
             ))
             added_tariffs += 1
         else:
@@ -262,7 +262,7 @@ def seed_fleet_and_tariffs(session: Session, *, dry_run: bool = True) -> dict:
             existing.base_price_rub = row["base_price_rub"]
             existing.sla_hours = row["sla_hours"]
             existing.penalty_rate_per_day_pct = row["penalty_rate_per_day_pct"]
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             session.add(existing)
             updated_tariffs += 1
 
@@ -278,8 +278,8 @@ def seed_fleet_and_tariffs(session: Session, *, dry_run: bool = True) -> dict:
         session.add(ContractPenaltyConfig(
             tenant_id=tenant_id,
             **PENALTY_CONFIG,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
         ))
         penalty_upserted = True
     else:
@@ -288,7 +288,7 @@ def seed_fleet_and_tariffs(session: Session, *, dry_run: bool = True) -> dict:
         existing_config.penalty_rub_per_day = PENALTY_CONFIG["penalty_rub_per_day"]
         existing_config.max_penalty_pct = PENALTY_CONFIG["max_penalty_pct"]
         existing_config.currency = PENALTY_CONFIG["currency"]
-        existing_config.updated_at = datetime.utcnow()
+        existing_config.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         session.add(existing_config)
         penalty_upserted = True
 

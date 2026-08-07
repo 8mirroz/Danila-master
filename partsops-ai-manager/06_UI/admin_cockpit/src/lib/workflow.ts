@@ -199,7 +199,7 @@ export const getPriorityClasses = (priority?: string) => {
   }
 
   if (normalized === 'LOW') {
-    return 'bg-slate-100 text-slate-600 border-slate-200';
+    return 'bg-surface-3 text-ink-secondary border-line';
   }
 
   return 'bg-blue-50 text-blue-700 border-blue-200';

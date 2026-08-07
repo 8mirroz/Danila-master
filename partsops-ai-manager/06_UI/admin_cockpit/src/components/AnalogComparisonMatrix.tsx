@@ -204,8 +204,8 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
         );
       default:
         return (
-          <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+          <span className="bg-surface-3 text-ink-secondary border border-line px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-surface-5" />
             Tier 4: Spec Match
           </span>
         );
@@ -235,21 +235,21 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
   };
 
   return (
-    <div className="bg-white border border-[var(--border-default)] rounded-2xl p-5 shadow-[0_10px_30px_rgba(37,99,235,0.04)] space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
+    <div className="bg-surface-1 border border-line rounded-2xl p-5 shadow-[0_10px_30px_rgba(37,99,235,0.04)] space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-line-subtle pb-4 gap-3">
         <div>
-          <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+          <h3 className="text-sm font-bold text-ink-primary flex items-center gap-2">
             <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
               <Icon name="code-fork" size={16} />
             </span>
             Матрица подбора аналогов (live API)
           </h3>
-          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+          <p className="text-xs text-ink-secondary mt-0.5">
             Данные из `/api/contracts/…/analogs-report` — без demo-строк
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] bg-slate-50 text-slate-600 border border-slate-200 px-3 py-1 rounded-full font-mono font-medium">
+          <span className="text-[11px] bg-surface-2 text-ink-secondary border border-line px-3 py-1 rounded-full font-mono font-medium">
             Заявка: {requestId || 'не выбрана'}
           </span>
           <button
@@ -263,7 +263,7 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
       </div>
 
       {loading && (
-        <div className="text-xs text-slate-500 py-6 text-center">Загрузка аналогов…</div>
+        <div className="text-xs text-ink-muted py-6 text-center">Загрузка аналогов…</div>
       )}
 
       {!loading && source === 'error' && (
@@ -273,7 +273,7 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
       )}
 
       {!loading && source === 'empty' && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-600">
+        <div className="rounded-xl border border-line bg-surface-2 px-4 py-6 text-center text-xs text-ink-secondary">
           {requestId
             ? 'Нет позиций/аналогов в БД для этой заявки. Запустите resolve-analogs или contract crawler.'
             : 'Выберите заявку, чтобы увидеть live-матрицу аналогов.'}
@@ -294,29 +294,29 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
                 className={`p-4 rounded-xl border transition-all duration-200 flex flex-col justify-between space-y-3 ${
                   isApproved
                     ? 'bg-emerald-50/40 border-emerald-300/80 shadow-[0_4px_16px_rgba(14,159,110,0.08)]'
-                    : 'bg-slate-50/50 border-slate-200/80 hover:bg-white hover:border-blue-200 hover:shadow-md'
+                    : 'bg-surface-2/50 border-line hover:bg-surface-1 hover:border-blue-200 hover:shadow-md'
                 }`}
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[11px] font-mono text-slate-500 font-medium">
+                        <span className="text-[11px] font-mono text-ink-muted font-medium">
                           OEM: {item.oem_part}
                         </span>
                         <span className="text-[9px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.2 rounded font-mono font-bold uppercase">
                           {item.oem_status}
                         </span>
                       </div>
-                      <h4 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                      <h4 className="text-sm font-bold text-ink-primary flex items-center gap-1.5">
                         {item.analog_article}
-                        <span className="text-slate-500 text-xs font-semibold">({item.brand})</span>
+                        <span className="text-ink-muted text-xs font-semibold">({item.brand})</span>
                       </h4>
                     </div>
                     {getTierBadge(item.quality_tier)}
                   </div>
 
-                  <div className="space-y-1 bg-white p-2.5 rounded-lg border border-slate-200/70 text-[11px] text-slate-600">
+                  <div className="space-y-1 bg-surface-1 p-2.5 rounded-lg border border-line/70 text-[11px] text-ink-secondary">
                     {item.risk_factors.map((factor, idx) => (
                       <div key={idx} className="flex items-center gap-1.5">
                         <Icon name="check" size={12} className="text-emerald-500 shrink-0" />
@@ -326,7 +326,7 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                <div className="flex items-center justify-between pt-2 border-t border-line">
                   <div>
                     <div className="flex items-center gap-2">
                       {getRiskBadge(item.risk_score)}
@@ -336,7 +336,7 @@ export const AnalogComparisonMatrix: React.FC<AnalogComparisonMatrixProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-500">
+                    <div className="mt-1 text-[11px] text-ink-muted">
                       {item.price_analog > 0 ? `${item.price_analog.toLocaleString()} ₽` : 'цена н/д'}
                       {item.delivery_days > 0 ? ` · ${item.delivery_days} дн.` : ''}
                     </div>

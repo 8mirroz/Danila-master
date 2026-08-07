@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlmodel import Session, select
 from models import AutomationLock
@@ -54,7 +54,7 @@ class AutomationLocks:
                 pid=0,
             )
         ttl = ttl_seconds or self._default_ttl
-        expires_at = datetime.utcnow() + timedelta(seconds=ttl)
+        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=ttl)
 
         for attempt in range(retry_count):
             existing = self._session.exec(
@@ -78,16 +78,16 @@ class AutomationLocks:
                 return row
 
             if existing.owner_key == owner_key:
-                if not blocking or (existing.expires_at and existing.expires_at < datetime.utcnow()):
+                if not blocking or (existing.expires_at and existing.expires_at < datetime.now(timezone.utc).replace(tzinfo=None)):
                     existing.status = "released"
-                    existing.released_at = datetime.utcnow()
+                    existing.released_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 self._session.add(existing)
                 self._session.commit()
                 return existing
 
-            if existing.expires_at and existing.expires_at < datetime.utcnow():
+            if existing.expires_at and existing.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
                 existing.status = "expired"
-                existing.released_at = datetime.utcnow()
+                existing.released_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 self._session.add(existing)
                 self._session.commit()
                 continue
@@ -123,7 +123,7 @@ class AutomationLocks:
         if owner_key and lock.owner_key != owner_key:
             return
         lock.status = "released"
-        lock.released_at = datetime.utcnow()
+        lock.released_at = datetime.now(timezone.utc).replace(tzinfo=None)
         self._session.add(lock)
         self._session.commit()
 

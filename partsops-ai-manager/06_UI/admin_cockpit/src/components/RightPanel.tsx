@@ -177,7 +177,7 @@ export const RightPanel = ({
       <aside
         ref={collapsedRailRef}
         aria-label="Скрытая очередь заказов"
-        className="queue-collapsed-rail w-16 border-l border-[var(--border-default)] flex flex-col justify-between items-center py-4 transition-[background-color,border-color] duration-300 ease-out flex-shrink-0 select-none h-full"
+        className="queue-collapsed-rail w-16 border-l border-line flex flex-col justify-between items-center py-4 transition-[background-color,border-color] duration-300 ease-out flex-shrink-0 select-none h-full"
       >
         <div className="flex flex-col items-center gap-5 w-full">
           {/* Toggle Button */}
@@ -240,7 +240,7 @@ export const RightPanel = ({
           type="button"
           aria-label="Развернуть очередь заказов"
           data-queue-rail-reveal
-          className="queue-collapsed-rail__footer text-[var(--text-muted)] cursor-pointer"
+          className="queue-collapsed-rail__footer text-ink-muted cursor-pointer"
           onClick={onToggleCollapse}
           title="Развернуть очередь"
         >
@@ -252,22 +252,22 @@ export const RightPanel = ({
 
   return (
     <RightQueueRail drawerOpen={drawerOpen} onCloseDrawer={onCloseDrawer}>
-      <div className="queue-rail-content flex flex-col h-full min-w-0 bg-[var(--surface-1)]">
+      <div className="queue-rail-content flex flex-col h-full min-w-0 bg-surface-1">
         {/* Panel Header */}
-        <div className="p-4 border-b border-[var(--border-default)] flex items-center justify-between bg-[var(--surface-1)]">
+        <div className="p-4 border-b border-line flex items-center justify-between bg-surface-1">
           <div className="flex items-center gap-2.5">
             <button 
               onClick={onToggleCollapse}
               aria-expanded={true}
               aria-label="Свернуть очередь заказов"
-              className="w-7 h-7 rounded-full bg-[var(--surface-2)] border border-[var(--border-default)] hover:bg-[var(--state-hover)] hover:border-[var(--text-muted)] flex items-center justify-center text-xs text-[var(--text-secondary)] transition-all duration-200 shadow-sm"
+              className="w-7 h-7 rounded-full bg-surface-2 border border-line hover:bg-state-hover hover:border-[var(--text-muted)] flex items-center justify-center text-xs text-ink-secondary transition-all duration-200 shadow-sm"
               title="Свернуть очередь"
             >
               <Icon name="chevron-right" size={12} />
             </button>
             <div>
-              <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider block">Обработка заказов</span>
-              <h2 className="text-sm font-bold text-[var(--text-primary)]">Активная очередь</h2>
+              <span className="text-[10px] text-ink-muted font-bold uppercase tracking-wider block">Обработка заказов</span>
+              <h2 className="text-sm font-bold text-ink-primary">Активная очередь</h2>
             </div>
           </div>
           <ActionButton 
@@ -280,7 +280,7 @@ export const RightPanel = ({
         </div>
 
       {/* Stats Summary & Quick Intake */}
-      <div className="p-4 border-b border-[var(--border-default)] bg-[var(--surface-2)] space-y-4">
+      <div className="p-4 border-b border-line bg-surface-2 space-y-4">
         {/* Triage inline summary */}
         <div className="grid grid-cols-3 gap-2 text-[10px] select-none">
           {triageStats.map((item) => {
@@ -295,7 +295,7 @@ export const RightPanel = ({
               ? 'bg-[var(--accent-success)]/10 text-[var(--accent-success)] border-[var(--accent-success)]/30' 
               : item.tone === 'danger' 
               ? 'bg-[var(--accent-danger)]/10 text-[var(--accent-danger)] border-[var(--accent-danger)]/30' 
-              : 'bg-[var(--surface-3)] text-[var(--text-secondary)] border-[var(--border-default)]';
+              : 'bg-surface-3 text-ink-secondary border-line';
 
             return (
               <div 
@@ -331,15 +331,15 @@ export const RightPanel = ({
             </div>
           )}
           <div className="flex items-center justify-between">
-            <label className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">Быстрый ввод</label>
-            <span className="max-w-[58%] truncate text-right text-[9px] text-[var(--text-muted)] italic">drag & drop PDF/Excel/Word</span>
+            <label className="text-[10px] text-ink-muted font-bold uppercase tracking-wider">Быстрый ввод</label>
+            <span className="max-w-[58%] truncate text-right text-[9px] text-ink-muted italic">drag & drop PDF/Excel/Word</span>
           </div>
           <div className="relative">
             <textarea
-              className={`w-full min-h-[66px] border rounded-[10px] p-2.5 text-xs text-[var(--text-primary)] bg-[var(--surface-1)] outline-none focus:border-[var(--accent-primary)] font-sans resize-none transition-all ${
+              className={`w-full min-h-[66px] border rounded-[10px] p-2.5 text-xs text-ink-primary bg-surface-1 outline-none focus:border-accent-primary font-sans resize-none transition-all ${
                 isDragging 
-                  ? 'border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)] bg-[var(--accent-primary)]/10 border-dashed' 
-                  : 'border-[var(--border-default)]'
+                  ? 'border-accent-primary ring-2 ring-[var(--accent-primary)] bg-accent-primary/10 border-dashed' 
+                  : 'border-line'
               }`}
               placeholder="Введите текст запроса или перетащите файл (PDF, Excel, Word)..."
               rows={3}
@@ -347,8 +347,8 @@ export const RightPanel = ({
               onChange={(event) => setNewRequestText(event.target.value)}
             />
             {isDragging && (
-              <div className="absolute inset-0 bg-[var(--accent-primary)] bg-opacity-5 flex items-center justify-center pointer-events-none rounded-md">
-                <div className="bg-[var(--surface-2)] border border-[var(--accent-primary)] px-3 py-1.5 rounded-md shadow-sm text-xs font-semibold text-[var(--accent-primary)] flex items-center gap-1.5 animate-bounce">
+              <div className="absolute inset-0 bg-accent-primary bg-opacity-5 flex items-center justify-center pointer-events-none rounded-md">
+                <div className="bg-surface-2 border border-accent-primary px-3 py-1.5 rounded-md shadow-sm text-xs font-semibold text-accent-primary flex items-center gap-1.5 animate-bounce">
                   <Icon name="file-arrow-up" size={14} /> Сбросьте файл сюда
                 </div>
               </div>
@@ -357,15 +357,15 @@ export const RightPanel = ({
 
           {/* Attachment Badge */}
           {attachedFile && (
-            <div className="flex items-center justify-between bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/30 rounded px-2.5 py-1 text-[11px] font-medium text-[var(--accent-primary)]">
+            <div className="flex items-center justify-between bg-accent-primary/10 border border-accent-primary/30 rounded px-2.5 py-1 text-[11px] font-medium text-accent-primary">
               <span className="flex items-center gap-1.5 truncate">
-                <Icon name="file-arrow-up" size={13} className="text-[var(--accent-primary)]" />
+                <Icon name="file-arrow-up" size={13} className="text-accent-primary" />
                 <span className="truncate">{attachedFile.name}</span>
                 <span className="text-[9px] opacity-80">({(attachedFile.size / 1024).toFixed(1)} КБ)</span>
               </span>
               <button 
                 onClick={() => { setAttachedFile(null); setNewRequestText(''); }}
-                className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] font-bold ml-2 text-[10px]"
+                className="text-ink-muted hover:text-[var(--accent-danger)] font-bold ml-2 text-[10px]"
                 type="button"
                 title="Удалить файл"
               >
@@ -388,7 +388,7 @@ export const RightPanel = ({
             />
             <label 
               htmlFor="right-panel-file-upload"
-              className="queue-rail-attachment w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-1)] hover:bg-[var(--state-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-all duration-200"
+              className="queue-rail-attachment w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-[10px] border border-line bg-surface-1 hover:bg-state-hover text-ink-secondary hover:text-ink-primary cursor-pointer transition-all duration-200"
               aria-label="Загрузить файл"
               title="Загрузить файл"
             >
@@ -396,7 +396,7 @@ export const RightPanel = ({
             </label>
             <ActionButton 
               variant="primary" 
-              icon={attachedFile ? "fa-file-import" : "fa-paper-plane"} 
+              icon={attachedFile ? 'file-import' : 'paper-plane'} 
               loading={loading}
               disabled={!newRequestText.trim()}
               onClick={submitRequest}
@@ -409,18 +409,18 @@ export const RightPanel = ({
       </div>
 
       {/* Queue items section */}
-      <div className="px-4 py-2 bg-[var(--surface-2)] border-b border-[var(--border-default)] flex items-center justify-between text-[11px] font-semibold text-[var(--text-secondary)] select-none">
+      <div className="px-4 py-2 bg-surface-2 border-b border-line flex items-center justify-between text-[11px] font-semibold text-ink-secondary select-none">
         <span>ЗАКАЗЫ</span>
-        <button className="text-[var(--accent-primary)] hover:underline text-[10px] font-bold">Сортировка</button>
+        <button className="text-accent-primary hover:underline text-[10px] font-bold">Сортировка</button>
       </div>
 
       {/* Queue list container */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-[var(--bg-app)]">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-app-bg">
         {requests.length === 0 ? (
-          <div className="text-center py-10 bg-[var(--surface-1)] border border-[var(--border-default)] rounded-md p-4">
-              <Icon name="folder-open" size={24} className="mb-2 text-[var(--text-muted)]" />
-            <strong className="text-xs text-[var(--text-primary)] block font-bold">Очередь пуста</strong>
-            <p className="text-[10px] text-[var(--text-muted)] leading-relaxed mt-1">Создайте новый заказ или подключите бэкенд для наполнения очереди.</p>
+          <div className="text-center py-10 bg-surface-1 border border-line rounded-md p-4">
+              <Icon name="folder-open" size={24} className="mb-2 text-ink-muted" />
+            <strong className="text-xs text-ink-primary block font-bold">Очередь пуста</strong>
+            <p className="text-[10px] text-ink-muted leading-relaxed mt-1">Создайте новый заказ или подключите бэкенд для наполнения очереди.</p>
           </div>
         ) : (
           requests.map((req) => {
@@ -439,19 +439,19 @@ export const RightPanel = ({
                 onClick={() => onSelectRequest(req)}
                 className={`queue-order-card group relative overflow-hidden rounded-xl p-3.5 cursor-pointer transition-all duration-300 flex justify-between items-start gap-3 ${
                   isSelected 
-                    ? 'bg-[var(--surface-2)] shadow-md border-[var(--accent-primary)] ring-1 ring-[var(--accent-primary)]'
-                    : 'bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]'
+                    ? 'bg-surface-2 shadow-md border-accent-primary ring-1 ring-[var(--accent-primary)]'
+                    : 'bg-surface-1 border border-line hover:border-line-strong hover:bg-surface-2'
                 }`}
               >
                 {isSelected && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-[var(--accent-primary)]" />
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent-primary" />
                 )}
 
                 {/* Левая часть: вводные данные заказа */}
                 <div className="queue-order-main flex flex-col gap-1.5 flex-1 min-w-0">
                   <div className="queue-order-meta flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1" data-testid="queue-order-meta">
                     <StatusBadge status={req.status} />
-                    <span className="whitespace-nowrap pt-1 text-[10px] font-medium text-[var(--text-muted)] font-mono">
+                    <span className="whitespace-nowrap pt-1 text-[10px] font-medium text-ink-muted font-mono">
                       {new Date(req.created_at).toLocaleString('ru-RU', {
                         day: '2-digit', month: '2-digit',
                         hour: '2-digit', minute: '2-digit',
@@ -459,11 +459,11 @@ export const RightPanel = ({
                     </span>
                   </div>
 
-                  <h3 className="mt-1 break-words text-sm font-semibold tracking-tight text-[var(--text-primary)]">
+                  <h3 className="mt-1 break-words text-sm font-semibold tracking-tight text-ink-primary">
                     {req.customer_name || 'Без имени'}
                   </h3>
 
-                  <span className="truncate text-[10px] font-mono font-bold tracking-wider text-[var(--text-muted)]">
+                  <span className="truncate text-[10px] font-mono font-bold tracking-wider text-ink-muted">
                     {req.request_id}
                   </span>
                 </div>
@@ -471,18 +471,18 @@ export const RightPanel = ({
                 {/* Правая часть: 2 иконкообразных элемента (объем и стоимость) */}
                 <div className="queue-order-controls flex w-14 shrink-0 flex-col gap-2" data-testid="queue-order-controls">
                   <div
-                    className="flex h-7 w-full items-center justify-center gap-1 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-2)] px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]"
+                    className="flex h-7 w-full items-center justify-center gap-1 rounded-[8px] border border-line bg-surface-2 px-1.5 py-1 text-[10px] font-medium text-ink-secondary"
                     title="Примерный объем (позиций)"
                   >
-                    <Icon name="folder-open" size={12} className="text-[var(--text-muted)]" />
+                    <Icon name="folder-open" size={12} className="text-ink-muted" />
                     <span>{parts.length > 0 ? parts.length : '~'}</span>
                   </div>
 
                   <div
-                    className="flex h-7 w-full items-center justify-center gap-1 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-2)] px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]"
+                    className="flex h-7 w-full items-center justify-center gap-1 rounded-[8px] border border-line bg-surface-2 px-1.5 py-1 text-[10px] font-medium text-ink-secondary"
                     title="Примерная стоимость"
                   >
-                    <Icon name="circle-info" size={12} className="text-[var(--text-muted)]" />
+                    <Icon name="circle-info" size={12} className="text-ink-muted" />
                     <span>—</span>
                   </div>
                 </div>

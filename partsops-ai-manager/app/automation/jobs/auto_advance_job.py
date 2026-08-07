@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 from sqlmodel import Session, select
 
@@ -40,7 +40,7 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
                     state = sm_transition(state, target_state, req.model_dump())
                 
                 req.status = state
-                req.updated_at = datetime.utcnow()
+                req.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 session.add(req)
                 
                 append_request_event(

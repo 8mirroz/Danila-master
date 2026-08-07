@@ -41,7 +41,7 @@ export const SUPPLIER_STATUSES: Record<SupplierStatusKey, StatusMeta> = {
     label: 'Архив',
     shortLabel: 'Архив',
     tone: 'slate',
-    pillClass: 'bg-slate-100 text-slate-600 border-slate-200',
+    pillClass: 'bg-surface-3 text-ink-secondary border-line',
   },
 };
 
@@ -157,7 +157,7 @@ export function getSupplierStatusMeta(status: string): StatusMeta {
     label: status || '—',
     shortLabel: status || '—',
     tone: 'slate',
-    pillClass: 'bg-slate-100 text-slate-600 border-slate-200',
+    pillClass: 'bg-surface-3 text-ink-secondary border-line',
   };
 }
 
@@ -167,7 +167,7 @@ export function getSyncStatusMeta(status: string): StatusMeta {
     label: status || '—',
     shortLabel: status || '—',
     tone: 'slate',
-    pillClass: 'bg-slate-100 text-slate-600',
+    pillClass: 'bg-surface-3 text-ink-secondary',
   };
 }
 
@@ -224,7 +224,7 @@ export function getScraperBrandMeta(supplierId: string, name: string) {
   if (idLower.includes('exist') || nameLower.includes('exist')) {
     return {
       brandName: 'Exist.ru',
-      badgeClass: 'bg-blue-600 text-white shadow-xs',
+      badgeClass: 'bg-blue-600 text-white shadow-ds-sm',
       avatarBg: 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-black',
       borderClass: 'border-blue-500/30',
       accentColor: '#2563eb',
@@ -235,7 +235,7 @@ export function getScraperBrandMeta(supplierId: string, name: string) {
   if (idLower.includes('autodoc') || nameLower.includes('autodoc')) {
     return {
       brandName: 'Autodoc.ru',
-      badgeClass: 'bg-rose-600 text-white shadow-xs',
+      badgeClass: 'bg-rose-600 text-white shadow-ds-sm',
       avatarBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white font-black',
       borderClass: 'border-rose-500/30',
       accentColor: '#e11d48',
@@ -246,7 +246,7 @@ export function getScraperBrandMeta(supplierId: string, name: string) {
   if (idLower.includes('rossko') || nameLower.includes('rossko')) {
     return {
       brandName: 'Rossko.ru',
-      badgeClass: 'bg-amber-600 text-white shadow-xs',
+      badgeClass: 'bg-amber-600 text-white shadow-ds-sm',
       avatarBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white font-black',
       borderClass: 'border-amber-500/30',
       accentColor: '#d97706',
@@ -256,9 +256,9 @@ export function getScraperBrandMeta(supplierId: string, name: string) {
   }
   return {
     brandName: null,
-    badgeClass: 'bg-slate-700 text-white',
-    avatarBg: 'bg-[var(--surface-2)] text-[var(--text-secondary)] font-bold',
-    borderClass: 'border-[var(--border-default)]',
+    badgeClass: 'bg-ink-secondary text-white',
+    avatarBg: 'bg-surface-2 text-ink-secondary font-bold',
+    borderClass: 'border-line',
     accentColor: '#64748b',
     searchUrl: null,
     isConfiguredScraper: false,

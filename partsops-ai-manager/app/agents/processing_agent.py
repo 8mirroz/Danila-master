@@ -15,7 +15,7 @@ import json
 import logging
 import uuid
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.agents.base_agent import BaseAgent, AgentContext, AgentResult, AgentType
 from models import PartRequest, EventType, RequestState, ApprovalTicket
@@ -411,7 +411,7 @@ class ProcessingAgent(BaseAgent):
             "document_id": document_id,
             "document_type": "approval_invoice",
             "request_id": request.request_id,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "customer": {
                 "name": request.customer_name,
                 "phone": request.customer_phone_masked,
@@ -516,7 +516,7 @@ class ProcessingAgent(BaseAgent):
             if hasattr(request, key):
                 setattr(request, key, value)
         
-        request.updated_at = datetime.utcnow()
+        request.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         self.session.add(request)
         self.session.commit()
         self.session.refresh(request)

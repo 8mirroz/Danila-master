@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import json
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from sqlmodel import Session, select
@@ -70,7 +70,7 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
         return {"ok": True, "dry_run": True, "dispatched": 0}
 
     # Build query for pending messages ready for retry
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     query = select(OutboundMessage).where(
         OutboundMessage.tenant_id == context.tenant_id,
         OutboundMessage.status.in_(["pending", "failed"]),

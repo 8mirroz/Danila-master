@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActionButton, SearchField, DataTable } from './Primitives';
+import { ActionButton, SearchField, DataTable, Icon } from './Primitives';
 
 type Invoice = {
   invoice_id: string;
@@ -90,9 +90,9 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
       case 'DRAFT':
         return 'bg-amber-50 border-amber-200 text-amber-700';
       case 'CLOSED':
-        return 'bg-slate-100 border-slate-200 text-slate-700';
+        return 'bg-surface-3 border-line text-ink-secondary';
       default:
-        return 'bg-slate-50 border-slate-100 text-slate-600';
+        return 'bg-surface-2 border-line-subtle text-ink-secondary';
     }
   };
 
@@ -119,32 +119,32 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {Object.entries(groups).map(([groupName, groupInvoices]) => (
-          <div key={groupName} className="border border-[var(--border-default)] rounded-lg p-4 bg-[var(--surface-1)] shadow-sm hover:shadow transition-all">
-            <div className="flex items-center gap-3 mb-3 border-b border-[var(--border-subtle)] pb-2.5">
+          <div key={groupName} className="border border-line rounded-lg p-4 bg-surface-1 shadow-sm hover:shadow transition-all">
+            <div className="flex items-center gap-3 mb-3 border-b border-line-subtle pb-2.5">
               <div className="w-10 h-10 rounded bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-500 text-lg">
-                <i className="fas fa-folder-open"></i>
+                <Icon name="folder-open" size={14} />
               </div>
               <div>
-                <h4 className="text-xs font-bold text-[var(--text-primary)] truncate max-w-[160px]">{groupName}</h4>
-                <span className="text-[10px] text-[var(--text-muted)] font-semibold">{groupInvoices.length} документов</span>
+                <h4 className="text-xs font-bold text-ink-primary truncate max-w-[160px]">{groupName}</h4>
+                <span className="text-[10px] text-ink-muted font-semibold">{groupInvoices.length} документов</span>
               </div>
             </div>
             <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
               {groupInvoices.map(inv => (
                 <div 
                   key={inv.invoice_id}
-                  className="flex justify-between items-center text-[10px] p-2 hover:bg-[var(--surface-2)] rounded border border-[var(--border-subtle)] transition-all cursor-pointer"
+                  className="flex justify-between items-center text-[10px] p-2 hover:bg-surface-2 rounded border border-line-subtle transition-all cursor-pointer"
                   onClick={() => onSelectRequest && onSelectRequest(inv.request_id)}
                 >
-                  <div className="font-mono font-bold text-[var(--accent-primary)]">{inv.invoice_id}</div>
-                  <div className="font-bold text-[var(--text-primary)]">{inv.total_price.toLocaleString()} ₽</div>
+                  <div className="font-mono font-bold text-accent-primary">{inv.invoice_id}</div>
+                  <div className="font-bold text-ink-primary">{inv.total_price.toLocaleString()} ₽</div>
                 </div>
               ))}
             </div>
           </div>
         ))}
         {Object.keys(groups).length === 0 && (
-          <div className="col-span-full py-10 text-center text-xs text-[var(--text-muted)] italic">
+          <div className="col-span-full py-10 text-center text-xs text-ink-muted italic">
             Нет доступных папок с документами
           </div>
         )}
@@ -156,51 +156,51 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
     <div className="space-y-4">
       {/* 1. Statistics Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[var(--surface-1)] border border-[var(--border-default)] rounded-lg p-3.5 shadow-sm">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">Всего выставлено</span>
-          <div className="text-lg font-black text-[var(--text-primary)]">{totalBilled.toLocaleString()} ₽</div>
-          <span className="text-[10px] text-[var(--text-secondary)] font-medium mt-1 block">{invoices.length} счетов</span>
+        <div className="bg-surface-1 border border-line rounded-lg p-3.5 shadow-sm">
+          <span className="text-[10px] uppercase tracking-wider text-ink-muted font-bold block mb-1">Всего выставлено</span>
+          <div className="text-lg font-black text-ink-primary">{totalBilled.toLocaleString()} ₽</div>
+          <span className="text-[10px] text-ink-secondary font-medium mt-1 block">{invoices.length} счетов</span>
         </div>
-        <div className="bg-[var(--surface-1)] border border-[var(--border-default)] rounded-lg p-3.5 shadow-sm">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">Оплачено счетов</span>
+        <div className="bg-surface-1 border border-line rounded-lg p-3.5 shadow-sm">
+          <span className="text-[10px] uppercase tracking-wider text-ink-muted font-bold block mb-1">Оплачено счетов</span>
           <div className="text-lg font-black text-[var(--accent-success)]">{paidSum.toLocaleString()} ₽</div>
-          <span className="text-[10px] text-[var(--text-secondary)] font-medium mt-1 block">{paidCount} документов</span>
+          <span className="text-[10px] text-ink-secondary font-medium mt-1 block">{paidCount} документов</span>
         </div>
-        <div className="bg-[var(--surface-1)] border border-[var(--border-default)] rounded-lg p-3.5 shadow-sm">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">В ожидании оплаты</span>
+        <div className="bg-surface-1 border border-line rounded-lg p-3.5 shadow-sm">
+          <span className="text-[10px] uppercase tracking-wider text-ink-muted font-bold block mb-1">В ожидании оплаты</span>
           <div className="text-lg font-black text-[var(--accent-warning)]">{pendingSum.toLocaleString()} ₽</div>
-          <span className="text-[10px] text-[var(--text-secondary)] font-medium mt-1 block">{pendingCount} черновиков/отправленных</span>
+          <span className="text-[10px] text-ink-secondary font-medium mt-1 block">{pendingCount} черновиков/отправленных</span>
         </div>
-        <div className="bg-[var(--surface-1)] border border-[var(--border-default)] rounded-lg p-3.5 shadow-sm">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">Средний чек</span>
+        <div className="bg-surface-1 border border-line rounded-lg p-3.5 shadow-sm">
+          <span className="text-[10px] uppercase tracking-wider text-ink-muted font-bold block mb-1">Средний чек</span>
           <div className="text-lg font-black text-[var(--accent-info)]">{avgInvoiceAmount.toLocaleString()} ₽</div>
-          <span className="text-[10px] text-[var(--text-secondary)] font-medium mt-1 block">на один коммерческий пакет</span>
+          <span className="text-[10px] text-ink-secondary font-medium mt-1 block">на один коммерческий пакет</span>
         </div>
       </div>
 
       {/* 2. Controls, Search and Filtering Registry Panel */}
-      <div className="bg-[var(--surface-1)] border border-[var(--border-default)] rounded-lg p-4 shadow-sm space-y-3.5">
+      <div className="bg-surface-1 border border-line rounded-lg p-4 shadow-sm space-y-3.5">
         <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
           
           {/* View Modes switcher */}
-          <div className="flex items-center gap-1.5 bg-[var(--surface-2)] p-1 rounded-md border border-[var(--border-default)] self-start">
+          <div className="flex items-center gap-1.5 bg-surface-2 p-1 rounded-md border border-line self-start">
             <button 
               onClick={() => setViewMode('list')}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-[var(--surface-1)] text-[var(--accent-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-surface-1 text-accent-primary shadow-sm' : 'text-ink-secondary hover:text-ink-primary'}`}
             >
-              <i className="fas fa-list-ul mr-1"></i> Список
+              <Icon name="list-ul" size={14} className="mr-1" /> Список
             </button>
             <button 
               onClick={() => setViewMode('folders')}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${viewMode === 'folders' ? 'bg-[var(--surface-1)] text-[var(--accent-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${viewMode === 'folders' ? 'bg-surface-1 text-accent-primary shadow-sm' : 'text-ink-secondary hover:text-ink-primary'}`}
             >
-              <i className="fas fa-folder mr-1"></i> Папки
+              <Icon name="folder" size={14} className="mr-1" /> Папки
             </button>
             <button 
               onClick={() => setViewMode('grid')}
-              className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${viewMode === 'grid' ? 'bg-[var(--surface-1)] text-[var(--accent-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${viewMode === 'grid' ? 'bg-surface-1 text-accent-primary shadow-sm' : 'text-ink-secondary hover:text-ink-primary'}`}
             >
-              <i className="fas fa-grip-horizontal mr-1"></i> Плитка
+              <Icon name="grip-horizontal" size={14} className="mr-1" /> Плитка
             </button>
           </div>
 
@@ -216,11 +216,11 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
 
           {/* Sort selection */}
           <div className="flex items-center gap-2">
-            <label className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">Сортировка</label>
+            <label className="text-[10px] text-ink-muted font-bold uppercase tracking-wider">Сортировка</label>
             <select
               value={sortBy}
               onChange={(e: any) => setSortBy(e.target.value)}
-              className="bg-[var(--surface-2)] border border-[var(--border-default)] rounded px-2.5 py-1.5 text-xs outline-none text-[var(--text-primary)]"
+              className="bg-surface-2 border border-line rounded px-2.5 py-1.5 text-xs outline-none text-ink-primary"
             >
               <option value="date_desc">Сначала новые</option>
               <option value="date_asc">Сначала старые</option>
@@ -231,9 +231,9 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
         </div>
 
         {/* 3. Detailed Filters row */}
-        <div className="flex flex-wrap items-center gap-4 bg-[var(--surface-2)] p-2.5 rounded border border-[var(--border-default)] text-xs">
+        <div className="flex flex-wrap items-center gap-4 bg-surface-2 p-2.5 rounded border border-line text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Статус счёта:</span>
+            <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Статус счёта:</span>
             <div className="flex gap-1">
               {['all', 'DRAFT', 'SENT', 'PAID'].map((status) => (
                 <button
@@ -241,8 +241,8 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
                   onClick={() => setFilterStatus(status)}
                   className={`px-2 py-0.5 rounded border font-medium text-[10px] transition-all ${
                     filterStatus === status 
-                      ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)]' 
-                      : 'bg-[var(--surface-1)] border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-slate-50'
+                      ? 'bg-accent-primary text-white border-accent-primary' 
+                      : 'bg-surface-1 border-line text-ink-secondary hover:bg-surface-2'
                   }`}
                 >
                   {status === 'all' ? 'Все' : getStatusLabel(status)}
@@ -251,10 +251,10 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
             </div>
           </div>
 
-          <div className="h-4 w-px bg-slate-300"></div>
+          <div className="h-4 w-px bg-surface-5"></div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Заказ:</span>
+            <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Заказ:</span>
             <div className="flex gap-1">
               {[
                 { id: 'all', label: 'Все' },
@@ -266,8 +266,8 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
                   onClick={() => setFilterOrderType(t.id)}
                   className={`px-2 py-0.5 rounded border font-medium text-[10px] transition-all ${
                     filterOrderType === t.id 
-                      ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)]' 
-                      : 'bg-[var(--surface-1)] border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-slate-50'
+                      ? 'bg-accent-primary text-white border-accent-primary' 
+                      : 'bg-surface-1 border-line text-ink-secondary hover:bg-surface-2'
                   }`}
                 >
                   {t.label}
@@ -278,13 +278,13 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
 
           {viewMode === 'folders' && (
             <>
-              <div className="h-4 w-px bg-slate-300"></div>
+              <div className="h-4 w-px bg-surface-5"></div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Группировка:</span>
+                <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Группировка:</span>
                 <select
                   value={folderGroupBy}
                   onChange={(e: any) => setFolderGroupBy(e.target.value)}
-                  className="bg-[var(--surface-1)] border border-[var(--border-default)] rounded px-1.5 py-0.5 text-[10px] font-bold outline-none"
+                  className="bg-surface-1 border border-line rounded px-1.5 py-0.5 text-[10px] font-bold outline-none"
                 >
                   <option value="customer">По клиентам</option>
                   <option value="status">По статусам</option>
@@ -301,18 +301,18 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
               {sortedInvoices.map((inv) => (
                 <tr 
                   key={inv.invoice_id} 
-                  className="border-b border-[var(--border-subtle)] hover:bg-[var(--surface-2)] transition-all text-xs cursor-pointer"
+                  className="border-b border-line-subtle hover:bg-surface-2 transition-all text-xs cursor-pointer"
                   onClick={() => onSelectRequest && onSelectRequest(inv.request_id)}
                 >
-                  <td className="px-4 py-3 font-mono font-bold text-[var(--accent-primary)]">{inv.invoice_id}</td>
+                  <td className="px-4 py-3 font-mono font-bold text-accent-primary">{inv.invoice_id}</td>
                   <td className="px-4 py-3 font-mono font-semibold">{inv.request_id}</td>
                   <td className="px-4 py-3 font-bold">{inv.customer_name}</td>
-                  <td className="px-4 py-3 font-semibold text-[var(--text-secondary)]">
-                    <span className={`inline-block w-2 h-2 rounded-full mr-2 ${isOrderClosed(inv.order_status) ? 'bg-slate-400' : inv.order_status ? 'bg-green-500' : 'bg-amber-400'}`}></span>
+                  <td className="px-4 py-3 font-semibold text-ink-secondary">
+                    <span className={`inline-block w-2 h-2 rounded-full mr-2 ${isOrderClosed(inv.order_status) ? 'bg-surface-5' : inv.order_status ? 'bg-green-500' : 'bg-amber-400'}`}></span>
                     {getOrderStage(inv.order_status)}
                   </td>
                   <td className="px-4 py-3 font-black">{inv.total_price.toLocaleString()} ₽</td>
-                  <td className="px-4 py-3 text-[var(--text-muted)]">{new Date(inv.created_at).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-ink-muted">{new Date(inv.created_at).toLocaleString()}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusBadgeClass(inv.status)}`}>
                       {getStatusLabel(inv.status)}
@@ -322,7 +322,7 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
               ))}
               {sortedInvoices.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-[var(--text-muted)] italic text-xs">
+                  <td colSpan={7} className="text-center py-8 text-ink-muted italic text-xs">
                     Счета не найдены по заданным критериям фильтрации
                   </td>
                 </tr>
@@ -337,7 +337,7 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
               {sortedInvoices.map((inv) => {
                 const isClosed = isOrderClosed(inv.order_status);
                 return (
-                  <div key={inv.invoice_id} className="border border-[var(--border-default)] rounded-lg p-3 bg-[var(--surface-1)] shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-3 h-52 relative group">
+                  <div key={inv.invoice_id} className="border border-line rounded-lg p-3 bg-surface-1 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-3 h-52 relative group">
                     <div className="absolute top-2 right-2">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${getStatusBadgeClass(inv.status)}`}>
                         {getStatusLabel(inv.status)}
@@ -348,26 +348,26 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
                     <div className="flex-1 flex gap-3.5 items-start">
                       <div className="w-12 h-16 rounded border border-red-200 bg-red-50/50 flex flex-col justify-between p-1.5 shadow-sm text-center shrink-0 group-hover:bg-red-50 transition-all select-none">
                         <span className="text-[7px] text-red-500 font-extrabold uppercase leading-none">PDF</span>
-                        <i className="fas fa-file-pdf text-red-500 text-lg"></i>
-                        <span className="text-[6px] text-slate-400 font-mono font-bold leading-none truncate">{inv.invoice_id.slice(-5)}</span>
+                        <Icon name="file-pdf" size={18} className="text-red-500 text-lg" />
+                        <span className="text-[6px] text-ink-muted font-mono font-bold leading-none truncate">{inv.invoice_id.slice(-5)}</span>
                       </div>
                       <div className="space-y-1.5 min-w-0">
-                        <h4 className="text-xs font-black text-[var(--text-primary)] truncate font-mono">{inv.invoice_id}</h4>
-                        <p className="text-[10px] text-[var(--text-muted)] truncate font-medium">{inv.customer_name}</p>
-                        <p className="text-[9px] text-[var(--text-secondary)] font-bold">
+                        <h4 className="text-xs font-black text-ink-primary truncate font-mono">{inv.invoice_id}</h4>
+                        <p className="text-[10px] text-ink-muted truncate font-medium">{inv.customer_name}</p>
+                        <p className="text-[9px] text-ink-secondary font-bold">
                           Заказ: <span className="font-mono">{inv.request_id}</span>
                         </p>
-                        <p className="text-[9px] text-[var(--text-muted)] font-semibold">
-                          Стадия: <span className={`font-bold ${isClosed ? 'text-slate-600' : inv.order_status ? 'text-green-600' : 'text-amber-600'}`}>{getOrderStage(inv.order_status)}</span>
+                        <p className="text-[9px] text-ink-muted font-semibold">
+                          Стадия: <span className={`font-bold ${isClosed ? 'text-ink-secondary' : inv.order_status ? 'text-green-600' : 'text-amber-600'}`}>{getOrderStage(inv.order_status)}</span>
                         </p>
                       </div>
                     </div>
 
-                    <div className="border-t border-[var(--border-subtle)] pt-2.5 flex justify-between items-center">
-                      <span className="text-xs font-black text-[var(--text-primary)]">{inv.total_price.toLocaleString()} ₽</span>
+                    <div className="border-t border-line-subtle pt-2.5 flex justify-between items-center">
+                      <span className="text-xs font-black text-ink-primary">{inv.total_price.toLocaleString()} ₽</span>
                       <ActionButton 
                         variant="secondary" 
-                        icon="fa-eye" 
+                        icon="eye" 
                         className="py-1 px-2.5 text-[9px] font-bold"
                         onClick={() => onSelectRequest && onSelectRequest(inv.request_id)}
                       >
@@ -378,7 +378,7 @@ export const InvoicesRegistry: React.FC<InvoicesRegistryProps> = ({
                 );
               })}
               {sortedInvoices.length === 0 && (
-                <div className="col-span-full py-10 text-center text-xs text-[var(--text-muted)] italic">
+                <div className="col-span-full py-10 text-center text-xs text-ink-muted italic">
                   Счета не найдены по заданным критериям фильтрации
                 </div>
               )}

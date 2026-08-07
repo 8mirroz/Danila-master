@@ -3,7 +3,7 @@ Tests for Full-Cycle Automation Pipeline (Phase 8)
 """
 import pytest
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlmodel import SQLModel, Session, select
 
 from database import engine
@@ -176,12 +176,12 @@ def test_supplier_recalc_job():
         log1 = SupplierReliabilityLog(
             supplier_id="SUP-RECALC",
             reliability_score=0.9,
-            logged_at=datetime.utcnow() - timedelta(days=5),
+            logged_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=5),
         )
         log2 = SupplierReliabilityLog(
             supplier_id="SUP-RECALC",
             reliability_score=0.8,
-            logged_at=datetime.utcnow() - timedelta(days=10),
+            logged_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=10),
         )
         session.add(log1)
         session.add(log2)

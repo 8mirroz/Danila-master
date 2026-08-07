@@ -5,7 +5,7 @@ import pytest
 import json
 from unittest.mock import patch, MagicMock
 from sqlmodel import SQLModel, create_engine, Session, select
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import engine
 from models import PartRequest, RequestState, ERPSyncLog, RequestEvent, EventType
@@ -208,7 +208,7 @@ def test_sync_invoice_draft_already_synced_idempotency():
             idempotency_key="erp-sync-invoice-INV-TEST-2",
             status="SUCCESS",
             attempt_count=1,
-            succeeded_at=datetime.utcnow(),
+            succeeded_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         session.add(req)
         session.add(invoice)
@@ -256,7 +256,7 @@ def test_process_payment_webhook_updates_status():
             "payment_ref": "PAY-NEW-123",
             "amount": 1200.0,
             "currency": "RUB",
-            "paid_at": datetime.utcnow().isoformat(),
+            "paid_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
         
         res = process_payment_webhook(webhook_payload, session)
@@ -313,7 +313,7 @@ def test_process_payment_webhook_idempotency_duplicate():
             idempotency_key="webhook-payment-INV-TEST-4",
             status="SUCCESS",
             attempt_count=1,
-            succeeded_at=datetime.utcnow(),
+            succeeded_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         session.add(req)
         session.add(invoice)
@@ -343,7 +343,7 @@ def test_retry_outbox_advances_to_dlq_on_max_attempts():
             status="RETRYING",
             attempt_count=2,
             erp_response_json='{"error": "Previous failure"}',
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         session.add(sync_log)
         session.commit()

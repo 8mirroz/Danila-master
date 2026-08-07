@@ -1,6 +1,10 @@
 import { getAccessToken, oidcEnabled } from './auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `${window.location.protocol}//${window.location.hostname}:8000`;
+/**
+ * Prefer same-origin + Vite proxy in local dev (avoids CORS on 5xx).
+ * Override with VITE_API_BASE_URL for absolute backends.
+ */
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 export class ApiError extends Error {
   status: number;
@@ -458,10 +462,10 @@ class AuthenticatedEventSource implements PartsOpsEventSource {
 }
 
 export function createEventSource(tenantId?: string): PartsOpsEventSource {
-  const baseUrl = API_BASE_URL.replace('/api', '');
+  const baseUrl = API_BASE_URL;
   const token = getAccessToken();
   if (oidcEnabled() && token) return new AuthenticatedEventSource(`${baseUrl}/api/events/stream`, token);
-  const url = `${baseUrl}/api/events/stream${tenantId ? `?tenant_id=${tenantId}` : ''}`;
+  const url = `${baseUrl}/api/events/stream${tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''}`;
   return new EventSource(url);
 }
 

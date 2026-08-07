@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { ActionButton } from './Primitives';
+import { ActionButton, Icon } from './Primitives';
 import { apiFetch } from '../lib/api';
 
 type LogEntry = {
@@ -23,7 +23,7 @@ type ProviderStatus = {
 const initialLogs: LogEntry[] = [];
 
 const categoryLabel: Record<LogEntry['category'], { label: string; cls: string }> = {
-  system: { label: 'Ядро', cls: 'text-slate-600 bg-slate-50 border-slate-100' },
+  system: { label: 'Ядро', cls: 'text-ink-secondary bg-surface-2 border-line-subtle' },
   parser: { label: 'Парсер', cls: 'text-blue-600 bg-blue-50 border-blue-100' },
   matcher: { label: 'Матчер', cls: 'text-sky-600 bg-sky-50 border-sky-100' },
   pricing: { label: 'Цены', cls: 'text-amber-600 bg-amber-50 border-amber-100' },
@@ -135,11 +135,11 @@ export const AgentMonitor = () => {
     void refreshOpsState();
   };
 
-  const getLevelIcon = (lvl: LogEntry['level']) => {
+  const getLevelIcon = (lvl: LogEntry['level']): { name: string; className: string } => {
     switch (lvl) {
-      case 'success': return 'fa-circle-check text-green-500';
-      case 'warn': return 'fa-triangle-exclamation text-amber-500';
-      default: return 'fa-circle-info text-blue-500';
+      case 'success': return { name: 'circle-check', className: 'text-green-500' };
+      case 'warn': return { name: 'triangle-exclamation', className: 'text-amber-500' };
+      default: return { name: 'circle-info', className: 'text-blue-500' };
     }
   };
 
@@ -153,7 +153,7 @@ export const AgentMonitor = () => {
 
   return (
     <section className="panel-card animate-fade-in">
-      <div className="flex flex-col gap-6 border-b border-[var(--border-subtle)] px-6 py-5 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-6 border-b border-line-subtle px-6 py-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="ui-stack-3 max-w-3xl">
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-700">
@@ -162,17 +162,17 @@ export const AgentMonitor = () => {
             <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
               monitorState === 'online' ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                 : monitorState === 'degraded' ? 'border-amber-200 bg-amber-50 text-amber-700'
-                : 'border-slate-200 bg-slate-50 text-slate-600'
+                : 'border-line bg-surface-2 text-ink-secondary'
             }`}>
               <span className={`h-1.5 w-1.5 rounded-full ${
-                monitorState === 'online' ? 'bg-emerald-500' : monitorState === 'degraded' ? 'bg-amber-500' : 'bg-slate-500'
+                monitorState === 'online' ? 'bg-emerald-500' : monitorState === 'degraded' ? 'bg-amber-500' : 'bg-surface-20'
               }`} />
               {monitorState === 'online' ? 'Контур живой' : monitorState === 'degraded' ? 'Часть данных stale' : 'Ожидание backend данных'}
             </div>
           </div>
           <div className="ui-stack-2">
-            <h3 className="text-[34px] font-bold leading-[0.98] tracking-[-0.05em] text-[var(--text-primary)]">Операторская консоль AI-движка</h3>
-            <p className="max-w-2xl text-[15px] leading-8 text-[var(--text-secondary)]">
+            <h3 className="text-[34px] font-bold leading-[0.98] tracking-[-0.05em] text-ink-primary">Операторская консоль AI-движка</h3>
+            <p className="max-w-2xl text-[15px] leading-8 text-ink-secondary">
               Монитор показывает только живые сигналы backend: провайдеры LLM, бюджет и журнал действий. Если источник недоступен, это явно помечается как stale/degraded.
             </p>
           </div>
@@ -181,22 +181,22 @@ export const AgentMonitor = () => {
         <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
           <div className="ui-metric-card">
             <div className="ui-eyebrow">Session spend</div>
-            <div className="mt-2 text-xl font-bold tracking-[-0.04em] text-[var(--text-primary)]">
+            <div className="mt-2 text-xl font-bold tracking-[-0.04em] text-ink-primary">
               {sessionSpend !== null ? `$${sessionSpend.toFixed(2)}` : 'stale'}
             </div>
-            <div className="mt-1 text-[11px] text-[var(--text-secondary)]">daily_cost_usd</div>
+            <div className="mt-1 text-[11px] text-ink-secondary">daily_cost_usd</div>
           </div>
           <div className="ui-metric-card">
             <div className="ui-eyebrow">RPM policy</div>
-            <div className="mt-2 text-xl font-bold tracking-[-0.04em] text-[var(--text-primary)]">
+            <div className="mt-2 text-xl font-bold tracking-[-0.04em] text-ink-primary">
               {rpmPolicy !== null ? rpmPolicy : 'stale'}
             </div>
-            <div className="mt-1 text-[11px] text-[var(--text-secondary)]">по числу backend-провайдеров</div>
+            <div className="mt-1 text-[11px] text-ink-secondary">по числу backend-провайдеров</div>
           </div>
           <div className="ui-metric-card">
             <div className="ui-eyebrow">Queue health</div>
             <div className="mt-2 text-xl font-bold tracking-[-0.04em] text-emerald-600">{filteredLogs.length}</div>
-            <div className="mt-1 text-[11px] text-[var(--text-secondary)]">{isLoading ? 'refreshing' : 'cached signals'}</div>
+            <div className="mt-1 text-[11px] text-ink-secondary">{isLoading ? 'refreshing' : 'cached signals'}</div>
           </div>
         </div>
       </div>
@@ -206,20 +206,20 @@ export const AgentMonitor = () => {
           <div className="ui-section ui-stack-4">
             <div className="flex items-center justify-between gap-2">
               <span className="ui-eyebrow">Конфигурация модели</span>
-              <span className="text-[10px] font-semibold text-[var(--text-secondary)]">Live policy</span>
+              <span className="text-[10px] font-semibold text-ink-secondary">Live policy</span>
             </div>
             <div className="ui-stack-4 text-xs">
               <div className="grid grid-cols-1 gap-2">
                 {providerStatuses.length > 0 ? providerStatuses.map((provider, index) => (
-                  <div key={`${provider.model || provider.name || index}`} className="rounded-2xl border border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-2">
+                  <div key={`${provider.model || provider.name || index}`} className="rounded-2xl border border-line bg-surface-1 px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold text-[var(--text-primary)]">{provider.model || provider.name || 'provider'}</span>
-                      <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)]">{provider.status || 'unknown'}</span>
+                      <span className="text-[11px] font-semibold text-ink-primary">{provider.model || provider.name || 'provider'}</span>
+                      <span className="text-[10px] font-bold uppercase text-ink-secondary">{provider.status || 'unknown'}</span>
                     </div>
                     {provider.error && <div className="mt-1 text-[10px] text-rose-600">{provider.error}</div>}
                   </div>
                 )) : (
-                  <div className="rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--surface-1)] px-3 py-4 text-[11px] text-[var(--text-muted)]">
+                  <div className="rounded-2xl border border-dashed border-line bg-surface-1 px-3 py-4 text-[11px] text-ink-muted">
                     Данные провайдеров недоступны. Состояние ниже помечено как stale.
                   </div>
                 )}
@@ -227,19 +227,19 @@ export const AgentMonitor = () => {
 
               <div className="grid grid-cols-3 gap-3 text-center text-[10px] font-bold">
                 <div className="ui-stat-card">
-                  <span className="block text-[var(--text-muted)]">LLM</span>
-                  <span className={`mt-1 block ${providerStatuses.length ? 'text-emerald-600' : 'text-slate-500'}`}>
+                  <span className="block text-ink-muted">LLM</span>
+                  <span className={`mt-1 block ${providerStatuses.length ? 'text-emerald-600' : 'text-ink-muted'}`}>
                     {providerStatuses.length ? 'LIVE' : 'STALE'}
                   </span>
                 </div>
                 <div className="ui-stat-card">
-                  <span className="block text-[var(--text-muted)]">Budget</span>
-                  <span className={`mt-1 block ${budgetStats ? 'text-emerald-600' : 'text-slate-500'}`}>
+                  <span className="block text-ink-muted">Budget</span>
+                  <span className={`mt-1 block ${budgetStats ? 'text-emerald-600' : 'text-ink-muted'}`}>
                     {budgetStats ? 'SYNCED' : 'STALE'}
                   </span>
                 </div>
                 <div className="ui-stat-card">
-                  <span className="block text-[var(--text-muted)]">Logs</span>
+                  <span className="block text-ink-muted">Logs</span>
                   <span className="mt-1 block text-sky-600">{filteredLogs.length}</span>
                 </div>
               </div>
@@ -249,14 +249,14 @@ export const AgentMonitor = () => {
           <div className="flex gap-3">
             <button
               onClick={handleRestart}
-              className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold transition-all hover:bg-slate-100"
+              className="flex-1 rounded-full border border-line bg-surface-2 px-3 py-2 text-xs font-bold transition-all hover:bg-surface-3"
             >
-              <i className="fas fa-arrows-rotate mr-1.5" />
+              <Icon name="arrows-rotate" size={14} className="mr-1.5" />
               Обновить
             </button>
             <ActionButton
               variant="secondary"
-              icon="fa-pause"
+              icon="pause"
               onClick={() => { lastLiveSnapshotRef.current = ''; setLogs(initialLogs); }}
               className="flex-1 rounded-full text-xs"
             >
@@ -269,10 +269,10 @@ export const AgentMonitor = () => {
           <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="ui-stack-2">
               <div className="flex items-center gap-1.5 ui-eyebrow">
-                <i className="fas fa-terminal text-[var(--accent-primary)]"></i>
+                <Icon name="terminal" size={14} className="text-accent-primary" />
                 Живой лог событий
               </div>
-              <div className="text-xl font-bold tracking-[-0.03em] text-[var(--text-primary)]">Сигналы, исключения и решения оператора</div>
+              <div className="text-xl font-bold tracking-[-0.03em] text-ink-primary">Сигналы, исключения и решения оператора</div>
             </div>
             <input
               type="text"
@@ -283,14 +283,17 @@ export const AgentMonitor = () => {
             />
           </div>
 
-          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto rounded-[18px] border border-[var(--border-default)] bg-[var(--surface-1)] p-4 font-mono text-[10px] shadow-inner">
+          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto rounded-[18px] border border-line bg-surface-1 p-4 font-mono text-[10px] shadow-inner">
             {filteredLogs.map((log) => {
               const badge = categoryLabel[log.category];
               return (
                 <div key={log.id} className="ui-log-item">
-                  <div className="flex items-start gap-2 text-[var(--text-secondary)] transition-all hover:text-[var(--text-primary)]">
-                    <span className="shrink-0 select-none text-[var(--text-muted)] font-semibold">{log.time}</span>
-                    <i className={`fas ${getLevelIcon(log.level)} shrink-0 mt-0.5`}></i>
+                  <div className="flex items-start gap-2 text-ink-secondary transition-all hover:text-ink-primary">
+                    <span className="shrink-0 select-none text-ink-muted font-semibold">{log.time}</span>
+                    {(() => {
+                      const levelIcon = getLevelIcon(log.level);
+                      return <Icon name={levelIcon.name} size={12} className={`shrink-0 mt-0.5 ${levelIcon.className}`} />;
+                    })()}
                     <span className={`shrink-0 select-none rounded-full border px-1.5 py-px text-[8px] font-bold uppercase ${badge.cls}`}>
                       {badge.label}
                     </span>
@@ -311,7 +314,7 @@ export const AgentMonitor = () => {
                         onClick={() => setLogs((prev) => prev.map((entry) => (
                           entry.id === log.id ? { ...entry, message: `${entry.message} (Подтверждено: Игнорировать)`, hasActions: false } : entry
                         )))}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[8px] font-bold uppercase text-slate-600 transition-all hover:bg-slate-100"
+                        className="rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[8px] font-bold uppercase text-ink-secondary transition-all hover:bg-surface-3"
                       >
                         Игнорировать
                       </button>
@@ -321,7 +324,7 @@ export const AgentMonitor = () => {
               );
             })}
             {filteredLogs.length === 0 && (
-              <div className="py-12 text-center italic text-[var(--text-muted)] select-none">
+              <div className="py-12 text-center italic text-ink-muted select-none">
                 Нет событий монитора — только live LLM/budget status выше
               </div>
             )}

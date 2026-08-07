@@ -143,26 +143,26 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
               <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
                 <Icon name="rotate" size={12} /> Автономный режим поиска
               </span>
-              <span className="font-mono text-[10px] text-[var(--text-muted)]">Global OEM Cross-Matching Engine v2.4</span>
+              <span className="font-mono text-[10px] text-ink-muted">Global OEM Cross-Matching Engine v2.4</span>
             </div>
-            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+            <h2 className="text-xl font-bold tracking-tight text-ink-primary">
               Матрица подбора аналогов и кросс-кодов
             </h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--text-secondary)]">
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-secondary">
               Мгновенный подбор кросс-номеров, сравнение цен поставщиков и оценка рисков качества. Вы можете искать детали напрямую по артикулу OEM или выбрать запрос из рабочей очереди.
             </p>
           </div>
 
           {/* Quick Request Selector */}
-          <div className="flex items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-[var(--surface-2)] p-3">
+          <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface-2 p-3">
             <div className="text-right shrink-0 hidden sm:block">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Контекст заявки</div>
-              <div className="text-xs font-semibold text-[var(--text-primary)]">Открыть в степпере</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Контекст заявки</div>
+              <div className="text-xs font-semibold text-ink-primary">Открыть в степпере</div>
             </div>
             <select
               value={selectedReqId}
               onChange={handleSelectReqChange}
-              className="cursor-pointer rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
+              className="cursor-pointer rounded-xl border border-line bg-surface-1 px-3 py-2 text-xs font-semibold text-ink-primary focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
             >
               <option value="">-- Выберите запрос из очереди --</option>
               {activeRequests.map((r) => (
@@ -185,15 +185,15 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
               onChange={(e) => setSearchOem(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Введите артикул OEM (напр. 34116852253), бренд (BOSCH) или номер кросса..."
-              className="w-full pl-10 pr-24 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#0F172A] focus:ring-1 focus:ring-[#0F172A] transition-all shadow-sm"
+              className="w-full pl-10 pr-24 py-2.5 bg-surface-1 border border-line-strong rounded-xl text-xs font-semibold text-ink-primary placeholder-ink-muted focus:outline-none focus:border-[#0F172A] focus:ring-1 focus:ring-[#0F172A] transition-all shadow-sm"
             />
-            <div className="absolute left-3 top-3 text-[var(--text-muted)]">
+            <div className="absolute left-3 top-3 text-ink-muted">
               <Icon name="search" size={14} />
             </div>
             <div className="absolute right-2 top-1.5 flex items-center gap-1">
               <button
                 onClick={() => performSearch(searchOem)}
-                className="rounded-lg bg-[var(--accent-primary)] px-3 py-1 text-[10px] font-semibold text-white shadow-xs transition hover:bg-[var(--accent-primary-strong)]"
+                className="rounded-lg bg-accent-primary px-3 py-1 text-[10px] font-semibold text-white shadow-ds-sm transition hover:bg-accent-strong"
               >
                 Найти
               </button>
@@ -204,7 +204,7 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
                   setSearchOem('');
                   setSearchResults([]);
                 }}
-                className="absolute right-16 top-2.5 text-xs text-slate-400 hover:text-slate-600"
+                className="absolute right-16 top-2.5 text-xs text-ink-muted hover:text-ink-secondary"
               >
                 ✕
               </button>
@@ -213,7 +213,7 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
 
           {/* Quick OEM Chip Buttons */}
           <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full">
-            <span className="text-[10px] font-bold text-slate-400 uppercase mr-1 whitespace-nowrap">
+            <span className="text-[10px] font-bold text-ink-muted uppercase mr-1 whitespace-nowrap">
               {searchHistory.length > 0 ? 'История:' : 'Быстрый выбор:'}
             </span>
             {(searchHistory.length > 0 ? searchHistory : ['34116852253', '04465-33470', '13717582310']).map((chip) => (
@@ -226,7 +226,7 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition-all border whitespace-nowrap ${
                   searchOem === chip
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-blue-50 hover:text-blue-700'
+                    : 'bg-surface-1 text-ink-secondary border-line-strong hover:bg-blue-50 hover:text-blue-700'
                 }`}
               >
                 {chip}
@@ -235,7 +235,7 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
             {searchHistory.length > 0 && (
               <button
                 onClick={clearHistory}
-                className="px-2 py-1 text-[10px] text-slate-400 hover:text-rose-600 font-bold transition-colors ml-2 whitespace-nowrap"
+                className="px-2 py-1 text-[10px] text-ink-muted hover:text-rose-600 font-bold transition-colors ml-2 whitespace-nowrap"
                 title="Очистить историю поиска"
               >
                 Очистить ✕
@@ -250,21 +250,21 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
         title={`Результаты поиска кроссов (${searchResults.length} поз.)`}
         icon="list"
         headerActions={
-          <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200">
+          <span className="text-[10px] font-mono font-bold text-ink-muted bg-surface-3 px-2 py-1 rounded border border-line">
             Прямое сопоставление база данных + API
           </span>
         }
       >
         {loading ? (
-          <div className="py-12 flex flex-col items-center justify-center text-slate-500">
+          <div className="py-12 flex flex-col items-center justify-center text-ink-muted">
             <Icon name="spinner" size={32} className="animate-spin mb-4 text-blue-600" />
-            <p className="text-xs font-bold text-slate-700">Ищем аналоги и предложения поставщиков...</p>
+            <p className="text-xs font-bold text-ink-secondary">Ищем аналоги и предложения поставщиков...</p>
           </div>
         ) : error ? (
           <div className="py-12 flex flex-col items-center justify-center text-rose-500">
             <Icon name="warning" size={32} className="mb-4 text-rose-500" />
-            <p className="text-xs font-bold text-slate-700">Ошибка поиска</p>
-            <p className="text-[11px] text-slate-500 mt-1">{error}</p>
+            <p className="text-xs font-bold text-ink-secondary">Ошибка поиска</p>
+            <p className="text-[11px] text-ink-muted mt-1">{error}</p>
           </div>
         ) : searchResults.length === 0 ? (
           !searchOem ? (
@@ -273,29 +273,29 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
                 <Icon name="search" size={28} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-800">Добро пожаловать в хаб подбора аналогов</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                <h3 className="text-sm font-bold text-ink-primary">Добро пожаловать в хаб подбора аналогов</h3>
+                <p className="text-xs text-ink-muted mt-1 max-w-md mx-auto leading-relaxed">
                   Введите OEM артикул детали, бренд или название в поисковую строку выше для быстрого поиска по каталогам поставщиков и симуляции цен.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-                <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl space-y-1">
+                <div className="p-3 bg-surface-2 border border-line rounded-xl space-y-1">
                   <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs">
                     <Icon name="rotate" size={12} />
                     <span>Умный кросс-метчинг</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 leading-normal">
+                  <p className="text-[10px] text-ink-muted leading-normal">
                     6-компонентная формула подбора анализирует синонимы, совместимость моделей и расположение.
                   </p>
                 </div>
 
-                <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl space-y-1">
+                <div className="p-3 bg-surface-2 border border-line rounded-xl space-y-1">
                   <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs">
                     <Icon name="pencil" size={12} />
                     <span>Симуляция цен в 1 клик</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 leading-normal">
+                  <p className="text-[10px] text-ink-muted leading-normal">
                     Переносите цены найденных аналогов напрямую в калькулятор прибыли и логистических затрат.
                   </p>
                 </div>
@@ -316,18 +316,18 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
             </div>
           ) : (
             <div className="py-10 text-center">
-              <Icon name="circle-info" size={32} className="mx-auto text-slate-400 mb-2" />
-              <p className="text-xs font-bold text-slate-700">
+              <Icon name="circle-info" size={32} className="mx-auto text-ink-muted mb-2" />
+              <p className="text-xs font-bold text-ink-secondary">
                 По запросу «{searchOem}» аналоги не найдены
               </p>
-              <p className="text-[11px] text-slate-500 mt-1">Попробуйте ввести только цифровую часть артикула OEM или выберите другой фильтр.</p>
+              <p className="text-[11px] text-ink-muted mt-1">Попробуйте ввести только цифровую часть артикула OEM или выберите другой фильтр.</p>
             </div>
           )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                <tr className="border-b border-line bg-surface-2 text-[10px] uppercase font-bold text-ink-muted tracking-wider">
                   <th className="py-3 px-3">Артикул</th>
                   <th className="py-3 px-3">Наименование / Бренд</th>
                   <th className="py-3 px-3">Категория</th>
@@ -343,27 +343,27 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
                   const item = match.item;
                   return (
                     <tr key={`${item.catalog_id}-${idx}`} className="hover:bg-blue-50/40 transition-colors">
-                      <td className="py-3 px-3 font-mono font-bold text-slate-900">
+                      <td className="py-3 px-3 font-mono font-bold text-ink-primary">
                         {item.oem_number}
                       </td>
                       <td className="py-3 px-3">
-                        <div className="font-bold text-slate-900 text-[11px] truncate max-w-[150px]" title={item.name}>{item.name}</div>
-                        <div className="text-[10px] text-slate-500 font-semibold">{item.brand}</div>
+                        <div className="font-bold text-ink-primary text-[11px] truncate max-w-[150px]" title={item.name}>{item.name}</div>
+                        <div className="text-[10px] text-ink-muted font-semibold">{item.brand}</div>
                       </td>
                       <td className="py-3 px-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide border ${
                           item.category === 'OES' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
                           item.category === 'PREMIUM' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                          'bg-slate-100 text-slate-600 border-slate-300'
+                          'bg-surface-3 text-ink-secondary border-line-strong'
                         }`}>
                           {item.category}
                         </span>
                       </td>
                       <td className="py-3 px-3">
-                        <span className="text-[11px] font-bold text-slate-700">{match.supplier?.name || 'Н/Д'}</span>
+                        <span className="text-[11px] font-bold text-ink-secondary">{match.supplier?.name || 'Н/Д'}</span>
                       </td>
                       <td className="py-3 px-3 text-right">
-                        <div className="font-mono font-black text-slate-900">
+                        <div className="font-mono font-black text-ink-primary">
                           {item.price.toLocaleString()} ₽
                         </div>
                         {onSimulatePrice && (
@@ -390,40 +390,40 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
                         </span>
 
                         {hoveredScoreIdx === idx && match.breakdown && (
-                          <div className="absolute z-30 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 bg-slate-900 text-white text-[11px] rounded-xl p-3 shadow-xl border border-slate-700 space-y-1.5 text-left">
-                            <div className="font-bold border-b border-slate-700 pb-1 text-xs text-blue-300">Детализация AI оценки</div>
+                          <div className="absolute z-30 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 bg-ink-primary text-white text-[11px] rounded-xl p-3 shadow-xl border border-line space-y-1.5 text-left">
+                            <div className="font-bold border-b border-line pb-1 text-xs text-blue-300">Детализация AI оценки</div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">OEM совпадение (30%):</span>
+                              <span className="text-ink-muted">OEM совпадение (30%):</span>
                               <span className="font-mono font-bold">{(match.breakdown.oem_score ?? match.breakdown.oem_exact ?? 0)}%</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Совпадение бренда (20%):</span>
+                              <span className="text-ink-muted">Совпадение бренда (20%):</span>
                               <span className="font-mono font-bold">{(match.breakdown.brand_score ?? match.breakdown.brand_article ?? 0)}%</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Текст / Синонимы (20%):</span>
+                              <span className="text-ink-muted">Текст / Синонимы (20%):</span>
                               <span className="font-mono font-bold">{(match.breakdown.text_score ?? match.breakdown.normalized_name ?? 0)}%</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Совместимость авто (15%):</span>
+                              <span className="text-ink-muted">Совместимость авто (15%):</span>
                               <span className="font-mono font-bold">{(match.breakdown.vehicle_score ?? match.breakdown.vehicle_compatibility ?? 0)}%</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Расположение / Сторона (10%):</span>
+                              <span className="text-ink-muted">Расположение / Сторона (10%):</span>
                               <span className="font-mono font-bold">{(match.breakdown.position_score ?? match.breakdown.side_position ?? 0)}%</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Надёжность поставщика (5%):</span>
+                              <span className="text-ink-muted">Надёжность поставщика (5%):</span>
                               <span className="font-mono font-bold">{(match.breakdown.supplier_score ?? match.breakdown.supplier_data_quality ?? 0)}%</span>
                             </div>
                           </div>
                         )}
                       </td>
                       <td className="py-3 px-3 text-center">
-                        <span className="text-[11px] font-bold text-slate-700">{item.delivery_days}</span>
+                        <span className="text-[11px] font-bold text-ink-secondary">{item.delivery_days}</span>
                       </td>
                       <td className="py-3 px-3 text-center">
-                        <span className="text-[11px] font-bold text-slate-700">{item.stock_qty} шт.</span>
+                        <span className="text-[11px] font-bold text-ink-secondary">{item.stock_qty} шт.</span>
                       </td>
                     </tr>
                   );

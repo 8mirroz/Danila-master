@@ -294,13 +294,13 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
 
       {isOpen && (
         <div className={embedded ? 'hermes-embedded-shell' : 'hermes-overlay fixed inset-0 z-[80] flex justify-end'} onClick={embedded ? undefined : closeDrawer}>
-          <div ref={drawerRef} data-testid="hermes-drawer" role={embedded ? 'region' : 'dialog'} aria-modal={embedded ? undefined : true} aria-label="Hermes — read-only помощник" className={embedded ? 'hermes-embedded-panel relative flex h-full w-full flex-col text-slate-100' : 'hermes-drawer relative flex h-full w-full flex-col text-slate-100'} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === 'Escape') closeDrawer(); }}>
+          <div ref={drawerRef} data-testid="hermes-drawer" role={embedded ? 'region' : 'dialog'} aria-modal={embedded ? undefined : true} aria-label="Hermes — read-only помощник" className={embedded ? 'hermes-embedded-panel relative flex h-full w-full flex-col text-ink-primary' : 'hermes-drawer relative flex h-full w-full flex-col text-ink-primary'} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === 'Escape') closeDrawer(); }}>
             <div data-hermes-motion className="hermes-drawer__header flex items-center justify-between gap-3 px-5 py-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="hermes-avatar"><Icon name="robot" size={19} weight="duotone" /></div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2"><h3 className="truncate text-sm font-extrabold text-white">Hermes</h3><span className={`hermes-status ${statusTone[health.status]}`}><span className="hermes-status__dot" />{statusLabel[health.status]}</span></div>
-                  <span className="text-[10px] text-slate-400">PartsOps Copilot · профиль {health.profile}</span>
+                  <span className="text-[10px] text-ink-muted">PartsOps Copilot · профиль {health.profile}</span>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -314,7 +314,7 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
               <span className="hermes-readonly shrink-0">READ-ONLY</span>
             </div>
 
-            <div className="mx-4 mt-3 flex items-center justify-between text-[10px] text-slate-500"><span className="flex items-center gap-1.5"><span className={`hermes-health-dot ${statusTone[health.status]}`} />{progressLabel}</span><span>{health.capabilities.length ? `${health.capabilities.length} capabilities` : 'Проверка канала'}</span></div>
+            <div className="mx-4 mt-3 flex items-center justify-between text-[10px] text-ink-muted"><span className="flex items-center gap-1.5"><span className={`hermes-health-dot ${statusTone[health.status]}`} />{progressLabel}</span><span>{health.capabilities.length ? `${health.capabilities.length} capabilities` : 'Проверка канала'}</span></div>
 
             <div className="hermes-messages flex-1 space-y-4 overflow-y-auto px-4 py-5" aria-live="polite">
               {messages.map((msg) => (
@@ -338,13 +338,13 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
                 <textarea ref={inputRef} rows={1} value={inputMessage} disabled={isProcessing} onChange={(event) => { setInputMessage(event.target.value); resizeInput(event.currentTarget); }} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void handleSendMessage(); } }} placeholder="Спросить Hermes о функциях, статусе, блокировках…" aria-label="Сообщение Hermes" />
                 {isProcessing ? <button type="button" onClick={() => void handleStopRun()} className="hermes-stop-button" aria-label="Остановить запрос"><Icon name="stop" size={14} /> Стоп</button> : <button type="submit" disabled={!inputMessage.trim()} className="hermes-send-button" aria-label="Отправить сообщение"><Icon name="paper-plane" size={15} weight="bold" /></button>}
               </form>
-              <div className="mt-2 flex items-center justify-between px-1 text-[9px] text-slate-600"><span>Ответы основаны на серверном контексте и справке</span><span>⌘/Ctrl + Enter</span></div>
+              <div className="mt-2 flex items-center justify-between px-1 text-[9px] text-ink-secondary"><span>Ответы основаны на серверном контексте и справке</span><span>⌘/Ctrl + Enter</span></div>
             </div>
           </div>
         </div>
       )}
 
-      {selectedSourceDoc && <div className="hermes-source-overlay fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setSelectedSourceDoc(null)}><div className="hermes-source-card w-full max-w-lg rounded-2xl p-5 text-slate-200" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-slate-800 pb-3"><h3 className="flex items-center gap-2 text-sm font-bold text-white"><Icon name="book-open" size={15} className="text-emerald-400" />{selectedSourceDoc.title}</h3><button onClick={() => setSelectedSourceDoc(null)} aria-label="Закрыть источник"><Icon name="x-mark" size={15} /></button></div><p className="whitespace-pre-wrap pt-4 text-xs leading-relaxed text-slate-300">{selectedSourceDoc.content}</p></div></div>}
+      {selectedSourceDoc && <div className="hermes-source-overlay fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setSelectedSourceDoc(null)}><div className="hermes-source-card w-full max-w-lg rounded-2xl p-5 text-ink-primary" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-line pb-3"><h3 className="flex items-center gap-2 text-sm font-bold text-white"><Icon name="book-open" size={15} className="text-emerald-400" />{selectedSourceDoc.title}</h3><button onClick={() => setSelectedSourceDoc(null)} aria-label="Закрыть источник"><Icon name="x-mark" size={15} /></button></div><p className="whitespace-pre-wrap pt-4 text-xs leading-relaxed text-ink-secondary">{selectedSourceDoc.content}</p></div></div>}
     </>
   );
 };

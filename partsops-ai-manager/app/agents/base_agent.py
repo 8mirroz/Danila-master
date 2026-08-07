@@ -13,7 +13,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, List
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from sqlmodel import Session, select
@@ -288,7 +288,7 @@ class BaseAgent(ABC):
             if hasattr(request, key):
                 setattr(request, key, value)
         
-        request.updated_at = datetime.utcnow()
+        request.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         self.session.add(request)
         self.session.commit()
         self.session.refresh(request)

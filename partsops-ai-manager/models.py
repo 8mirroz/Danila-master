@@ -284,8 +284,8 @@ class PartRequest(SQLModel, table=True):
     status: str = Field(default=RequestState.NEW)
     priority: str = Field(default=RequestPriority.NORMAL)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
     # Customer (masked PII for agent layer; raw stored in separate secure field)
     customer_name: Optional[str] = None
@@ -340,7 +340,7 @@ class RequestEvent(SQLModel, table=True):
     actor_type: str        # user|agent|system|external
     actor_id: str = Field(default="system")
 
-    occurred_at: datetime = Field(default_factory=datetime.utcnow)
+    occurred_at: datetime = Field(default_factory=_utcnow)
 
     # JSON payload for event-specific data
     payload_json: Optional[str] = None
@@ -418,7 +418,7 @@ class MatchEvidence(SQLModel, table=True):
     decision: str = Field(default="manual_review")  # auto_candidate|manual_review|reject
     matched_fields_json: Optional[str] = None
     conflicts_json: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 # ──────────────────────────────────────────────
@@ -441,7 +441,7 @@ class ERPSyncLog(SQLModel, table=True):
     last_error: Optional[str] = None
     erp_response_json: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
     last_attempt_at: Optional[datetime] = None
     succeeded_at: Optional[datetime] = None
 
@@ -471,7 +471,7 @@ class GoldenSample(SQLModel, table=True):
     model_version: Optional[str] = None
     prompt_version: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 # ──────────────────────────────────────────────
@@ -489,7 +489,7 @@ class SupplierOffer(SQLModel, table=True):
     brand: str
     sale_price: float
     stock_qty: int
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 # ──────────────────────────────────────────────
@@ -503,7 +503,7 @@ class PriceHistoryLedger(SQLModel, table=True):
     catalog_id: str = Field(index=True)
     price: float = Field(default=0.0)
     currency: str = Field(default="RUB")
-    recorded_at: datetime = Field(default_factory=datetime.utcnow)
+    recorded_at: datetime = Field(default_factory=_utcnow)
 
 
 class SupplierReliabilityLog(SQLModel, table=True):
@@ -514,7 +514,7 @@ class SupplierReliabilityLog(SQLModel, table=True):
     reliability_score: float = Field(default=0.0)
     event_type: str = Field(default="initial")  # initial|delivery_feedback|sla_breach|manual_adjustment
     reason: Optional[str] = None
-    logged_at: datetime = Field(default_factory=datetime.utcnow)
+    logged_at: datetime = Field(default_factory=_utcnow)
 
 
 # ──────────────────────────────────────────────
@@ -548,7 +548,7 @@ class UploadArtifact(SQLModel, table=True):
     status: str = Field(default="stored") # stored|quarantined|rejected|attached
     rejection_reason: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 # ──────────────────────────────────────────────
@@ -574,7 +574,7 @@ class JobRun(SQLModel, table=True):
     result_json: Optional[str] = None
     correlation_id: Optional[str] = None
     idempotency_key: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class PipelineRun(SQLModel, table=True):
@@ -594,8 +594,8 @@ class PipelineRun(SQLModel, table=True):
     lease_expires_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class PipelineRunEvent(SQLModel, table=True):
@@ -608,7 +608,7 @@ class PipelineRunEvent(SQLModel, table=True):
     phase: Optional[str] = None
     message: str = Field(default="")
     payload_json: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class AutomationLock(SQLModel, table=True):
@@ -617,7 +617,7 @@ class AutomationLock(SQLModel, table=True):
     tenant_id: str = Field(default="default", index=True)
     lock_name: str = Field(index=True)
     owner_key: str = Field(default="")
-    acquired_at: datetime = Field(default_factory=datetime.utcnow)
+    acquired_at: datetime = Field(default_factory=_utcnow)
     expires_at: Optional[datetime] = None
     released_at: Optional[datetime] = None
     status: str = Field(default="active")  # active|expired|released
@@ -640,8 +640,8 @@ class OutboundMessage(SQLModel, table=True):
     last_error: Optional[str] = None
     sent_at: Optional[datetime] = None
     next_retry_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class LLMUsageLog(SQLModel, table=True):
@@ -660,7 +660,7 @@ class LLMUsageLog(SQLModel, table=True):
     latency_ms: Optional[int] = None
     status: str = Field(default="ok")  # ok|blocked|error
     correlation_id: Optional[str] = Field(default=None, index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class RequestScore(SQLModel, table=True):
@@ -685,8 +685,8 @@ class RequestScore(SQLModel, table=True):
     return_risk: Optional[bool] = None
     low_margin_risk: Optional[bool] = None
     resolved: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class ApprovalTicket(SQLModel, table=True):
@@ -704,7 +704,7 @@ class ApprovalTicket(SQLModel, table=True):
     decided_at: Optional[datetime] = None
     decision_note: Optional[str] = None
     payload_json: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 # ──────────────────────────────────────────────
@@ -727,8 +727,8 @@ class FleetVehicle(SQLModel, table=True):
     status: str = Field(default="active", index=True)  # active|maintenance|retired
     contract_ref: str = Field(default="2026.170160")
     notes: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class ServiceTariff(SQLModel, table=True):
@@ -746,8 +746,8 @@ class ServiceTariff(SQLModel, table=True):
     contract_ref: str = Field(default="2026.170160")
     is_active: bool = Field(default=True, index=True)
     notes: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class ContractPenaltyConfig(SQLModel, table=True):
@@ -762,8 +762,8 @@ class ContractPenaltyConfig(SQLModel, table=True):
     currency: str = Field(default="RUB")
     effective_from: datetime
     effective_to: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 # ──────────────────────────────────────────────
@@ -800,8 +800,8 @@ class ContractPosition(SQLModel, table=True):
     change_reason: Optional[str] = None
     selected_reason: Optional[str] = None
     calculation_json: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class PriceEvidence(SQLModel, table=True):
@@ -840,7 +840,7 @@ class PriceEvidence(SQLModel, table=True):
     unavailable_reason: Optional[str] = None
     comparability_status: str = Field(default="REQUIRES_REVIEW")
     evidence_status: str = Field(default="pending")  # pending|valid|stale|invalid
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class OEMCandidate(SQLModel, table=True):
@@ -863,8 +863,8 @@ class OEMCandidate(SQLModel, table=True):
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     rejection_reason: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class AnalogCandidate(SQLModel, table=True):
@@ -895,8 +895,8 @@ class AnalogCandidate(SQLModel, table=True):
     eta_delta_days: Optional[int] = None
     manual_review_status: str = Field(default="pending")  # pending|approved|rejected|needs_review
     rejection_reason: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class CompatibilityEvidence(SQLModel, table=True):
@@ -912,14 +912,14 @@ class CompatibilityEvidence(SQLModel, table=True):
     source: str
     source_url: Optional[str] = None
     score_points: int = Field(default=0)
-    captured_at: datetime = Field(default_factory=datetime.utcnow)
+    captured_at: datetime = Field(default_factory=_utcnow)
     evidence_ref: Optional[str] = None
     evidence_hash: Optional[str] = None
     readability_status: str = Field(default="unknown")  # readable|partial|unreadable|unknown
     completeness_status: str = Field(default="partial")  # complete|partial|missing
     freshness_status: str = Field(default="current")  # current|stale|unknown
     created_by: str = Field(default="agent")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class ContractExport(SQLModel, table=True):
@@ -939,7 +939,7 @@ class ContractExport(SQLModel, table=True):
     client_document_path: Optional[str] = None
     client_document_sha256: Optional[str] = None
     created_by: str = Field(default="system")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class ContractAuditRun(SQLModel, table=True):
@@ -954,7 +954,7 @@ class ContractAuditRun(SQLModel, table=True):
     status: str = Field(default="completed")  # required|in_progress|completed|blocked
     unresolved_critical_count: int = Field(default=0)
     created_by: str = Field(default="system")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
     completed_at: Optional[datetime] = None
 
 
@@ -971,8 +971,8 @@ class ContractWorkflowState(SQLModel, table=True):
     blocking_code: Optional[str] = None
     blocking_reason: Optional[str] = None
     updated_by: str = Field(default="system")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class ContractWorkflowEvent(SQLModel, table=True):
@@ -987,7 +987,7 @@ class ContractWorkflowEvent(SQLModel, table=True):
     reason: str
     allowed: bool = Field(default=True)
     violations_json: str = Field(default="[]")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class ContractRequirement(SQLModel, table=True):
@@ -1011,8 +1011,8 @@ class ContractRequirement(SQLModel, table=True):
     coverage_status: str = Field(default="Missing")  # Covered|Partial|Missing|Conflict
     implementation_element: Optional[str] = None
     comment: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class RequirementCoverage(SQLModel, table=True):
@@ -1031,7 +1031,7 @@ class RequirementCoverage(SQLModel, table=True):
     export_covered: bool = Field(default=False)
     status: str = Field(default="Missing")  # Covered|Partial|Missing|Conflict
     notes: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class ContractGap(SQLModel, table=True):
@@ -1054,7 +1054,7 @@ class ContractGap(SQLModel, table=True):
     required_tests: str = Field(default="")
     closure_criteria: str
     status: str = Field(default="open")  # open|accepted|closed
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
     resolved_at: Optional[datetime] = None
 
 
@@ -1076,7 +1076,7 @@ class AdaptationDecisionRecord(SQLModel, table=True):
     tests: str = Field(default="")
     rollback: str = Field(default="")
     created_by: str = Field(default="system")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class ContractExceptionRecord(SQLModel, table=True):
@@ -1097,7 +1097,7 @@ class ContractExceptionRecord(SQLModel, table=True):
     resolution: Optional[str] = None
     export_impact: str = Field(default="blocks_export")
     status: str = Field(default="open")  # open|resolved|accepted
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
     resolved_at: Optional[datetime] = None
 
 
@@ -1109,7 +1109,7 @@ class ClientApproval(SQLModel, table=True):
     request_id: str = Field(index=True)
     export_id: str = Field(index=True)
     approved_by: str
-    approved_at: datetime = Field(default_factory=datetime.utcnow)
+    approved_at: datetime = Field(default_factory=_utcnow)
     evidence_ref: Optional[str] = None
     comment: Optional[str] = None
 
@@ -1122,7 +1122,7 @@ class PurchaseAuthorization(SQLModel, table=True):
     request_id: str = Field(index=True)
     approval_id: str = Field(index=True)
     authorized_by: str
-    authorized_at: datetime = Field(default_factory=datetime.utcnow)
+    authorized_at: datetime = Field(default_factory=_utcnow)
     status: str = Field(default="authorized")
     comment: Optional[str] = None
 
@@ -1136,7 +1136,7 @@ class ContractPurchaseRecord(SQLModel, table=True):
     authorization_id: str = Field(index=True)
     supplier_ref: str
     ordered_by: str
-    ordered_at: datetime = Field(default_factory=datetime.utcnow)
+    ordered_at: datetime = Field(default_factory=_utcnow)
     amount_total: float = Field(default=0.0)
     currency: str = Field(default="RUB")
     evidence_ref: Optional[str] = None
@@ -1152,7 +1152,7 @@ class ContractReceiptVerification(SQLModel, table=True):
     request_id: str = Field(index=True)
     purchase_id: str = Field(index=True)
     verified_by: str
-    verified_at: datetime = Field(default_factory=datetime.utcnow)
+    verified_at: datetime = Field(default_factory=_utcnow)
     evidence_ref: str
     received_quantity: int = Field(default=0)
     status: str = Field(default="verified")
@@ -1167,7 +1167,7 @@ class ContractArchiveRecord(SQLModel, table=True):
     request_id: str = Field(index=True)
     receipt_id: str = Field(index=True)
     archived_by: str
-    archived_at: datetime = Field(default_factory=datetime.utcnow)
+    archived_at: datetime = Field(default_factory=_utcnow)
     archive_ref: str
     registry_hash: Optional[str] = None
     status: str = Field(default="archived")

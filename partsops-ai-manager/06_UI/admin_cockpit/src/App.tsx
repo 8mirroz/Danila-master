@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, useRef } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useState, useRef } from 'react';
 import {
   AppFrame,
   TopCommandBar,
@@ -10,39 +10,53 @@ import {
   InlineAlert,
   Icon,
 } from './components/Primitives';
-import { SupplierMatrix } from './components/SupplierMatrix';
-import { PricingCalculator } from './components/PricingCalculator';
-import { GlobalMatchingHub } from './components/GlobalMatchingHub';
-import { GlobalPricingSimulator } from './components/GlobalPricingSimulator';
-import { AuditTimeline } from './components/AuditTimeline';
-import { CompletedOrdersHistory } from './components/CompletedOrdersHistory';
 import { RightPanel } from './components/RightPanel';
 import { KanbanBoard } from './components/KanbanBoard';
-import { EvidenceGatesWidget } from './components/EvidenceGatesWidget';
-import { InvoicePreview } from './components/InvoicePreview';
-import { LLMCostPanel } from './components/LLMCostPanel';
 import { apiFetch, createEventSource } from './lib/api';
 import { subscribeCommandPaletteShortcut } from './lib/commandPaletteShortcut';
 import { useDashboardViewModel } from './lib/useDashboardViewModel';
 import { ChevronStepper } from './components/ChevronStepper';
-import { SuppliersPage } from './components/SuppliersPage';
 import { CommandPalette } from './components/CommandPalette';
-import { PipelineMonitor } from './components/PipelineMonitor';
-import { AgentOSPanel } from './components/AgentOSPanel';
-import { MultiAgentOrchestraView } from './components/MultiAgentOrchestraView';
-import { CrawlerIntakePanel } from './components/CrawlerIntakePanel';
-import { RFQFileImportPanel } from './components/RFQFileImportPanel';
-import { ContractControlPanel } from './components/ContractControlPanel';
-import { BlockedQueue } from './components/BlockedQueue';
 import { TransitionActions } from './components/TransitionActions';
 import { notify } from './lib/notify';
-import { JobReportView } from './components/JobReportView';
-import { HermesChatDrawer } from './components/HermesChatDrawer';
-import { BatchSearchModal } from './components/BatchSearchModal';
 import { getWorkflowStepIndex } from './lib/workflow';
 import { type RequestItem } from './lib/types';
-import { CommercialAccountPanel, type CommercialAccountData } from './components/CommercialAccountPanel';
-import { QuotesPanel } from './components/QuotesPanel';
+import type { CommercialAccountData } from './components/CommercialAccountPanel';
+
+/** Lazy route/panel chunks — keep shell + kanban eager for first paint. */
+const SupplierMatrix = lazy(() => import('./components/SupplierMatrix').then((m) => ({ default: m.SupplierMatrix })));
+const PricingCalculator = lazy(() => import('./components/PricingCalculator').then((m) => ({ default: m.PricingCalculator })));
+const GlobalMatchingHub = lazy(() => import('./components/GlobalMatchingHub').then((m) => ({ default: m.GlobalMatchingHub })));
+const GlobalPricingSimulator = lazy(() => import('./components/GlobalPricingSimulator').then((m) => ({ default: m.GlobalPricingSimulator })));
+const AuditTimeline = lazy(() => import('./components/AuditTimeline').then((m) => ({ default: m.AuditTimeline })));
+const CompletedOrdersHistory = lazy(() => import('./components/CompletedOrdersHistory').then((m) => ({ default: m.CompletedOrdersHistory })));
+const EvidenceGatesWidget = lazy(() => import('./components/EvidenceGatesWidget').then((m) => ({ default: m.EvidenceGatesWidget })));
+const InvoicePreview = lazy(() => import('./components/InvoicePreview').then((m) => ({ default: m.InvoicePreview })));
+const LLMCostPanel = lazy(() => import('./components/LLMCostPanel').then((m) => ({ default: m.LLMCostPanel })));
+const SuppliersPage = lazy(() => import('./components/SuppliersPage').then((m) => ({ default: m.SuppliersPage })));
+const PipelineMonitor = lazy(() => import('./components/PipelineMonitor').then((m) => ({ default: m.PipelineMonitor })));
+const AgentOSPanel = lazy(() => import('./components/AgentOSPanel').then((m) => ({ default: m.AgentOSPanel })));
+const MultiAgentOrchestraView = lazy(() => import('./components/MultiAgentOrchestraView').then((m) => ({ default: m.MultiAgentOrchestraView })));
+const CrawlerIntakePanel = lazy(() => import('./components/CrawlerIntakePanel').then((m) => ({ default: m.CrawlerIntakePanel })));
+const RFQFileImportPanel = lazy(() => import('./components/RFQFileImportPanel').then((m) => ({ default: m.RFQFileImportPanel })));
+const ContractControlPanel = lazy(() => import('./components/ContractControlPanel').then((m) => ({ default: m.ContractControlPanel })));
+const BlockedQueue = lazy(() => import('./components/BlockedQueue').then((m) => ({ default: m.BlockedQueue })));
+const JobReportView = lazy(() => import('./components/JobReportView').then((m) => ({ default: m.JobReportView })));
+const HermesChatDrawer = lazy(() => import('./components/HermesChatDrawer').then((m) => ({ default: m.HermesChatDrawer })));
+const BatchSearchModal = lazy(() => import('./components/BatchSearchModal').then((m) => ({ default: m.BatchSearchModal })));
+const CommercialAccountPanel = lazy(() => import('./components/CommercialAccountPanel').then((m) => ({ default: m.CommercialAccountPanel })));
+const QuotesPanel = lazy(() => import('./components/QuotesPanel').then((m) => ({ default: m.QuotesPanel })));
+
+function RouteFallback({ label = 'Загрузка панели…' }: { label?: string }) {
+  return (
+    <div className="panel-card-tight flex min-h-[220px] items-center justify-center p-8" role="status" aria-live="polite">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <Icon name="spinner" size={22} className="animate-spin text-accent-primary" />
+        <p className="text-xs font-semibold text-ink-secondary">{label}</p>
+      </div>
+    </div>
+  );
+}
 
 type Request = {
   id: number;
@@ -115,20 +129,26 @@ function App() {
     setCommercialLoading(true);
     setCommercialError(null);
     try {
+      // Analytics is optional: schema drift / 5xx must not blank the whole commercial panel.
       const [organizationResponse, usageResponse, membersResponse, analyticsResponse] = await Promise.all([
         apiFetch('/api/organizations/current'),
         apiFetch('/api/billing/usage'),
         apiFetch('/api/organizations/current/members'),
-        apiFetch('/api/analytics/quoteops'),
+        apiFetch('/api/analytics/quoteops').catch(() => null),
       ]);
-      if (!organizationResponse.ok || !usageResponse.ok || !membersResponse.ok || !analyticsResponse.ok) throw new Error('Commercial account HTTP error');
+      if (!organizationResponse.ok || !usageResponse.ok || !membersResponse.ok) {
+        throw new Error('Commercial account HTTP error');
+      }
       const organization = await organizationResponse.json();
       const usage = await usageResponse.json();
       const members = await membersResponse.json();
-      const analytics = await analyticsResponse.json();
+      const analytics =
+        analyticsResponse && analyticsResponse.ok
+          ? await analyticsResponse.json()
+          : undefined;
       setCommercialAccount({ ...organization, usage, members, analytics });
     } catch (error) {
-      console.error('Commercial account unavailable', error);
+      console.warn('Commercial account partial/unavailable', error);
       setCommercialAccount(null);
       setCommercialError('Commercial account unavailable');
     } finally {
@@ -219,7 +239,7 @@ function App() {
     void fetchSuppliersForPalette();
   }, [fetchTrigger]);
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     try {
       const res = await apiFetch('/api/requests');
       if (res.ok) {
@@ -229,11 +249,11 @@ function App() {
     } catch (error) {
       console.error('Error fetching requests', error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void fetchRequests();
-  }, [fetchTrigger]);
+  }, [fetchTrigger, fetchRequests]);
 
   const pendingGRef = useRef(false);
   const pendingGTimerRef = useRef<number | null>(null);
@@ -322,52 +342,63 @@ function App() {
   useEffect(() => {
     const tenantId = import.meta.env.VITE_PARTSOPS_TENANT_ID || 'default';
     const es = createEventSource(tenantId);
+    let debounceTimer: number | null = null;
+    const bumpFetch = (pipeline = false, detail?: unknown) => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        setFetchTrigger((prev) => prev + 1);
+        if (pipeline) {
+          window.dispatchEvent(new CustomEvent('orchestra-update', { detail }));
+        }
+        debounceTimer = null;
+      }, 400);
+    };
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'requests_updated' || data.type === 'llm_cost_updated' || data.type === 'metrics_updated' || data.type === 'pipeline_runs_updated') {
-          setFetchTrigger((prev) => prev + 1);
-          if (data.type === 'pipeline_runs_updated') {
-            window.dispatchEvent(new CustomEvent('orchestra-update', { detail: data }));
-          }
+          bumpFetch(data.type === 'pipeline_runs_updated', data);
         }
       } catch (e) {
         console.warn('SSE message parse error:', e);
       }
     };
-    es.onerror = (err) => {
-      console.warn('SSE connection error:', err);
+    es.onerror = () => {
+      // EventSource reconnects automatically; avoid log spam.
     };
     return () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
       es.close();
     };
   }, []);
 
   useEffect(() => {
-    if (selectedReq) {
-      setWorkspace(null);
-      setWorkspaceError(null);
-      setSelectedOffers({});
-      void apiFetch(`/api/requests/${selectedReq.request_id}/workspace`)
-        .then(async (res) => {
-          if (!res.ok) throw new Error(`Workspace HTTP ${res.status}`);
-          return res.json() as Promise<Workspace>;
-        })
-        .then((data) => {
-          setWorkspace(data);
-          setNormalizedParts(data.request.parts ?? []);
-          setSelectedOffers(data.candidates.selected_offers ?? {});
-          setSelectedReq((previous) => previous && previous.status !== data.request.status
-            ? { ...previous, status: data.request.status }
-            : previous);
-          setActiveStep(getRequestWorkspaceStep(data.request.status));
-        })
-        .catch((error: unknown) => {
-          setNormalizedParts([]);
-          setWorkspaceError(error instanceof Error ? error.message : 'Не удалось загрузить подтверждённое состояние заявки');
+    if (!selectedReq?.request_id) return;
+    const requestId = selectedReq.request_id;
+    setWorkspace(null);
+    setWorkspaceError(null);
+    setSelectedOffers({});
+    void apiFetch(`/api/requests/${requestId}/workspace`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Workspace HTTP ${res.status}`);
+        return res.json() as Promise<Workspace>;
+      })
+      .then((data) => {
+        setWorkspace(data);
+        setNormalizedParts(data.request.parts ?? []);
+        setSelectedOffers(data.candidates.selected_offers ?? {});
+        setSelectedReq((previous) => {
+          if (!previous || previous.request_id !== requestId) return previous;
+          if (previous.status === data.request.status) return previous;
+          return { ...previous, status: data.request.status };
         });
-    }
-  }, [selectedReq]);
+        setActiveStep(getRequestWorkspaceStep(data.request.status));
+      })
+      .catch((error: unknown) => {
+        setNormalizedParts([]);
+        setWorkspaceError(error instanceof Error ? error.message : 'Не удалось загрузить подтверждённое состояние заявки');
+      });
+  }, [selectedReq?.request_id]);
 
   const handleSelectRequest = (req: Request | RequestItem) => {
     const fullReq = requests.find((r) => r.request_id === req.request_id) || (req as Request);
@@ -507,17 +538,18 @@ function App() {
           drawerOpen={navDrawerOpen}
           onCloseDrawer={() => setNavDrawerOpen(false)}
         />
-        <main className="flex-1 h-full overflow-y-auto bg-[var(--bg-app)]">
+        <main className="flex-1 h-full overflow-y-auto bg-app-bg">
+          <Suspense fallback={<RouteFallback label="Загрузка рабочего пространства…" />}>
           {selectedReq && activeNav === 'matching' ? (
             <div className="p-4 max-w-6xl mx-auto space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)]">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-ink-secondary shadow-ds-sm">
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Режим контекста заявки: <strong className="font-mono text-[var(--accent-primary)]">{selectedReq.request_id}</strong> ({selectedReq.customer_name || 'Без имени'})</span>
+                  <span>Режим контекста заявки: <strong className="font-mono text-accent-primary">{selectedReq.request_id}</strong> ({selectedReq.customer_name || 'Без имени'})</span>
                 </div>
                 <button
                   onClick={() => setSelectedReq(null)}
-                  className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 py-1 text-[11px] font-bold text-[var(--accent-primary)] transition-all hover:bg-blue-50 active:scale-95"
+                  className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-surface-1 px-3 py-1 text-[11px] font-bold text-accent-primary transition-all hover:bg-blue-50 active:scale-95"
                   title="Перейти в автономный глобальный инструмент подбора/расчета без привязки к заявке"
                 >
                   <Icon name="rotate" size={12} /> Открепить заявку
@@ -549,10 +581,10 @@ function App() {
               {!workspace && !workspaceError && <InlineAlert type="info" message="Загружаем подтверждённое состояние заявки и разрешённые действия…" />}
               <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50/55 px-4 py-3 text-xs">
                 <div className="min-w-0">
-                  <p className="font-bold text-slate-900">{activeStep === 2 ? 'Проверьте распознанные позиции' : activeStep === 3 ? 'Выберите лучший оффер для каждой позиции' : activeStep === 4 ? 'Проверьте доказательства и согласуйте цену' : 'Подготовьте и отправьте счёт'}</p>
-                  <p className="mt-0.5 text-slate-600">Шаг нельзя пропустить, пока не выполнено обязательное условие текущего этапа.</p>
+                  <p className="font-bold text-ink-primary">{activeStep === 2 ? 'Проверьте распознанные позиции' : activeStep === 3 ? 'Выберите лучший оффер для каждой позиции' : activeStep === 4 ? 'Проверьте доказательства и согласуйте цену' : 'Подготовьте и отправьте счёт'}</p>
+                  <p className="mt-0.5 text-ink-secondary">Шаг нельзя пропустить, пока не выполнено обязательное условие текущего этапа.</p>
                 </div>
-                <span className="hidden shrink-0 rounded-full border border-blue-200 bg-white px-2.5 py-1 font-mono text-[10px] font-bold text-blue-700 sm:inline-flex">{activeStep === 2 ? `${requestPartsCount} поз.` : activeStep === 3 ? `${selectedOffersCount}/${requestPartsCount} выбрано` : selectedReq.status}</span>
+                <span className="hidden shrink-0 rounded-full border border-blue-200 bg-surface-1 px-2.5 py-1 font-mono text-[10px] font-bold text-blue-700 sm:inline-flex">{activeStep === 2 ? `${requestPartsCount} поз.` : activeStep === 3 ? `${selectedOffersCount}/${requestPartsCount} выбрано` : selectedReq.status}</span>
               </div>
               <div className="space-y-4">
                 {activeStep === 2 && (
@@ -560,12 +592,12 @@ function App() {
                     title="Шаг 2: Анализ нормализации и корректировка данных"
                     icon="square-check"
                     headerActions={
-                      <span className="text-[10px] font-bold text-[var(--accent-primary)] uppercase bg-blue-50 px-2 py-0.5 border border-blue-200 rounded">
+                      <span className="text-[10px] font-bold text-accent-primary uppercase bg-blue-50 px-2 py-0.5 border border-blue-200 rounded">
                         Защита перс. данных активна
                       </span>
                     }
                   >
-                    <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
+                    <p className="text-xs text-ink-secondary mb-4 leading-relaxed">
                       Проверьте детали, распознанные агентом приема LangGraph. Вы можете редактировать названия, изменять количество и подтверждать совпадения перед подбором.
                     </p>
                     <ReviewPanel
@@ -604,7 +636,7 @@ function App() {
                           });
                       }}
                     />
-                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface-1 px-4 py-3 shadow-sm">
                       <Button variant="secondary" icon="arrow-left" onClick={() => setActiveStep(2)}>Назад к проверке</Button>
                       <Button variant="primary" icon="arrow-right" disabled={!allOffersSelected} onClick={() => setActiveStep(4)} title={!allOffersSelected ? 'Выберите оффер для каждой позиции' : undefined}>
                         К согласованию <span className="ml-1 font-mono text-[10px] opacity-80">{selectedOffersCount}/{requestPartsCount}</span>
@@ -614,7 +646,7 @@ function App() {
                 )}
                 {activeStep === 4 && (
                   <SectionCard title="Шаг 4: Контроль операционного согласования" icon="circle-info">
-                    <p className="text-xs text-[var(--text-secondary)] mb-4 leading-relaxed">
+                    <p className="text-xs text-ink-secondary mb-4 leading-relaxed">
                       Изучите ценовые аномалии и проверьте целостность цепочки аудита SHA-256. Требуется явное одобрение администратора/специалиста для разблокировки ценового листа перед подготовкой черновика коммерческого предложения.
                     </p>
                     <div className="mb-4">
@@ -626,7 +658,7 @@ function App() {
                         message="Некоторые детали не имеют выбранных предложений поставщиков. Настоятельно рекомендуется сравнить и выбрать варианты для всех позиций перед согласованием."
                       />
                     )}
-                    <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[var(--border-subtle)] justify-end">
+                    <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-line-subtle justify-end">
                       <Button variant="secondary" icon="arrow-left" onClick={() => setActiveStep(3)}>Назад к подбору</Button>
                       <TransitionActions
                         status={selectedReq.status}
@@ -651,6 +683,7 @@ function App() {
                       canCreateInvoice={Boolean(workspace?.principal_permissions.can_create_invoice)}
                       canSyncErp={Boolean((workspace?.allowed_actions ?? []).some((action) => action.id === 'sync_to_erp'))}
                       erpQuotationRef={selectedReq.erp_quotation_ref}
+                      hasSelectedOffers={Object.keys(selectedOffers || {}).length > 0 || Object.keys(workspace?.candidates?.selected_offers || {}).length > 0}
                       onDraftInvoice={(data) => {
                         const invoice = data.invoice ?? data;
                         const invoiceRef = invoice.invoice_ref ?? invoice.invoice_number;
@@ -666,7 +699,11 @@ function App() {
                         setFetchTrigger((prev) => prev + 1);
                       }}
                     />
-                    <InvoicePreview requestId={selectedReq.request_id} onSent={() => setFetchTrigger((prev) => prev + 1)} />
+                    <InvoicePreview
+                      requestId={selectedReq.request_id}
+                      expectInvoice={Boolean(selectedReq.erp_invoice_ref) || ['INVOICE_DRAFTED', 'SENT_TO_CLIENT', 'PAID', 'PURCHASE_ORDERED', 'FULFILLED', 'CLOSED'].includes(selectedReq.status)}
+                      onSent={() => setFetchTrigger((prev) => prev + 1)}
+                    />
                   </div>
                 )}
               </div>
@@ -702,11 +739,11 @@ function App() {
                         void notify.erpSync();
                         setTimeout(() => setIsErpSyncing(false), 800);
                       }}
-                      className="dashboard-overview__refresh p-2 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] text-[var(--text-secondary)] transition-all duration-200 hover:bg-[var(--surface-3)] hover:text-[var(--text-primary)] active:scale-95 flex items-center justify-center"
+                      className="dashboard-overview__refresh p-2 rounded-control border border-line bg-surface-2 text-ink-secondary transition-all duration-200 hover:bg-surface-3 hover:text-ink-primary active:scale-95 flex items-center justify-center"
                       title="Обновить статус ERP (синхронизация состояния)"
                       aria-label="Обновить статус ERP"
                     >
-                      <Icon name="rotate" size={14} className={`text-[var(--accent-primary)] ${isErpSyncing ? 'animate-spin' : ''}`} />
+                      <Icon name="rotate" size={14} className={`text-accent-primary ${isErpSyncing ? 'animate-spin' : ''}`} />
                     </button>
                     <div className="dashboard-overview__header">
                       <div className="dashboard-overview__intro">
@@ -716,7 +753,7 @@ function App() {
                             {dashboardVm.loading && !hasConfirmedHealth ? 'Проверка системы' : (dashboardVm.health?.status === 'healthy' || dashboardVm.health?.status === 'ok') ? 'Данные подтверждены' : 'Статус недоступен'}
                           </span>
                           {dashboardVm.health?.tenant_id && (
-                            <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                            <span className="font-mono text-[10px] text-ink-muted">
                               Tenant: {dashboardVm.health.tenant_id}
                             </span>
                           )}
@@ -732,15 +769,15 @@ function App() {
                       <div className="dashboard-overview__actions">
                         <button
                           onClick={() => setIsBatchModalOpen(true)}
-                          className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-2)] px-4 py-2.5 text-xs font-semibold text-[var(--text-secondary)] transition-all duration-200 hover:bg-[var(--surface-3)] hover:text-[var(--text-primary)] active:scale-95"
+                          className="flex items-center gap-2 rounded-control border border-line bg-surface-2 px-4 py-2.5 text-xs font-semibold text-ink-secondary transition-all duration-200 hover:bg-surface-3 hover:text-ink-primary active:scale-95"
                           title="Быстрый пакетный поиск по списку артикулов OEM"
                         >
-                          <Icon name="search" size={14} className="text-[var(--accent-primary)]" />
+                          <Icon name="search" size={14} className="text-accent-primary" />
                           Быстрый поиск по артикулу
                         </button>
                         <button
                           onClick={handleOpenNewOrder}
-                          className="flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--accent-primary)] px-5 py-2.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-[var(--accent-primary-strong)] active:scale-95"
+                          className="flex items-center gap-2 rounded-control bg-accent-primary px-5 py-2.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-accent-strong active:scale-95"
                           title="Создать и настроить новый кастомный запрос"
                         >
                           <Icon name="plus" size={14} className="text-white" />
@@ -811,7 +848,7 @@ function App() {
                   </section>
 
                   {!dashboardVm.loading && !hasConfirmedHealth && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-control border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900">
                       <span><strong>Данные dashboard недоступны.</strong> Повторите загрузку после восстановления соединения.</span>
                       <Button size="sm" variant="secondary" icon="rotate" onClick={() => void dashboardVm.refetch()} aria-label="Повторить загрузку dashboard">
                         Повторить
@@ -857,10 +894,10 @@ function App() {
 
               {activeNav === 'kanban' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-[var(--border-strong)] pb-3">
+                  <div className="flex items-center justify-between border-b border-line-strong pb-3">
                     <div>
-                      <h2 className="text-lg font-bold text-[var(--text-primary)]">Интерактивный рабочий процесс</h2>
-                      <p className="text-xs text-[var(--text-secondary)]">Перетаскивайте запросы между этапами обработки для автоматического изменения статуса в системе.</p>
+                      <h2 className="text-lg font-bold text-ink-primary">Интерактивный рабочий процесс</h2>
+                      <p className="text-xs text-ink-secondary">Перетаскивайте запросы между этапами обработки для автоматического изменения статуса в системе.</p>
                     </div>
                     <Button variant="secondary" icon="rotate" onClick={fetchRequests} title="Обновить доску" />
                   </div>
@@ -930,37 +967,35 @@ function App() {
 
               {activeNav === 'matching' && !selectedReq && (
                 <div className="mx-auto max-w-6xl space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--surface-1)] border border-[var(--border-default)] p-3.5 rounded-[var(--radius-card)] shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-surface-1 border border-line p-3.5 rounded-card shadow-sm">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
                         <Icon name="rotate" size={16} />
                       </div>
                       <div>
-                        <h3 className="text-xs font-bold text-[var(--text-primary)]">Автономный хаб подбора и цен</h3>
-                        <p className="text-[11px] text-[var(--text-secondary)]">Переключайтесь между поиском запчастей по OEM и автономным симулятором калькуляции цен</p>
+                        <h3 className="text-xs font-bold text-ink-primary">Автономный хаб подбора и цен</h3>
+                        <p className="text-[11px] text-ink-secondary">Переключайтесь между поиском запчастей по OEM и автономным симулятором калькуляции цен</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <div className="ds-segmented" role="group" aria-label="Режим автономного хаба">
                       <button
+                        type="button"
                         onClick={() => setStandaloneTab('matching')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                          standaloneTab === 'matching'
-                            ? 'bg-white text-indigo-700 shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900'
+                        className={`ds-segmented__item inline-flex items-center gap-1.5 ${
+                          standaloneTab === 'matching' ? 'ds-segmented__item--active' : ''
                         }`}
                       >
-                        <Icon name="rotate" size={13} /> 🔍 OEM Поиск и Метчинг
+                        <Icon name="rotate" size={13} /> OEM Поиск и Метчинг
                       </button>
                       <button
+                        type="button"
                         onClick={() => setStandaloneTab('pricing')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                          standaloneTab === 'pricing'
-                            ? 'bg-white text-indigo-700 shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900'
+                        className={`ds-segmented__item inline-flex items-center gap-1.5 ${
+                          standaloneTab === 'pricing' ? 'ds-segmented__item--active' : ''
                         }`}
                       >
-                        <Icon name="pencil" size={13} /> 🧮 Симулятор цен
+                        <Icon name="pencil" size={13} /> Симулятор цен
                       </button>
                     </div>
                   </div>
@@ -1008,13 +1043,13 @@ function App() {
                     }}
                     fetchTrigger={fetchTrigger}
                   />
-                  <div className="flex items-center justify-center p-8 bg-[var(--surface-1)] border border-[var(--border-default)] rounded-[var(--radius-card)] h-[650px] shadow-[var(--shadow-sm)] select-none">
+                  <div className="flex items-center justify-center p-8 bg-surface-1 border border-line rounded-card h-[650px] shadow-ds-sm select-none">
                     <div className="text-center max-w-sm">
-                      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-[var(--text-muted)] border border-slate-200 mx-auto">
+                      <div className="w-12 h-12 rounded-full bg-surface-3 flex items-center justify-center mb-4 text-ink-muted border border-line mx-auto">
                         <Icon name="circle-info" size={24} />
                       </div>
-                      <h3 className="text-sm font-bold text-[var(--text-primary)] block mb-1">Детальный аудит не загружен</h3>
-                      <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                      <h3 className="text-sm font-bold text-ink-primary block mb-1">Детальный аудит не загружен</h3>
+                      <p className="text-[11px] text-ink-secondary leading-relaxed">
                         Пожалуйста, выберите завершенный заказ из архива слева или активный запрос из очереди справа, чтобы просмотреть цепочку событий аудита и проверить SHA-256 хеши.
                       </p>
                     </div>
@@ -1023,6 +1058,7 @@ function App() {
               )}
             </div>
           )}
+          </Suspense>
         </main>
         <RightPanel
           requests={requests}
@@ -1047,6 +1083,7 @@ function App() {
         suppliers={suppliersForPalette}
       />
 
+      <Suspense fallback={null}>
       <BatchSearchModal
         isOpen={isBatchModalOpen}
         onClose={() => setIsBatchModalOpen(false)}
@@ -1056,6 +1093,7 @@ function App() {
           setActiveNav('report');
         }}
       />
+      </Suspense>
 
     </AppFrame>
   );

@@ -1,7 +1,7 @@
 """
 W3 P1 honesty tests for automation stubs: notify_owner, dead_letter_cleanup, vin_query.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlmodel import Session, SQLModel, select
@@ -107,7 +107,7 @@ def test_notify_owner_with_recipient_queues_outbox():
 
 def test_dead_letter_dry_run_would_remove():
     with Session(engine) as session:
-        old = datetime.utcnow() - timedelta(hours=100)
+        old = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=100)
         msg = OutboundMessage(
             tenant_id="default",
             request_id="REQ-DL-1",
@@ -142,8 +142,8 @@ def test_dead_letter_dry_run_would_remove():
 
 def test_dead_letter_removes_old_failed_only():
     with Session(engine) as session:
-        old = datetime.utcnow() - timedelta(hours=100)
-        recent = datetime.utcnow() - timedelta(hours=1)
+        old = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=100)
+        recent = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
 
         dead_old = OutboundMessage(
             tenant_id="default",

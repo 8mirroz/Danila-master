@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatusBadge, EmptyState } from './Primitives';
+import { StatusBadge, EmptyState, Icon } from './Primitives';
 import { TransitionActions } from './TransitionActions';
 
 type Request = {
@@ -38,16 +38,16 @@ export const BlockedQueue: React.FC<BlockedQueueProps> = ({
 
   return (
     <section className="panel-card-tight overflow-hidden p-5 space-y-4">
-      <div className="flex items-center justify-between border-b border-[var(--border-default)] pb-3">
+      <div className="flex items-center justify-between border-b border-line pb-3">
         <div className="flex items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-100 text-amber-700 text-xs font-bold">
-            <i className="fas fa-triangle-exclamation" />
+            <Icon name="triangle-exclamation" size={14} />
           </span>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-ink-primary">
             Следующие действия ({actionableRequests.length})
           </h3>
         </div>
-        <span className="text-[10px] text-[var(--text-muted)] font-mono">
+        <span className="text-[10px] text-ink-muted font-mono">
           Подтверждено backend capabilities
         </span>
       </div>
@@ -56,7 +56,7 @@ export const BlockedQueue: React.FC<BlockedQueueProps> = ({
         <EmptyState
           title="Действий, требующих оператора, нет"
           description="Все текущие запросы проходят этапы обработки в штатном режиме."
-          icon="fa-shield-check"
+          icon="shield-check"
         />
       ) : (
         <div className="space-y-3">
@@ -70,7 +70,7 @@ export const BlockedQueue: React.FC<BlockedQueueProps> = ({
                 onClick={() => onSelectRequest(req)}
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
+                  <span className="font-mono text-xs font-bold text-ink-primary">
                     {req.request_id}
                   </span>
                   <StatusBadge status={req.status} />
@@ -79,7 +79,7 @@ export const BlockedQueue: React.FC<BlockedQueueProps> = ({
                       className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
                         req.priority.toLowerCase() === 'high' || req.priority.toLowerCase() === 'urgent'
                           ? 'bg-red-100 text-red-700'
-                          : 'bg-slate-200 text-slate-700'
+                          : 'bg-surface-4 text-ink-secondary'
                       }`}
                     >
                       {req.priority}
@@ -87,14 +87,14 @@ export const BlockedQueue: React.FC<BlockedQueueProps> = ({
                   )}
                 </div>
 
-                <div className="text-xs font-medium text-[var(--text-secondary)] flex flex-wrap items-center gap-3">
+                <div className="text-xs font-medium text-ink-secondary flex flex-wrap items-center gap-3">
                   <span>
-                    <i className="fas fa-user text-[10px] mr-1 text-slate-400" />
+                    <Icon name="user" size={10} className="text-[10px] mr-1 text-ink-muted" />
                     {req.customer_name || 'Клиент'}
                   </span>
                   {req.vehicle_make && (
                     <span>
-                      <i className="fas fa-car text-[10px] mr-1 text-slate-400" />
+                      <Icon name="car" size={10} className="text-[10px] mr-1 text-ink-muted" />
                       {req.vehicle_make} {req.vehicle_model || ''}
                     </span>
                   )}

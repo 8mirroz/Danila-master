@@ -5,18 +5,94 @@ import { KanbanCard } from './KanbanCard';
 import { PipelineRunDialog } from './PipelineRunDialog';
 
 type Request = {
-  id: number; request_id: string; source: string; status: string; customer_name: string; created_at: string; parts_json: string;
-  customer_phone_masked?: string; customer_email_masked?: string; vehicle_vin_masked?: string; priority?: string; vehicle_make?: string; vehicle_model?: string;
+  id: number;
+  request_id: string;
+  source: string;
+  status: string;
+  customer_name: string;
+  created_at: string;
+  parts_json: string;
+  customer_phone_masked?: string;
+  customer_email_masked?: string;
+  vehicle_vin_masked?: string;
+  priority?: string;
+  vehicle_make?: string;
+  vehicle_model?: string;
 };
 
-const COLUMNS = [
-  { id: 'intake', title: 'Входящие', icon: 'file-arrow-up', iconColor: 'text-[#53B6FF]', bgClass: 'bg-[rgba(83,182,255,0.03)] border-[rgba(83,182,255,0.12)]', statuses: ['NEW', 'NORMALIZING', 'PARSING', 'VIN_CHECK', 'PART_EXTRACTION', 'NEEDS_MANUAL_PARSE', 'NEEDS_CLARIFICATION'] },
-  { id: 'matching', title: 'Подбор', icon: 'code-fork', iconColor: 'text-[#2EE6D6]', bgClass: 'bg-[rgba(46,230,214,0.03)] border-[rgba(46,230,214,0.12)]', statuses: ['MATCHING', 'SUPPLIER_SEARCH', 'OFFER_RANKING', 'MANUAL_REVIEW', 'REWORK'] },
-  { id: 'approval', title: 'Согласование', icon: 'circle-check', iconColor: 'text-[#F5C84C]', bgClass: 'bg-[rgba(245,200,76,0.03)] border-[rgba(245,200,76,0.12)]', statuses: ['PRICING_REVIEW', 'READY_FOR_APPROVAL'] },
-  { id: 'invoicing', title: 'Счета в ERP', icon: 'folder-open', iconColor: 'text-[#3EE985]', bgClass: 'bg-[rgba(62,233,133,0.03)] border-[rgba(62,233,133,0.12)]', statuses: ['APPROVED', 'ERP_SYNCING', 'INVOICE_DRAFTED', 'SENT_TO_CLIENT', 'PAID', 'PURCHASE_ORDERED', 'FULFILLED', 'CLOSED', 'CANCELLED', 'FAILED', 'ERP_SYNC_FAILED', 'CLIENT_REJECTED', 'EXPIRED'] },
+interface ColumnDef {
+  id: string;
+  title: string;
+  icon: string;
+  topBarClass: string;
+  iconBgClass: string;
+  badgeClass: string;
+  description: string;
+  statuses: string[];
+}
+
+const COLUMNS: ColumnDef[] = [
+  {
+    id: 'intake',
+    title: 'Прием & Нормализация',
+    icon: 'file-arrow-up',
+    topBarClass: 'bg-accent-primary',
+    iconBgClass: 'bg-blue-50 text-accent-primary border-blue-200',
+    badgeClass: 'bg-blue-50 text-accent-primary border-blue-200',
+    description: 'Входящие запросы клиентов',
+    statuses: ['NEW', 'NORMALIZING', 'PARSING', 'VIN_CHECK', 'PART_EXTRACTION', 'NEEDS_MANUAL_PARSE', 'NEEDS_CLARIFICATION'],
+  },
+  {
+    id: 'matching',
+    title: 'Подбор поставщиков',
+    icon: 'code-fork',
+    topBarClass: 'bg-accent-info',
+    iconBgClass: 'bg-cyan-50 text-accent-info border-cyan-200',
+    badgeClass: 'bg-cyan-50 text-accent-info border-cyan-200',
+    description: 'Поиск и ранжирование аналогов',
+    statuses: ['MATCHING', 'SUPPLIER_SEARCH', 'OFFER_RANKING', 'MANUAL_REVIEW', 'REWORK'],
+  },
+  {
+    id: 'approval',
+    title: 'Согласование цен',
+    icon: 'circle-check',
+    topBarClass: 'bg-accent-warning',
+    iconBgClass: 'bg-amber-50 text-accent-warning border-amber-200',
+    badgeClass: 'bg-amber-50 text-accent-warning border-amber-200',
+    description: 'Оценка маржинальности и рисков',
+    statuses: ['PRICING_REVIEW', 'READY_FOR_APPROVAL'],
+  },
+  {
+    id: 'invoicing',
+    title: 'Счета & ERP Sync',
+    icon: 'folder-open',
+    topBarClass: 'bg-accent-success',
+    iconBgClass: 'bg-emerald-50 text-accent-success border-emerald-200',
+    badgeClass: 'bg-emerald-50 text-accent-success border-emerald-200',
+    description: 'Выгрузка коммерческих предложений',
+    statuses: [
+      'APPROVED',
+      'ERP_SYNCING',
+      'INVOICE_DRAFTED',
+      'SENT_TO_CLIENT',
+      'PAID',
+      'PURCHASE_ORDERED',
+      'FULFILLED',
+      'CLOSED',
+      'CANCELLED',
+      'FAILED',
+      'ERP_SYNC_FAILED',
+      'CLIENT_REJECTED',
+      'EXPIRED',
+    ],
+  },
 ];
 
-export function KanbanBoard({ requests, onSelectRequest, onRunsChanged }: {
+export function KanbanBoard({
+  requests,
+  onSelectRequest,
+  onRunsChanged,
+}: {
   requests: Request[];
   onSelectRequest: (request: Request) => void;
   onRunsChanged: () => void;
@@ -29,10 +105,13 @@ export function KanbanBoard({ requests, onSelectRequest, onRunsChanged }: {
   const restored = React.useRef(false);
   const boardRef = React.useRef<HTMLDivElement>(null);
 
-  // Track status changes to animate moved cards
   React.useEffect(() => {
     const oldStatuses = new Map(previous.current.map((request) => [request.request_id, request.status]));
-    const moved = new Set(requests.filter((request) => oldStatuses.get(request.request_id) && oldStatuses.get(request.request_id) !== request.status).map((request) => request.request_id));
+    const moved = new Set(
+      requests
+        .filter((request) => oldStatuses.get(request.request_id) && oldStatuses.get(request.request_id) !== request.status)
+        .map((request) => request.request_id)
+    );
     previous.current = requests;
     if (!moved.size) return;
     setRecentlyMoved(moved);
@@ -40,48 +119,33 @@ export function KanbanBoard({ requests, onSelectRequest, onRunsChanged }: {
     return () => window.clearTimeout(timer);
   }, [requests]);
 
-  // GSAP entrance animation for columns and cards on mount
   React.useEffect(() => {
-    if (boardRef.current) {
-      // 1. Column stagger entrance
-      gsap.fromTo(
-        boardRef.current.querySelectorAll('.kanban-column'),
-        { opacity: 0, y: 35 },
-        { opacity: 1, y: 0, duration: 0.7, stagger: 0.12, ease: 'power3.out' }
-      );
-      
-      // 2. Cards stagger entrance
-      gsap.fromTo(
-        boardRef.current.querySelectorAll('.kanban-card'),
-        { opacity: 0, scale: 0.95, y: 15 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.5, stagger: 0.04, delay: 0.25, ease: 'power2.out' }
-      );
-    }
-  }, []);
+    if (!boardRef.current) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return;
 
-  // GSAP feedback animation on moved cards
-  React.useEffect(() => {
-    if (recentlyMoved.size > 0 && boardRef.current) {
-      recentlyMoved.forEach((reqId) => {
-        const cardEl = boardRef.current?.querySelector(`[data-request-id="${reqId}"]`);
-        if (cardEl) {
-          gsap.timeline()
-            .fromTo(cardEl, 
-              { scale: 0.9, borderColor: '#2EE6D6', boxShadow: '0 0 25px rgba(46, 230, 214, 0.5)' },
-              { scale: 1.04, duration: 0.25, ease: 'power2.out' }
-            )
-            .to(cardEl, { rotation: 1.5, duration: 0.06, yoyo: true, repeat: 3 })
-            .to(cardEl, { rotation: 0, scale: 1, duration: 0.15, ease: 'power2.inOut' });
-        }
-      });
-    }
-  }, [recentlyMoved]);
+    gsap.fromTo(
+      boardRef.current.querySelectorAll('.kanban-column'),
+      { opacity: 0, y: 24 },
+      { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power2.out' }
+    );
+
+    gsap.fromTo(
+      boardRef.current.querySelectorAll('.kanban-card'),
+      { opacity: 0, scale: 0.97, y: 10 },
+      { opacity: 1, scale: 1, y: 0, duration: 0.4, stagger: 0.03, delay: 0.15, ease: 'power2.out' }
+    );
+  }, []);
 
   React.useEffect(() => {
     if (restored.current || !requests.length) return;
     restored.current = true;
     try {
-      const stored = JSON.parse(localStorage.getItem('partsops.activePipelineRun') || 'null') as { requestId?: string; runId?: string; targetLane?: string } | null;
+      const stored = JSON.parse(localStorage.getItem('partsops.activePipelineRun') || 'null') as {
+        requestId?: string;
+        runId?: string;
+        targetLane?: string;
+      } | null;
       const request = requests.find((item) => item.request_id === stored?.requestId);
       if (request && stored?.runId && stored.targetLane) {
         setPending({ request, lane: stored.targetLane, runId: stored.runId });
@@ -92,107 +156,110 @@ export function KanbanBoard({ requests, onSelectRequest, onRunsChanged }: {
     }
   }, [requests]);
 
-  const requestRun = (request: Request, lane: string) => { setPending({ request, lane }); setDialogOpen(true); };
+  const requestRun = (request: Request, lane: string) => {
+    setPending({ request, lane });
+    setDialogOpen(true);
+  };
 
-  // Drag over columns micro-interactions with GSAP
   const handleDragEnter = (e: React.DragEvent, columnId: string) => {
     e.preventDefault();
     setActiveDragColumn(columnId);
-    
-    const colEl = boardRef.current?.querySelector(`[data-column-id="${columnId}"]`);
-    if (colEl) {
-      gsap.to(colEl, {
-        scale: 1.015,
-        borderColor: 'rgba(46, 230, 214, 0.4)',
-        backgroundColor: 'rgba(46, 230, 214, 0.06)',
-        boxShadow: '0 0 25px rgba(46, 230, 214, 0.15)',
-        duration: 0.25,
-        ease: 'power2.out'
-      });
-    }
   };
 
-  const handleDragLeave = (e: React.DragEvent, columnId: string) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    // Verify we are leaving the actual container boundary
     const rect = e.currentTarget.getBoundingClientRect();
     if (e.clientX < rect.left || e.clientX >= rect.right || e.clientY < rect.top || e.clientY >= rect.bottom) {
       setActiveDragColumn(null);
-      const colEl = boardRef.current?.querySelector(`[data-column-id="${columnId}"]`);
-      if (colEl) {
-        gsap.to(colEl, {
-          scale: 1,
-          borderColor: '',
-          backgroundColor: '',
-          boxShadow: '',
-          duration: 0.25,
-          ease: 'power2.out'
-        });
-      }
     }
   };
 
-  const handleDrop = (event: React.DragEvent, lane: string, columnId: string) => {
+  const handleDrop = (event: React.DragEvent, lane: string) => {
     event.preventDefault();
     setActiveDragColumn(null);
-    
-    const colEl = boardRef.current?.querySelector(`[data-column-id="${columnId}"]`);
-    if (colEl) {
-      gsap.timeline()
-        .to(colEl, { scale: 0.98, duration: 0.1, ease: 'power2.out' })
-        .to(colEl, { scale: 1, borderColor: '', backgroundColor: '', boxShadow: '', duration: 0.25, ease: 'back.out(2)' });
-    }
 
     const id = event.dataTransfer.getData('text/plain');
     const request = requests.find((item) => item.request_id === id);
     if (request) requestRun(request, lane);
   };
 
-  return <>
-    <div ref={boardRef} className="grid min-h-[calc(100vh-250px)] grid-cols-1 gap-5 overflow-hidden pb-2 md:grid-cols-2 xl:grid-cols-4">
-      {COLUMNS.map((column) => {
-        const cards = requests.filter((request) => column.statuses.includes(request.status));
-        return <section 
-          key={column.id} 
-          data-column-id={column.id}
-          onDragOver={(event) => event.preventDefault()} 
-          onDragEnter={(event) => handleDragEnter(event, column.id)}
-          onDragLeave={(event) => handleDragLeave(event, column.id)}
-          onDrop={(event) => handleDrop(event, column.title, column.id)} 
-          className={`kanban-column flex min-h-[420px] flex-col rounded-[26px] border p-4 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all duration-300 ${column.bgClass} ${activeDragColumn === column.id ? 'border-[#2EE6D6]/40 bg-[#2EE6D6]/10' : ''}`} 
-          aria-label={`${column.title}: ${cards.length} запросов`}
-        >
-          <header className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-white/10 bg-white/5 shadow-inner">
-                <Icon name={column.icon} className={column.iconColor} size={15} />
+  return (
+    <>
+      <div ref={boardRef} className="grid grid-cols-1 gap-4 pb-4 md:grid-cols-2 xl:grid-cols-4">
+        {COLUMNS.map((column) => {
+          const cards = requests.filter((request) => column.statuses.includes(request.status));
+          const isDraggingOver = activeDragColumn === column.id;
+
+          return (
+            <section
+              key={column.id}
+              data-column-id={column.id}
+              onDragOver={(event) => event.preventDefault()}
+              onDragEnter={(event) => handleDragEnter(event, column.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(event) => handleDrop(event, column.title)}
+              className={`kanban-column ds-kanban-column ${isDraggingOver ? 'ds-kanban-column--drop' : ''}`}
+              aria-label={`${column.title}: ${cards.length} запросов`}
+            >
+              <div className={`h-1.5 w-full rounded-t-2xl ${column.topBarClass}`} />
+
+              <header className="border-b border-line bg-surface-2/60 p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control border shadow-ds-sm ${column.iconBgClass}`}>
+                      <Icon name={column.icon} size={14} />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-xs font-bold tracking-tight text-ink-primary">
+                        {column.title}
+                      </h3>
+                      <p className="truncate text-[10px] font-medium text-ink-muted">
+                        {column.description}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold ${column.badgeClass}`}>
+                    {cards.length}
+                  </span>
+                </div>
+              </header>
+
+              <div className="custom-scrollbar max-h-[calc(100vh-280px)] flex-1 space-y-2.5 overflow-y-auto p-3">
+                {cards.length > 0 ? (
+                  cards.map((request) => (
+                    <KanbanCard
+                      key={request.request_id}
+                      request={request}
+                      onSelectRequest={onSelectRequest}
+                      onRunPipeline={(item) => requestRun(item, column.title)}
+                      isHighlighted={recentlyMoved.has(request.request_id)}
+                    />
+                  ))
+                ) : (
+                  <div className="ds-empty">
+                    <div className="ds-empty__icon">
+                      <Icon name={column.icon} size={16} />
+                    </div>
+                    <p className="ds-empty__title">Нет активных заявок</p>
+                    <p className="ds-empty__hint">Перетащите заказ сюда для запуска этапа</p>
+                  </div>
+                )}
               </div>
-              <div>
-                <h3 className="text-[13px] font-bold text-[#F4F7FB] tracking-tight">{column.title}</h3>
-                <p className="text-[10px] text-[#9AA6B2] font-semibold uppercase tracking-wider">Перенос запускает pipeline</p>
-              </div>
-            </div>
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold font-mono text-[#2EE6D6] border border-white/10">{cards.length}</span>
-          </header>
-          
-          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-1">
-            {cards.length ? cards.map((request) => (
-              <KanbanCard 
-                key={request.request_id} 
-                request={request} 
-                onSelectRequest={onSelectRequest} 
-                onRunPipeline={(item) => requestRun(item, column.title)} 
-                isHighlighted={recentlyMoved.has(request.request_id)} 
-              />
-            )) : (
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-10 text-center text-[11px] font-medium text-[#5F6B78]">
-                Нет запросов на этом этапе
-              </div>
-            )}
-          </div>
-        </section>;
-      })}
-    </div>
-    <PipelineRunDialog request={pending?.request ?? null} targetLane={pending?.lane ?? null} restoreRunId={pending?.runId ?? null} open={dialogOpen} onClose={() => setDialogOpen(false)} onCompleted={onRunsChanged} />
-  </>;
+            </section>
+          );
+        })}
+      </div>
+
+      <PipelineRunDialog
+        request={pending?.request ?? null}
+        targetLane={pending?.lane ?? null}
+        restoreRunId={pending?.runId ?? null}
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onCompleted={onRunsChanged}
+      />
+    </>
+  );
 }
+
+export default KanbanBoard;
