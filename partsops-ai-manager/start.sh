@@ -100,7 +100,7 @@ elif [ -d "partsops-ai-manager/venv" ]; then
   source partsops-ai-manager/venv/bin/activate
 fi
 
-export PARTSOPS_CORS_ORIGINS=${PARTSOPS_CORS_ORIGINS:-"http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:3000,http://127.0.0.1:3000"}
+export PARTSOPS_CORS_ORIGINS=${PARTSOPS_CORS_ORIGINS:-"http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.81:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:3000,http://127.0.0.1:3000,*"}
 export PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+:$PYTHONPATH}"
 
 UVICORN_ARGS=(--host 0.0.0.0 --port 8000)
@@ -124,7 +124,7 @@ fi
 echo "Starting Frontend (Vite)..."
 if [ -d "06_UI/admin_cockpit" ]; then
   cd 06_UI/admin_cockpit
-  npm run dev -- --port 5173 &
+  npm run dev -- --host 0.0.0.0 --port 5173 &
   FRONTEND_PID=$!
   cd ../..
 fi

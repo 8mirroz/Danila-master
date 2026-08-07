@@ -192,7 +192,19 @@ def test_help_service_retrieval():
 
 
 def test_context_envelope_building(session: Session):
-    ref = CopilotContextRef(screen_id="kanban_board")
+    from models import PartRequest
+    req = PartRequest(
+        tenant_id="default",
+        request_id="REQ-1001",
+        source="web",
+        status="BLOCKED",
+        customer_name="Тест Клиент",
+    )
+    session.add(req)
+    session.commit()
+
+    # Direct selection by request_id
+    ref = CopilotContextRef(screen_id="kanban_board", selected_request_id="REQ-1001")
     envelope = build_context_envelope(
         session=session,
         tenant_id="default",
@@ -201,7 +213,21 @@ def test_context_envelope_building(session: Session):
     )
     assert envelope.screen_id == "kanban_board"
     assert envelope.screen_title == "Канбан-доска заказов"
-    assert len(envelope.available_help_sources) > 0
+    assert envelope.selected_request is not None
+    assert envelope.selected_request.get("request_id") == "REQ-1001"
+    assert any("open_request" == a["action"] for a in envelope.allowed_user_actions)
+
+    # Resolution from user query when selected_request_id is not passed
+    ref_empty = CopilotContextRef(screen_id="kanban_board")
+    envelope_query = build_context_envelope(
+        session=session,
+        tenant_id="default",
+        context_ref=ref_empty,
+        user_role="manager",
+        query="Почему заблокирован REQ-1001?",
+    )
+    assert envelope_query.selected_request is not None
+    assert envelope_query.selected_request.get("request_id") == "REQ-1001"
 
 
 def test_strict_grounding_filter():

@@ -122,6 +122,36 @@ class Invoice(SQLModel, table=True):
 
 SEED_SUPPLIERS = [
     Supplier(
+        supplier_id="sup_exist", name="Exist.ru (ООО «Экзист.ру»)",
+        contact_person="Отдел продаж Exist API", phone="+7-495-777-0101",
+        email="api@exist.ru", city="Москва",
+        specialization="Exist API, OEM и Кроссы",
+        reliability_score=0.95, avg_delivery_days=1,
+        rating_auto=0.95, rating_manual=4.9, account_owner="Scraper System",
+        payment_terms="B2B API / Prepaid", delivery_terms="Pick-up / Delivery",
+        notes_internal="Авторизованный веб-скрапинг источник Exist.ru",
+    ),
+    Supplier(
+        supplier_id="sup_autodoc", name="Autodoc.ru (ООО «Автодок»)",
+        contact_person="Поддержка Autodoc B2B", phone="+7-495-988-7700",
+        email="b2b@autodoc.ru", city="Москва",
+        specialization="Autodoc API, Прямые дистрибьюторы",
+        reliability_score=0.96, avg_delivery_days=2,
+        rating_auto=0.96, rating_manual=4.8, account_owner="Scraper System",
+        payment_terms="B2B API / Net 14", delivery_terms="Standard Delivery",
+        notes_internal="Авторизованный веб-скрапинг источник Autodoc.ru",
+    ),
+    Supplier(
+        supplier_id="sup_rossko", name="Rossko.ru (ООО «Росско»)",
+        contact_person="B2B Менеджер Росско", phone="+7-800-500-7788",
+        email="info@rossko.ru", city="Санкт-Петербург",
+        specialization="Rossko API, Официальные OES бренды",
+        reliability_score=0.98, avg_delivery_days=1,
+        rating_auto=0.98, rating_manual=5.0, account_owner="Scraper System",
+        payment_terms="B2B API / Net 30", delivery_terms="Express Delivery",
+        notes_internal="Авторизованный веб-скрапинг источник Rossko.ru",
+    ),
+    Supplier(
         supplier_id="SUP-001", name="ООО «АвтоАльянс»",
         contact_person="Иванов Алексей", phone="+7-495-123-4567",
         email="ivanov@autoalliance.ru", city="Москва",
@@ -169,6 +199,48 @@ SEED_SUPPLIERS = [
 ]
 
 SEED_CATALOG = [
+    # ─── sup_exist: Exist.ru ────
+    SupplierCatalogItem(catalog_id="CAT-015", supplier_id="sup_exist",
+        part_name="Комплект передних тормозных колодок BMW X5",
+        oem_number="34116852253", brand="ATE", price=6200,
+        stock_qty=15, delivery_days=1, category="brake"),
+    SupplierCatalogItem(catalog_id="CAT-016", supplier_id="sup_exist",
+        part_name="Масляный фильтр ДВС BMW N55",
+        oem_number="11427953129", brand="Bosch", price=890,
+        stock_qty=25, delivery_days=1, category="filter"),
+    SupplierCatalogItem(catalog_id="CAT-017", supplier_id="sup_exist",
+        part_name="Воздушный фильтр ДВС MANN",
+        oem_number="W6103", brand="MANN-FILTER", price=1850,
+        stock_qty=30, delivery_days=1, category="filter"),
+
+    # ─── sup_autodoc: Autodoc.ru ────
+    SupplierCatalogItem(catalog_id="CAT-018", supplier_id="sup_autodoc",
+        part_name="Комплект передних тормозных колодок BMW X5",
+        oem_number="34116852253", brand="Brembo", price=5950,
+        stock_qty=18, delivery_days=2, category="brake"),
+    SupplierCatalogItem(catalog_id="CAT-019", supplier_id="sup_autodoc",
+        part_name="Воздушный фильтр ДВС VAG",
+        oem_number="04E115561H", brand="VAG OE", price=1390,
+        stock_qty=30, delivery_days=2, category="filter"),
+    SupplierCatalogItem(catalog_id="CAT-020", supplier_id="sup_autodoc",
+        part_name="Масляный фильтр KNECHT/MAHLE",
+        oem_number="OC90", brand="KNECHT/MAHLE", price=1180,
+        stock_qty=50, delivery_days=2, category="filter"),
+
+    # ─── sup_rossko: Rossko.ru ────
+    SupplierCatalogItem(catalog_id="CAT-021", supplier_id="sup_rossko",
+        part_name="Комплект передних тормозных колодок BMW X5",
+        oem_number="34116852253", brand="TRW", price=6100,
+        stock_qty=22, delivery_days=1, category="brake"),
+    SupplierCatalogItem(catalog_id="CAT-022", supplier_id="sup_rossko",
+        part_name="Масляный фильтр KNECHT/MAHLE",
+        oem_number="OC90", brand="KNECHT/MAHLE", price=1220,
+        stock_qty=40, delivery_days=1, category="filter"),
+    SupplierCatalogItem(catalog_id="CAT-023", supplier_id="sup_rossko",
+        part_name="Свеча зажигания иридиевая VAG",
+        oem_number="04E115561H", brand="VAG OE", price=1420,
+        stock_qty=35, delivery_days=1, category="engine"),
+
     # ─── SUP-001: АвтоАльянс ────
     SupplierCatalogItem(catalog_id="CAT-001", supplier_id="SUP-001",
         part_name="Тормозные колодки передние BMW X5 (E70)",

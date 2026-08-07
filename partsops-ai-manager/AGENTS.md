@@ -111,6 +111,14 @@ Verify live code first; do not assume the policy is already implemented.
 - **Замена datetime.utcnow()**: Для устранения `DeprecationWarning: datetime.datetime.utcnow() is deprecated` заменять вызовы на `datetime.now(timezone.utc).replace(tzinfo=None)` (если целевые поля БД/модели работают с наивным временем UTC), чтобы сохранить полную совместимость без предупреждений.
 - **Legacy Query API**: В тестах и коде заменять `session.query(Model)` на актуальный `session.exec(select(Model))` (для удаления использовать `session.exec(delete(Model))`).
 
+### 🗄️ Multi-DB Seed Synchronization
+- **Синхронизация поставщиков между базами данных**: При добавлении или изменении сид-данных (`SEED_SUPPLIERS` или `SEED_CATALOG` в `suppliers.py`) необходимо принудительно синхронизировать все созданные файлы SQLite БД в проекте (`database.db`, `browser_database.db`, `test_database.db`) через `SQLModel.metadata.create_all(engine)` и вызов `seed_database(session)`.
+
+### 📊 Экспорт Договорных Отчетов (Форма ответа_договор.xlsx)
+- **Динамическое сопоставление площадок скрапинга**: При автоматическом формировании отчетов договора по шаблону `/Users/user/Downloads/Форма ответа_договор.xlsx` 3 авторизованных поставщика веб-скрапинга (`sup_exist`, `sup_autodoc`, `sup_rossko`) подставляются в колонки `D, E, F` (оригинальные запчасти) и `J, K, L` (аналоги).
+- **Гиперссылки на доказательную базу**: В режиме `full` в ячейки цен подставляются `file://` гиперссылки на скриншоты со страниц скрапинга из `storage/evidence/{tenant_id}/{request_id}`.
+
+
 ## Code Map
 
 - `main.py`: HTTP runtime only, no new business logic.

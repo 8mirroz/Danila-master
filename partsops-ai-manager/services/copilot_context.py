@@ -42,6 +42,8 @@ SCREEN_TITLES: Dict[str, str] = {
 }
 
 
+import re
+
 def build_context_envelope(
     session: Session,
     tenant_id: str,
@@ -57,16 +59,37 @@ def build_context_envelope(
     blocking_reasons: List[str] = []
     evidence_summary: Optional[Dict[str, Any]] = None
 
-    if context_ref.selected_request_id:
-        from models import Request
-        stmt = select(Request).where(
-            Request.id == context_ref.selected_request_id,
-            Request.tenant_id == tenant_id
+    target_request_id = context_ref.selected_request_id
+    if not target_request_id and query:
+        match = re.search(r"REQ-\d+", query, re.IGNORECASE)
+        if match:
+            target_request_id = match.group(0).upper()
+
+    resolved_request_id: Optional[str] = None
+
+    if target_request_id:
+        from models import PartRequest
+        # Check by request_id (e.g. 'REQ-1001') or numeric id
+        stmt = select(PartRequest).where(
+            (PartRequest.request_id == target_request_id) | (PartRequest.request_id == str(target_request_id).upper()),
+            PartRequest.tenant_id == tenant_id
         )
         order = session.exec(stmt).first()
+        if not order:
+            try:
+                numeric_id = int(str(target_request_id).replace("REQ-", "").strip())
+                stmt_num = select(PartRequest).where(
+                    PartRequest.id == numeric_id,
+                    PartRequest.tenant_id == tenant_id
+                )
+                order = session.exec(stmt_num).first()
+            except ValueError:
+                order = None
+
         if order:
             raw_dict = order.model_dump()
             order_dict = mask_request_for_agent(raw_dict)
+            resolved_request_id = order.request_id
             
             # Extract allowed next state transitions
             current_status = getattr(order, "status", "DRAFT")
@@ -90,11 +113,12 @@ def build_context_envelope(
     allowed_user_actions = [
         {"action": "open_screen", "label": "Открыть экран", "screen_id": screen_id}
     ]
-    if context_ref.selected_request_id:
+    active_req_id = resolved_request_id or context_ref.selected_request_id
+    if active_req_id:
         allowed_user_actions.append({
             "action": "open_request",
             "label": "Открыть карточку заказа",
-            "request_id": context_ref.selected_request_id
+            "request_id": active_req_id
         })
 
     # Get available help sources

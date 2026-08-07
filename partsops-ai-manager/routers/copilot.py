@@ -286,19 +286,21 @@ async def stream_run_events(
         try:
             yield encode(event("run.started"))
 
+            history_stmt = select(CopilotMessage).where(
+                CopilotMessage.conversation_id == run.conversation_id,
+            ).order_by(CopilotMessage.created_at.asc())
+            history = session.exec(history_stmt).all()
+            current_message = next((msg.masked_content for msg in reversed(history) if msg.role == "user"), "")
+
             context_ref = CopilotContextRef.model_validate_json(run.context_ref_json)
             envelope = build_context_envelope(
                 session=session,
                 tenant_id=tenant_id,
                 context_ref=context_ref,
                 user_role=role,
+                query=current_message,
             )
 
-            history_stmt = select(CopilotMessage).where(
-                CopilotMessage.conversation_id == run.conversation_id,
-            ).order_by(CopilotMessage.created_at.asc())
-            history = session.exec(history_stmt).all()
-            current_message = next((msg.masked_content for msg in reversed(history) if msg.role == "user"), "")
             history_for_model = history[:-1] if history and history[-1].role == "user" else history
             conversation_history = [
                 {"role": msg.role, "content": msg.masked_content}
@@ -306,11 +308,14 @@ async def stream_run_events(
                 if msg.role in {"user", "assistant"} and msg.masked_content
             ]
             instructions = (
-                "Ты Hermes в PartsOps Admin Cockpit. Отвечай только на русском языке и только на основе "
-                "переданного ContextEnvelope и подтверждённых help sources. Режим строго READ-ONLY: "
-                "не вызывай terminal, file, web, MCP, delegation, ERP, pricing, supplier, purchasing или "
-                "любые инструменты изменения состояния. Не обещай выполнить действие. Если данных недостаточно, "
-                "скажи, что не можешь подтвердить. Навигацию предлагай только через allowlisted action objects.\n\n"
+                "Ты Hermes — официальный операционный помощник PartsOps Admin Cockpit. "
+                "Отвечай только на русском языке вежливо, четко и понятным естественным языком.\n\n"
+                "Инструкции по формированию ответа:\n"
+                "1. Режим строго READ-ONLY: не вызывай инструменты изменения состояния, не совершай закупки или списания, не давай обещаний принудительно изменить статус.\n"
+                "2. Если заказ выбран (selected_request не null): объясни его текущий статус, причины блокировки (если есть), состояние Evidence Gates и допустимые следующие переходы.\n"
+                "3. Если заказ не выбран (selected_request is null): объясни оператору контекст текущего экрана, перечисли доступные статьи справки и кратко подскажи, что для детального разбора конкретного заказа нужно выбрать его в списке или ввести его номер (например, REQ-1001).\n"
+                "4. Запрещено выводить «отладочный» дамп переменных, технический JSON или сырые строки вроде 'selected_request = null' или 'allowlist'. Форматируй ответ в понятный Markdown.\n"
+                "5. Навигацию и действия предлагай только через allowlisted action objects.\n\n"
                 f"ContextEnvelope: {envelope.model_dump_json()}"
             )
 
