@@ -362,4 +362,54 @@ test.describe('PartsOps Admin Cockpit - Refactored Soft UI & View Model', () => 
     await page.keyboard.press('Escape');
     await expect(hermes).not.toBeVisible();
   });
+
+  test('Kanban shows design-system columns and invoice-drafted card in ERP lane', async ({ page }) => {
+    await page.route('**/api/requests', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 42,
+            request_id: 'REQ-INV-E2E',
+            source: 'E2E',
+            status: 'INVOICE_DRAFTED',
+            customer_name: 'E2E Invoice Client',
+            created_at: new Date().toISOString(),
+            parts_json: JSON.stringify([{ name: 'Фильтр OC90', quantity: 1 }]),
+            priority: 'normal',
+            erp_invoice_ref: 'INV-E2E-001',
+            erp_quotation_ref: 'Q-DRAFT-INV-E2E',
+          },
+          {
+            id: 1,
+            request_id: 'REQ-4821',
+            source: 'MANUAL',
+            status: 'NEW',
+            customer_name: 'ООО АвтоТехСнаб',
+            created_at: new Date().toISOString(),
+            parts_json: JSON.stringify([{ name: 'Тормозные колодки', quantity: 2 }]),
+            priority: 'normal',
+          },
+        ]),
+      });
+    });
+
+    await page.goto('http://localhost:5176');
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: 'Канбан-доска' }).click();
+
+    await expect(page.getByText('Интерактивный рабочий процесс')).toBeVisible();
+    await expect(page.getByRole('region', { name: /Прием & Нормализация/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: /Подбор поставщиков/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: /Согласование цен/ })).toBeVisible();
+    const erpLane = page.getByRole('region', { name: /Счета & ERP Sync/ });
+    await expect(erpLane).toBeVisible();
+    await expect(erpLane.getByText('REQ-INV-E2E')).toBeVisible();
+    await expect(erpLane.getByText('E2E Invoice Client')).toBeVisible();
+  });
 });
