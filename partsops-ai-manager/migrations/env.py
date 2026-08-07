@@ -21,6 +21,7 @@ from models import (AdaptationDecisionRecord, ClientApproval, ContractArchiveRec
                     AnalogCandidate, CompatibilityEvidence, ContractWorkflowState,
                     ContractWorkflowEvent)  # noqa
 from suppliers import Supplier, SupplierCatalogItem, Invoice  # noqa
+from models_copilot import CopilotConversation, CopilotMessage, CopilotRun  # noqa
 
 # Alembic Config object
 config = context.config

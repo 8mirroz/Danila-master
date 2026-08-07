@@ -322,6 +322,16 @@ async def sse_stream(request: Request, tenant_id: Optional[str] = None):
 
     visited_corr_cache: set[str] = set()
 
+    def _fetch_snapshot():
+        with Session(engine) as session:
+            requests = session.exec(select(PartRequest).where(PartRequest.tenant_id == stream_tenant)).all()
+            request_count = len(requests)
+            logs = session.exec(select(LLMUsageLog).where(LLMUsageLog.tenant_id == stream_tenant)).all()
+            llm_cost = round(sum(log.cost_usd for log in logs), 10)
+            llm_count = len(logs)
+            status_counts = {status: sum(1 for r in requests if r.status == status) for status in ["NEW", "PART_EXTRACTION", "OFFER_MATCHING", "APPROVAL_GATE", "APPROVED", "INVOICE_DRAFTED", "ERP_SYNC", "CLOSED", "CANCELLED"]}
+            return request_count, logs, llm_cost, llm_count, status_counts, requests
+
     async def event_generator():
         last_request_count = -1
         last_status_counts = None
@@ -333,43 +343,34 @@ async def sse_stream(request: Request, tenant_id: Optional[str] = None):
             if await request.is_disconnected():
                 break
 
-            with Session(engine) as session:
-                # Get current request count
-                requests = session.exec(select(PartRequest).where(PartRequest.tenant_id == stream_tenant)).all()
-                request_count = len(requests)
+            request_count, logs, llm_cost, llm_count, status_counts, requests = await asyncio.to_thread(_fetch_snapshot)
 
-                # Get LLM costs
-                logs = session.exec(select(LLMUsageLog).where(LLMUsageLog.tenant_id == stream_tenant)).all()
-                llm_cost = round(sum(log.cost_usd for log in logs), 10)
-                llm_count = len(logs)
+            # Send events only when data changes
+            events = []
 
-                # Send events only when data changes
-                events = []
+            if request_count != last_request_count or status_counts != last_status_counts:
+                events.append({
+                    "type": "requests_updated",
+                    "data": {
+                        "total": request_count,
+                        "by_status": status_counts,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                })
+                last_request_count = request_count
+                last_status_counts = status_counts
 
-                status_counts = {status: sum(1 for r in requests if r.status == status) for status in ["NEW", "PART_EXTRACTION", "OFFER_MATCHING", "APPROVAL_GATE", "APPROVED", "INVOICE_DRAFTED", "ERP_SYNC", "CLOSED", "CANCELLED"]}
-                
-                if request_count != last_request_count or status_counts != last_status_counts:
-                    events.append({
-                        "type": "requests_updated",
-                        "data": {
-                            "total": request_count,
-                            "by_status": status_counts,
-                            "timestamp": datetime.now().isoformat()
-                        }
-                    })
-                    last_request_count = request_count
-                    last_status_counts = status_counts
+            if llm_cost != last_llm_cost or llm_count != last_llm_count:
+                events.append({
+                    "type": "llm_cost_updated",
+                    "data": {
+                        "total_cost_usd": llm_cost,
+                        "total_requests": llm_count
+                    }
+                })
+                last_llm_cost = llm_cost
+                last_llm_count = llm_count
 
-                if llm_cost != last_llm_cost or llm_count != last_llm_count:
-                    events.append({
-                        "type": "llm_cost_updated",
-                        "data": {
-                            "total_cost_usd": llm_cost,
-                            "total_requests": llm_count
-                        }
-                    })
-                    last_llm_cost = llm_cost
-                    last_llm_count = llm_count
 
                 # Pipeline runs: new correlation_id or status change
                 recent_corrs: dict[str, dict] = {}

@@ -25,6 +25,16 @@ else:
         echo=False
     )
 
+if "sqlite" in db_url:
+    from sqlalchemy import event
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
+
 def init_db():
     # Import all models so SQLModel.metadata knows about them
     from models import (PartRequest, SupplierOffer, RequestEvent, MatchEvidence, ERPSyncLog, GoldenSample,
@@ -36,6 +46,7 @@ def init_db():
                         AnalogCandidate, CompatibilityEvidence, ContractWorkflowState,
                         ContractWorkflowEvent, PipelineRun, PipelineRunEvent)  # noqa
     from suppliers import Supplier, SupplierCatalogItem, Invoice  # noqa
+    from models_copilot import CopilotConversation, CopilotMessage, CopilotRun  # noqa
     SQLModel.metadata.create_all(engine)
 
 def get_session():
