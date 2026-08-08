@@ -3,34 +3,34 @@ export const WORKFLOW_STEPS = ['Нормализация', 'Сравнение',
 export const REQUEST_STATUS_LABELS: Record<string, string> = {
   NEW: 'Новый',
   NORMALIZING: 'Нормализация',
-  PARSING: 'Разбор запроса',
-  VIN_CHECK: 'Проверка VIN',
-  PART_EXTRACTION: 'Извлечение деталей',
-  MATCHING: 'Поиск совпадений',
-  SUPPLIER_SEARCH: 'Поиск поставщиков',
-  OFFER_RANKING: 'Ранжирование офферов',
-  PRICING_REVIEW: 'Проверка цены',
-  READY_FOR_APPROVAL: 'Готово к согласованию',
-  APPROVED: 'Согласовано',
-  ERP_SYNCING: 'Выгрузка в ERP',
-  ERP_SYNC_FAILED: 'Ошибка ERP',
-  INVOICE_DRAFTED: 'Черновик счета',
-  SENT_TO_CLIENT: 'Отправлено клиенту',
+  PARSING: 'Разбор',
+  VIN_CHECK: 'VIN Чек',
+  PART_EXTRACTION: 'Разбор',
+  MATCHING: 'Поиск',
+  SUPPLIER_SEARCH: 'Поиск',
+  OFFER_RANKING: 'Подбор',
+  PRICING_REVIEW: 'Прайсинг',
+  READY_FOR_APPROVAL: 'Согласование',
+  APPROVED: 'Одобрено',
+  ERP_SYNCING: '1С Sync',
+  ERP_SYNC_FAILED: 'Ошибка 1С',
+  INVOICE_DRAFTED: 'Счет',
+  SENT_TO_CLIENT: 'Отправлено',
   PAID: 'Оплачено',
-  PURCHASE_ORDERED: 'Заказ у поставщика',
+  PURCHASE_ORDERED: 'Заказано',
   FULFILLED: 'Исполнено',
   CLOSED: 'Закрыто',
-  MANUAL_REVIEW: 'Ручная проверка',
-  NEEDS_CLARIFICATION: 'Нужно уточнение',
-  NEEDS_MANUAL_PARSE: 'Нужен ручной разбор',
-  FAILED: 'Ошибка обработки',
-  CANCELLED: 'Отменено',
-  REWORK: 'На доработке',
-  CLIENT_REJECTED: 'Отклонено клиентом',
+  MANUAL_REVIEW: 'Контроль',
+  NEEDS_CLARIFICATION: 'Уточнение',
+  NEEDS_MANUAL_PARSE: 'Коррекция',
+  FAILED: 'Ошибка',
+  CANCELLED: 'Отмена',
+  REWORK: 'Доработка',
+  CLIENT_REJECTED: 'Отклонено',
   EXPIRED: 'Истекло',
-  SUPPLIER_ISSUE: 'Проблема с поставщиком',
+  SUPPLIER_ISSUE: 'Сбой поставок',
   RETURN_CASE: 'Возврат',
-  FINANCE_REVIEW: 'Финансовая проверка',
+  FINANCE_REVIEW: 'Фин. проверка',
   VALIDATED: 'Проверено',
 };
 
@@ -91,6 +91,26 @@ export const isBlockedRequestStatus = (status: string) => BLOCKED_STATUSES.has(s
 export const isApprovalPendingStatus = (status: string) => APPROVAL_STATUSES.has(status.toUpperCase());
 export const isMatchingStatus = (status: string) => MATCHING_STATUSES.has(status.toUpperCase());
 export const isInvoiceReadyStatus = (status: string) => INVOICE_READY_STATUSES.has(status.toUpperCase());
+
+export type TrafficLightColor = 'green' | 'yellow' | 'red';
+
+export const getTrafficLight = (status: string): TrafficLightColor => {
+  const norm = (status || '').toUpperCase();
+  if (BLOCKED_STATUSES.has(norm) || norm === 'FAILED' || norm === 'ERP_SYNC_FAILED' || norm === 'CANCELLED' || norm === 'EXPIRED') {
+    return 'red';
+  }
+  if (APPROVAL_STATUSES.has(norm) || norm === 'NEEDS_CLARIFICATION' || norm === 'NEEDS_MANUAL_PARSE' || norm === 'REWORK') {
+    return 'yellow';
+  }
+  return 'green';
+};
+
+export const getTrafficLightLabel = (status: string): string => {
+  const light = getTrafficLight(status);
+  if (light === 'red') return 'Сбой / Блокировка';
+  if (light === 'yellow') return 'Требует внимания';
+  return 'В норме';
+};
 
 export const getWorkflowStepIndex = (status: string) => {
   const normalized = status.toUpperCase();

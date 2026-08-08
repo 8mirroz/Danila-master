@@ -46,6 +46,12 @@ const HermesChatDrawer = lazy(() => import('./components/HermesChatDrawer').then
 const BatchSearchModal = lazy(() => import('./components/BatchSearchModal').then((m) => ({ default: m.BatchSearchModal })));
 const CommercialAccountPanel = lazy(() => import('./components/CommercialAccountPanel').then((m) => ({ default: m.CommercialAccountPanel })));
 const QuotesPanel = lazy(() => import('./components/QuotesPanel').then((m) => ({ default: m.QuotesPanel })));
+const AttentionQueue = lazy(() => import('./components/AttentionQueue').then((m) => ({ default: m.AttentionQueue })));
+const SmartMatchCards = lazy(() => import('./components/SmartMatchCards').then((m) => ({ default: m.SmartMatchCards })));
+const SlideOverInspector = lazy(() => import('./components/SlideOverInspector').then((m) => ({ default: m.SlideOverInspector })));
+const RequestInspector = lazy(() => import('./components/RequestInspector').then((m) => ({ default: m.RequestInspector })));
+
+import { UIModeProvider, useUIMode } from './lib/useUIMode';
 
 function RouteFallback({ label = 'Загрузка панели…' }: { label?: string }) {
   return (
@@ -90,7 +96,9 @@ type Workspace = {
 };
 
 function App() {
+  const uiMode = useUIMode();
   const [selectedReq, setSelectedReq] = useState<Request | null>(null);
+  const [inspectReq, setInspectReq] = useState<Request | null>(null);
   const [activeNav, setActiveNav] = useState<string>('dashboard');
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
@@ -410,29 +418,35 @@ function App() {
   const handleStateTransition = async (targetState: string, reason: string, reqId?: string, version?: string | null) => {
     const idToTransition = reqId || selectedReq?.request_id;
     if (!idToTransition) return;
+
+    const fromStatus =
+      requests.find((item) => item.request_id === idToTransition)?.status ||
+      selectedReq?.status ||
+      'CURRENT';
+
     try {
       const res = await apiFetch(`/api/requests/${idToTransition}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(version ? { 'X-Request-Version': version } : {}) },
         body: JSON.stringify({ target_state: targetState, reason }),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        const updatedStatus = updated.workspace?.request?.status ?? updated.transition?.new_state;
-        if (!updatedStatus) throw new Error('Backend не вернул каноническое состояние заявки');
-        notify.transition(selectedReq?.status || 'CURRENT', updatedStatus);
-        setFetchTrigger((prev) => prev + 1);
-        if (selectedReq && selectedReq.request_id === idToTransition) {
-          setSelectedReq((prev) => (prev ? { ...prev, status: updatedStatus } : null));
-          if (updated.workspace) setWorkspace(updated.workspace);
-          if (targetState === 'APPROVED') setActiveStep(5);
-        }
-      } else {
+
+      if (!res.ok) {
         const err = await res.json().catch(() => null);
         const detail = typeof err?.detail === 'string' ? err.detail : err?.detail?.reason || `HTTP ${res.status}`;
-        const transitionError = new Error(`Ошибка смены статуса: ${detail}`);
-        notify.error(transitionError.message);
-        throw transitionError;
+        throw new Error(`Ошибка смены статуса: ${detail}`);
+      }
+
+      const updated = await res.json();
+      const updatedStatus = updated.workspace?.request?.status ?? updated.transition?.new_state;
+      if (!updatedStatus) throw new Error('Backend не вернул каноническое состояние заявки');
+
+      notify.transition(fromStatus, updatedStatus);
+      setFetchTrigger((prev) => prev + 1);
+      if (selectedReq && selectedReq.request_id === idToTransition) {
+        setSelectedReq((prev) => (prev ? { ...prev, status: updatedStatus } : null));
+        if (updated.workspace) setWorkspace(updated.workspace);
+        if (targetState === 'APPROVED') setActiveStep(5);
       }
     } catch (error) {
       console.error(error);
@@ -459,6 +473,13 @@ function App() {
       console.warn('Could not save golden correction to backend');
     }
     setSelectedReq((prev) => (prev ? { ...prev, parts_json: JSON.stringify(normalizedParts) } : null));
+
+    // Автоматическая смена статуса на бэкенде при завершении Шага 2
+    try {
+      await handleStateTransition('MATCHING', 'Проверка нормализации завершена, переход к подбору поставщиков');
+    } catch {
+      // Игнорируем если переход уже выполнен или требует подтверждения
+    }
     setActiveStep(3);
   };
 
@@ -475,12 +496,31 @@ function App() {
 
   const openWorkspaceStep = (index: number) => {
     if (!canOpenWorkspaceStep(index)) return;
+
+    // Сопоставление шагов степпера со статусами бэкенда для Синхронизации с Канбаном
+    const stepTargetStatus: Record<number, string> = {
+      0: 'NEW',
+      1: 'PARSING',
+      2: 'NEEDS_CLARIFICATION',
+      3: 'MATCHING',
+      4: 'PRICING_REVIEW',
+      5: 'READY_FOR_APPROVAL',
+      6: 'INVOICE_DRAFTED',
+      7: 'FULFILLED',
+    };
+
+    const targetState = stepTargetStatus[index];
+    if (targetState && selectedReq && selectedReq.status !== targetState) {
+      void handleStateTransition(targetState, `Переключение фазы в степпере на этап "${targetState}"`).catch(() => {});
+    }
+
     if (index === 2 || index === 3 || index === 4 || index >= 5) {
       setActiveStep(index === 2 ? 2 : index === 3 ? 3 : index === 4 ? 4 : 5);
     }
   };
 
   const navItems = [
+    { id: 'attention', label: 'Требуют внимания', icon: 'lightning', group: 'main' as const },
     { id: 'dashboard', label: 'Панель управления', icon: 'search', group: 'main' as const },
     { id: 'kanban', label: 'Канбан-доска', icon: 'list', group: 'main' as const },
     { id: 'suppliers', label: 'Каталог поставщиков', icon: 'car', group: 'main' as const },
@@ -609,36 +649,84 @@ function App() {
                 )}
                 {activeStep === 3 && (
                   <>
-                    <SupplierMatrix
-                      parts={normalizedParts}
-                      selectedOffers={selectedOffers}
-                      requestId={selectedReq.request_id}
-                      onSelectOffer={(partName, offer) => {
-                        void apiFetch(`/api/requests/${selectedReq.request_id}/actions/select_offer`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', ...(workspace?.updated_at ? { 'X-Request-Version': workspace.updated_at } : {}) },
-                          body: JSON.stringify({ part_name: partName, offer }),
-                        })
-                          .then(async (res) => {
-                            if (!res.ok) {
-                              const detail = await res.json().catch(() => null);
-                              throw new Error(typeof detail?.detail === 'string' ? detail.detail : `HTTP ${res.status}`);
-                            }
-                            return res.json();
+                    {uiMode.isAutopilot ? (
+                      <div className="space-y-4">
+                        {normalizedParts.map((part, pIdx) => (
+                          <SmartMatchCards
+                            key={pIdx}
+                            partName={part.name}
+                            matches={[]}
+                            selectedOffer={selectedOffers[part.name]}
+                            onSelectOffer={(offer) => {
+                              void apiFetch(`/api/requests/${selectedReq.request_id}/actions/select_offer`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', ...(workspace?.updated_at ? { 'X-Request-Version': workspace.updated_at } : {}) },
+                                body: JSON.stringify({ part_name: part.name, offer }),
+                              })
+                                .then(async (res) => {
+                                  if (!res.ok) {
+                                    const detail = await res.json().catch(() => null);
+                                    throw new Error(typeof detail?.detail === 'string' ? detail.detail : `HTTP ${res.status}`);
+                                  }
+                                  return res.json();
+                                })
+                                .then((data: Workspace) => {
+                                  setWorkspace(data);
+                                  setSelectedOffers(data.candidates?.selected_offers ?? {});
+                                  notify.success(`Оффер для «${part.name}» сохранён (1-Click)`);
+                                })
+                                .catch((error) => {
+                                  notify.error(error instanceof Error ? error.message : 'Не удалось сохранить оффер');
+                                });
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <SupplierMatrix
+                        parts={normalizedParts}
+                        selectedOffers={selectedOffers}
+                        requestId={selectedReq.request_id}
+                        onSelectOffer={(partName, offer) => {
+                          void apiFetch(`/api/requests/${selectedReq.request_id}/actions/select_offer`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', ...(workspace?.updated_at ? { 'X-Request-Version': workspace.updated_at } : {}) },
+                            body: JSON.stringify({ part_name: partName, offer }),
                           })
-                          .then((data: Workspace) => {
-                            setWorkspace(data);
-                            setSelectedOffers(data.candidates?.selected_offers ?? {});
-                            notify.success(`Оффер для «${partName}» сохранён`);
-                          })
-                          .catch((error) => {
-                            notify.error(error instanceof Error ? error.message : 'Не удалось сохранить оффер');
-                          });
-                      }}
-                    />
+                            .then(async (res) => {
+                              if (!res.ok) {
+                                const detail = await res.json().catch(() => null);
+                                throw new Error(typeof detail?.detail === 'string' ? detail.detail : `HTTP ${res.status}`);
+                              }
+                              return res.json();
+                            })
+                            .then((data: Workspace) => {
+                              setWorkspace(data);
+                              setSelectedOffers(data.candidates?.selected_offers ?? {});
+                              notify.success(`Оффер для «${partName}» сохранён`);
+                            })
+                            .catch((error) => {
+                              notify.error(error instanceof Error ? error.message : 'Не удалось сохранить оффер');
+                            });
+                        }}
+                      />
+                    )}
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface-1 px-4 py-3 shadow-sm">
                       <Button variant="secondary" icon="arrow-left" onClick={() => setActiveStep(2)}>Назад к проверке</Button>
-                      <Button variant="primary" icon="arrow-right" disabled={!allOffersSelected} onClick={() => setActiveStep(4)} title={!allOffersSelected ? 'Выберите оффер для каждой позиции' : undefined}>
+                      <Button
+                        variant="primary"
+                        icon="arrow-right"
+                        disabled={!allOffersSelected}
+                        onClick={async () => {
+                          try {
+                            await handleStateTransition('PRICING_REVIEW', 'Подбор позиций завершен, переход к согласованию цен');
+                          } catch {
+                            // Игнорируем если переход условный
+                          }
+                          setActiveStep(4);
+                        }}
+                        title={!allOffersSelected ? 'Выберите оффер для каждой позиции' : undefined}
+                      >
                         К согласованию <span className="ml-1 font-mono text-[10px] opacity-80">{selectedOffersCount}/{requestPartsCount}</span>
                       </Button>
                     </div>
@@ -728,7 +816,17 @@ function App() {
               </div>
             </div>
           ) : (
-            <div className={activeNav === 'suppliers' ? "h-full" : "p-4 max-w-6xl mx-auto space-y-4"}>
+            <div className={activeNav === 'suppliers' || activeNav === 'kanban' ? "h-full p-4 w-full" : "p-4 max-w-6xl mx-auto space-y-4"}>
+              {activeNav === 'attention' && (
+                <AttentionQueue
+                  requests={requests}
+                  onSelectRequest={handleSelectRequest}
+                  onTransitionRequest={(requestId, targetState, reason) =>
+                    handleStateTransition(targetState, reason, requestId)
+                  }
+                  onInspectRequest={(req) => setInspectReq(req)}
+                />
+              )}
               {activeNav === 'dashboard' && (
                 <>
                   <section className="dashboard-overview panel-card p-6">
@@ -893,17 +991,20 @@ function App() {
               )}
 
               {activeNav === 'kanban' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-line-strong pb-3">
+                <div className="w-full space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2.5">
                     <div>
-                      <h2 className="text-lg font-bold text-ink-primary">Интерактивный рабочий процесс</h2>
-                      <p className="text-xs text-ink-secondary">Перетаскивайте запросы между этапами обработки для автоматического изменения статуса в системе.</p>
+                      <h2 className="text-base font-bold text-ink-primary">Интерактивный рабочий процесс</h2>
+                      <p className="text-xs text-ink-secondary">Перетаскивайте запросы между этапами для прямого изменения статуса заявки.</p>
                     </div>
                     <Button variant="secondary" icon="rotate" onClick={fetchRequests} title="Обновить доску" />
                   </div>
                   <KanbanBoard
                     requests={requests}
                     onSelectRequest={handleSelectRequest}
+                    onTransitionRequest={(targetState, reason, requestId) =>
+                      handleStateTransition(targetState, reason, requestId)
+                    }
                     onRunsChanged={() => {
                       setFetchTrigger((previous) => previous + 1);
                     }}
@@ -1019,6 +1120,25 @@ function App() {
                 </div>
               )}
 
+              {activeNav === 'hermes' && (
+                <div className="mx-auto max-w-4xl h-[700px]">
+                  <HermesChatDrawer
+                    activeScreen={activeNav}
+                    selectedRequestId={selectedReq?.request_id || undefined}
+                    open={true}
+                    embedded={true}
+                    onOpenChange={(open) => { if (!open) setActiveNav('dashboard'); }}
+                    onNavigate={(screenId, reqId) => {
+                      setActiveNav(screenId);
+                      if (reqId) {
+                        const match = requests.find((r) => r.request_id === reqId);
+                        if (match) setSelectedReq(match);
+                      }
+                    }}
+                  />
+                </div>
+              )}
+
               {activeNav === 'audit' && selectedReq && (
                 <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-4">
                   <CompletedOrdersHistory
@@ -1095,8 +1215,38 @@ function App() {
       />
       </Suspense>
 
+      {inspectReq && (
+        <Suspense fallback={null}>
+          <SlideOverInspector
+            isOpen={!!inspectReq}
+            onClose={() => setInspectReq(null)}
+            title={`Детали запроса ${inspectReq.request_id}`}
+            subtitle={inspectReq.customer_name || 'Заказчик не указан'}
+            status={inspectReq.status}
+          >
+            <RequestInspector
+              request={inspectReq}
+              onTransition={async (targetState, reason) => {
+                await handleStateTransition(targetState, reason, inspectReq.request_id);
+                setInspectReq(null);
+              }}
+              onOpenFullWorkspace={(req) => {
+                setInspectReq(null);
+                handleSelectRequest(req);
+              }}
+            />
+          </SlideOverInspector>
+        </Suspense>
+      )}
+
     </AppFrame>
   );
 }
 
-export default App;
+export default function AppWithProvider() {
+  return (
+    <UIModeProvider>
+      <App />
+    </UIModeProvider>
+  );
+}

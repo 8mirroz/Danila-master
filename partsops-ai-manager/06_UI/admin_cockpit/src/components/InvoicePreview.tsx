@@ -88,6 +88,11 @@ export const InvoicePreview = ({ requestId, onSent, expectInvoice = false }: Inv
       const data = await res.json();
       if (res.ok && data.success && ['sent', 'delivered'].includes(data.status)) {
         setSendResult(`Успешно отправлено через ${channel}!`);
+        void apiFetch(`/api/requests/${requestId}/transition`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_state: 'SENT_TO_CLIENT', reason: 'Счет успешно доставлен клиенту' }),
+        }).catch(() => {});
         void checkInvoiceAndLogs();
         if (onSent) onSent();
       } else {

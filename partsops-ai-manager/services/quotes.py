@@ -107,6 +107,51 @@ def issue_quote(
     session.refresh(quote)
     return serialize_quote(quote, version)
 
+def build_multi_tier_options(pricing: dict[str, Any]) -> dict[str, Any]:
+    total_cost = float(pricing.get("total_supplier_cost_rub", 0.0) or 0.0)
+    total_sell = float(pricing.get("total_sell_price_rub", 0.0) or 0.0)
+
+    if total_sell == 0.0:
+        total_sell = total_cost * 1.30
+
+    oem_total = round(total_sell, 2)
+    optimum_total = round(total_sell * 0.82, 2)
+    budget_total = round(total_sell * 0.65, 2)
+
+    oem_margin = round(((oem_total - total_cost) / oem_total) * 100, 1) if oem_total > 0 else 0.0
+    optimum_margin = round(((optimum_total - (total_cost * 0.75)) / optimum_total) * 100, 1) if optimum_total > 0 else 0.0
+    budget_margin = round(((budget_total - (total_cost * 0.55)) / budget_total) * 100, 1) if budget_total > 0 else 0.0
+
+    return {
+        "oem": {
+            "tier_key": "oem",
+            "name": "Оригинал OEM",
+            "description": "100% заводские детали от официального дилера",
+            "total_price_rub": oem_total,
+            "estimated_margin_percent": max(0.0, oem_margin),
+            "delivery_days": 1,
+            "badge": "Заводское качество",
+        },
+        "optimum": {
+            "tier_key": "optimum",
+            "name": "Оптимум (Tier-1)",
+            "description": "Проверенные европейские аналоги (Bosch, Lemforder, Sachs)",
+            "total_price_rub": optimum_total,
+            "estimated_margin_percent": max(0.0, optimum_margin),
+            "delivery_days": 2,
+            "badge": "Выбор закупщиков",
+        },
+        "budget": {
+            "tier_key": "budget",
+            "name": "Эконом",
+            "description": "Доступные проверенные производители в наличии",
+            "total_price_rub": budget_total,
+            "estimated_margin_percent": max(0.0, budget_margin),
+            "delivery_days": 1,
+            "badge": "Максимальная выгода",
+        },
+    }
+
 
 def get_quote(
     session: Session, *, organization_id: str, quote_id: str, version: int | None = None

@@ -10,9 +10,10 @@ from sqlmodel import Session
 
 from database import get_session
 from rbac import CurrentPrincipal, get_current_principal, get_privileged_tenant
-from services.quotes import get_quote, issue_quote, list_quotes
+from services.quotes import build_multi_tier_options, get_quote, issue_quote, list_quotes
 
 router = APIRouter(prefix="/api/quotes", tags=["Quotes"])
+
 
 
 class IssueQuotePayload(BaseModel):
@@ -56,6 +57,24 @@ def read_quote(
     return get_quote(
         session, organization_id=organization_id, quote_id=quote_id, version=version
     )
+
+
+@router.get("/{quote_id}/tiers")
+def read_quote_tiers(
+    quote_id: str,
+    version: int | None = None,
+    session: Session = Depends(get_session),
+    organization_id: str = Depends(get_privileged_tenant),
+):
+    quote = get_quote(
+        session, organization_id=organization_id, quote_id=quote_id, version=version
+    )
+    pricing = quote.get("pricing_snapshot") or {}
+    return {
+        "quote_id": quote_id,
+        "version": quote.get("version"),
+        "tiers": build_multi_tier_options(pricing),
+    }
 
 
 @router.get("/{quote_id}/export/{format}")

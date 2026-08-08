@@ -105,7 +105,7 @@ export function OfferPage({ action }: { action?: 'accept' | 'reject' }) {
       </div>
 
       {offer.parts && (
-        <div className="bg-gray-800 rounded-lg p-6">
+        <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h3 className="text-lg font-bold mb-4">Line Items</h3>
           <table className="w-full text-left">
             <thead>
@@ -127,6 +127,33 @@ export function OfferPage({ action }: { action?: 'accept' | 'reject' }) {
           </table>
         </div>
       )}
+
+      {/* Multi-tier packages */}
+      <div className="mb-6">
+        <h3 className="text-xl font-bold mb-4">Выберите вариант поставки</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="border border-blue-500/30 bg-blue-950/20 rounded-lg p-4 cursor-pointer hover:border-blue-500 transition-all">
+            <span className="bg-blue-600 text-xs px-2 py-0.5 rounded font-bold uppercase">Оригинал OEM</span>
+            <h4 className="text-lg font-bold mt-2">100% Заводское качество</h4>
+            <p className="text-xs text-gray-400 mt-1">Официальные комплектующие от производителя</p>
+            <div className="mt-4 text-xl font-extrabold text-blue-400">Срок: 1 дн.</div>
+          </div>
+
+          <div className="border border-emerald-500 bg-emerald-950/30 rounded-lg p-4 cursor-pointer ring-2 ring-emerald-500">
+            <span className="bg-emerald-600 text-xs px-2 py-0.5 rounded font-bold uppercase">Оптимум (Tier-1)</span>
+            <h4 className="text-lg font-bold mt-2">Европейские аналоги</h4>
+            <p className="text-xs text-gray-400 mt-1">Bosch, Lemforder, Sachs — максимальная надёжность</p>
+            <div className="mt-4 text-xl font-extrabold text-emerald-400">Срок: 2 дн.</div>
+          </div>
+
+          <div className="border border-amber-500/30 bg-amber-950/20 rounded-lg p-4 cursor-pointer hover:border-amber-500 transition-all">
+            <span className="bg-amber-600 text-xs px-2 py-0.5 rounded font-bold uppercase">Эконом</span>
+            <h4 className="text-lg font-bold mt-2">Бюджетная выгода</h4>
+            <p className="text-xs text-gray-400 mt-1">Проверенные дубликаты в наличии</p>
+            <div className="mt-4 text-xl font-extrabold text-amber-400">Срок: 1 дн.</div>
+          </div>
+        </div>
+      </div>
 
       <div className="mt-6 flex gap-4">
         <button onClick={() => navigate(`/offer/${token}/accept`)} className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded font-bold">

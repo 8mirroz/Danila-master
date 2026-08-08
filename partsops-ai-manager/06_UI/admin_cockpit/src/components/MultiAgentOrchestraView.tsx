@@ -384,20 +384,23 @@ export function MultiAgentOrchestraView() {
   );
 }
 
-function enrichPhases(run: PipelineRun, traces: any[]): Record<string, PhaseDetail> {
+function enrichPhases(run: PipelineRun, traces: any): Record<string, PhaseDetail> {
   const result: Record<string, PhaseDetail> = { ...run.phases };
-  for (const t of traces) {
-    const key = t.provider;
+  const traceList = Array.isArray(traces) ? traces : Object.values(traces || {});
+  for (const t of traceList) {
+    if (!t || typeof t !== 'object') continue;
+    const key = (t as any).provider || (t as any).agent_type;
+    if (!key) continue;
     result[key] = {
-      agent_type: t.provider,
-      success: t.status === 'success',
-      execution_time_ms: t.latency_ms,
-      correlation_id: t.correlation_id,
-      latency_ms: t.latency_ms,
-      total_tokens: t.total_tokens,
-      cost_usd: t.cost_usd,
-      provider: t.provider,
-      model: t.model,
+      agent_type: (t as any).agent_type || (t as any).provider,
+      success: (t as any).status === 'success' || (t as any).success === true,
+      execution_time_ms: (t as any).latency_ms || (t as any).execution_time_ms || 0,
+      correlation_id: (t as any).correlation_id || '',
+      latency_ms: (t as any).latency_ms || (t as any).execution_time_ms || 0,
+      total_tokens: (t as any).total_tokens,
+      cost_usd: (t as any).cost_usd,
+      provider: (t as any).provider || (t as any).agent_type,
+      model: (t as any).model,
     };
   }
   return result;

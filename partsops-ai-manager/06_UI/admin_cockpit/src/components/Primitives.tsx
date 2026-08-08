@@ -93,9 +93,30 @@ import {
   XCircle,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
-import { getStatusBadgeClasses, getStatusLabel } from '../lib/workflow';
+import { getStatusBadgeClasses, getStatusLabel, getTrafficLight, getTrafficLightLabel } from '../lib/workflow';
 import { useFocusTrap, useKeydown } from '../lib/focus';
+import { useUIMode } from '../lib/useUIMode';
 import { LottieMotion } from './LottieMotion';
+
+export const UIModeSwitcher: React.FC = () => {
+  const { isAutopilot, toggle } = useUIMode();
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title="Переключить режим интерфейса (Shift + D)"
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition-all duration-200 active:scale-95 ${
+        isAutopilot
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+          : 'border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100'
+      }`}
+    >
+      <span className={`h-2 w-2 rounded-full ${isAutopilot ? 'bg-emerald-500 animate-pulse' : 'bg-blue-600'}`} />
+      <span>{isAutopilot ? 'Автопилот' : 'Режим Эксперт'}</span>
+      <span className="hidden sm:inline-block font-mono text-[9px] opacity-70 bg-black/5 px-1 rounded">Shift+D</span>
+    </button>
+  );
+};
 
 // =========================================
 // 0. Icon system (typed, Phosphor + FA aliases)
@@ -464,6 +485,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
     </div>
 
     <div className="flex items-center gap-3 text-xs shrink-0">
+      <UIModeSwitcher />
       {roleSwitcherNode && <div className="hidden md:flex border-r border-line pr-3">{roleSwitcherNode}</div>}
       <div className="hidden xl:flex flex-col text-right border-l border-line pl-3 shrink-0 whitespace-nowrap">
         <span className="text-[10px] text-ink-muted uppercase tracking-wider font-bold">Среда</span>
@@ -944,12 +966,30 @@ export const MetricTile: React.FC<MetricTileProps> = ({ label, value, delta, ton
 // =========================================
 // 12. StatusBadge
 // =========================================
-export const StatusBadge: React.FC<{ status: string }> = ({ status }) => (
-  <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${getStatusBadgeClasses(status)}`}>
-    <span className="w-1.5 h-1.5 rounded-full bg-current" />
-    {getStatusLabel(status)}
-  </span>
-);
+export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const label = getStatusLabel(status);
+  return (
+    <span
+      title={label}
+      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold uppercase whitespace-nowrap tracking-wide ${getStatusBadgeClasses(status)}`}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+      <span>{label}</span>
+    </span>
+  );
+};
+
+export const TrafficDot: React.FC<{ status: string; showLabel?: boolean }> = ({ status, showLabel = false }) => {
+  const light = getTrafficLight(status);
+  const color = light === 'green' ? 'bg-emerald-500' : light === 'yellow' ? 'bg-amber-500' : 'bg-rose-500';
+  const label = getTrafficLightLabel(status);
+  return (
+    <span className="inline-flex items-center gap-1.5" title={`${getStatusLabel(status)} (${label})`}>
+      <span className={`inline-block h-2.5 w-2.5 rounded-full ${color} ${light !== 'green' ? 'animate-pulse' : ''}`} />
+      {showLabel && <span className="text-xs font-semibold text-ink-secondary">{getStatusLabel(status)}</span>}
+    </span>
+  );
+};
 
 // =========================================
 // 13. Input + SearchField

@@ -46,6 +46,63 @@ class PricingContext:
     historical_median_price_90d: Optional[float] = None
     historical_prices_90d: Optional[List[float]] = None
 
+def simulate_what_if_margin(
+    contexts: List[PricingContext],
+    base_margin_delta: float = 0.0,
+    tier_overrides: Optional[dict] = None
+) -> dict:
+    """
+    Run What-If scenario simulation on a list of PricingContext objects.
+    Allows estimating revenue, profit, and average margin when adjusting margin policies.
+    """
+    total_purchase = 0.0
+    baseline_sell = 0.0
+    simulated_sell = 0.0
+
+    tier_overrides = tier_overrides or {}
+
+    for ctx in contexts:
+        # Calculate baseline
+        res_base = compute_price(ctx)
+        baseline_sell += res_base.client_price
+        total_purchase += (ctx.purchase_price + ctx.logistics_cost)
+
+        # Apply simulation delta
+        tier_delta = tier_overrides.get(ctx.brand_group, 0.0)
+        sim_margin = (ctx.target_margin_override or MARGIN_POLICY.get(ctx.brand_group, MARGIN_POLICY["default"])) + base_margin_delta + tier_delta
+
+        sim_ctx = PricingContext(
+            purchase_price=ctx.purchase_price,
+            currency=ctx.currency,
+            logistics_cost=ctx.logistics_cost,
+            urgency_level=ctx.urgency_level,
+            supplier_reliability_score=ctx.supplier_reliability_score,
+            is_non_returnable=ctx.is_non_returnable,
+            is_safety_critical=ctx.is_safety_critical,
+            is_original=ctx.is_original,
+            brand_group=ctx.brand_group,
+            target_margin_override=max(0.01, sim_margin),
+            tax_rate=ctx.tax_rate
+        )
+        res_sim = compute_price(sim_ctx)
+        simulated_sell += res_sim.client_price
+
+    baseline_profit = max(0.0, baseline_sell - total_purchase)
+    simulated_profit = max(0.0, simulated_sell - total_purchase)
+    profit_delta = simulated_profit - baseline_profit
+
+    return {
+        "items_count": len(contexts),
+        "total_purchase_cost": round(total_purchase, 2),
+        "baseline_revenue": round(baseline_sell, 2),
+        "simulated_revenue": round(simulated_sell, 2),
+        "baseline_profit": round(baseline_profit, 2),
+        "simulated_profit": round(simulated_profit, 2),
+        "profit_delta_rub": round(profit_delta, 2),
+        "profit_growth_percent": round((profit_delta / baseline_profit * 100), 2) if baseline_profit > 0 else 0.0
+    }
+
+
 
 
 @dataclass
