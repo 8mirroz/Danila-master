@@ -40,3 +40,7 @@ typing-inspection>=0.4.2
 
 # Observability
 watchfiles>=1.0.0
+
+# Test (CI / local; required for @pytest.mark.asyncio stream tests)
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
