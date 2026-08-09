@@ -156,8 +156,7 @@ class Settings:
 
     @property
     def PHASE_LABEL(self) -> str:
-        # Reflect current product stage (override via PARTSOPS_PHASE_LABEL)
-        return os.environ.get("PARTSOPS_PHASE_LABEL") or "Phase 2 — QuoteOps Beta Hardening"
+        return os.environ.get("PARTSOPS_PHASE_LABEL") or "Phase 0 — Stabilization"
 
     @property
     def HERMES_API_URL(self) -> str:
@@ -165,7 +164,44 @@ class Settings:
 
     @property
     def HERMES_API_KEY(self) -> str:
-        return os.environ.get("HERMES_API_KEY") or ""
+        """Resolve Hermes API key from env, else project `.hermes_api_key` file.
+
+        Bare `uvicorn` (without start.sh) often misses HERMES_API_KEY export;
+        setup_hermes.sh still writes the secret file — load it automatically.
+        """
+        env = (os.environ.get("HERMES_API_KEY") or os.environ.get("API_SERVER_KEY") or "").strip()
+        if env:
+            return env
+        try:
+            key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".hermes_api_key")
+            if os.path.isfile(key_path):
+                with open(key_path, "r", encoding="utf-8") as fh:
+                    file_key = fh.read().strip()
+                if file_key:
+                    return file_key
+        except OSError:
+            pass
+        return ""
+
+    @property
+    def COPILOT_LOCAL_FALLBACK(self) -> bool:
+        """When Hermes is offline, serve grounded local answers (default on)."""
+        raw = os.environ.get("COPILOT_LOCAL_FALLBACK", "1").strip().lower()
+        return raw not in {"0", "false", "no", "off"}
+
+    @property
+    def COPILOT_HERMES_START_TIMEOUT_SECONDS(self) -> float:
+        """Fail fast to local fallback if Hermes /v1/runs does not accept promptly."""
+        try:
+            return max(2.0, float(os.environ.get("COPILOT_HERMES_START_TIMEOUT_SECONDS", "8")))
+        except ValueError:
+            return 8.0
+
+    @property
+    def COPILOT_PREFER_LOCAL(self) -> bool:
+        """Skip Hermes and always use grounded local(+LLM) path. Useful for flaky sidecar."""
+        raw = os.environ.get("COPILOT_PREFER_LOCAL", "0").strip().lower()
+        return raw in {"1", "true", "yes", "on"}
 
     @property
     def COPILOT_TIMEOUT_SECONDS(self) -> int:

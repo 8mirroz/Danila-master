@@ -4,6 +4,7 @@ Builds PII-masked ContextEnvelope for Hermes runs and validates cited help sourc
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
@@ -61,7 +62,8 @@ def build_context_envelope(
 
     target_request_id = context_ref.selected_request_id
     if not target_request_id and query:
-        match = re.search(r"REQ-\d+", query, re.IGNORECASE)
+        # Real IDs are like REQ-ED8AE3E0 / REQ-LIVE-20260805, not only digits.
+        match = re.search(r"REQ-[A-Z0-9][A-Z0-9_-]{2,}", query, re.IGNORECASE)
         if match:
             target_request_id = match.group(0).upper()
 
@@ -165,3 +167,88 @@ def validate_and_filter_sources(
             valid_sources.append(source)
 
     return valid_sources
+
+
+def compact_envelope_for_hermes(envelope: ContextEnvelope, *, max_help: int = 3) -> Dict[str, Any]:
+    """Shrink ContextEnvelope for Hermes prompts.
+
+    Full order dumps (parts_json, match_evidence_json, …) blow token budgets and
+    make NVIDIA fallback chains hang. Send only operator-relevant fields.
+    """
+    import json as _json
+
+    order = envelope.selected_request
+    compact_order: Optional[Dict[str, Any]] = None
+    if order:
+        parts_count = 0
+        parts_preview: List[str] = []
+        raw_parts = order.get("parts_json")
+        if raw_parts:
+            try:
+                parts = _json.loads(raw_parts) if isinstance(raw_parts, str) else raw_parts
+                if isinstance(parts, list):
+                    parts_count = len(parts)
+                    for p in parts[:4]:
+                        if not isinstance(p, dict):
+                            continue
+                        name = p.get("name") or p.get("oem") or p.get("oem_number") or "позиция"
+                        qty = p.get("quantity") or p.get("qty") or 1
+                        parts_preview.append(f"{name} ×{qty}")
+            except (TypeError, ValueError, _json.JSONDecodeError):
+                pass
+
+        vehicle = " ".join(
+            str(x).strip()
+            for x in (
+                order.get("vehicle_make"),
+                order.get("vehicle_model"),
+                order.get("vehicle_year"),
+            )
+            if x
+        ).strip() or None
+
+        compact_order = {
+            "request_id": order.get("request_id") or order.get("id"),
+            "status": order.get("status"),
+            "customer_name": order.get("customer_name"),
+            "priority": order.get("priority"),
+            "vehicle": vehicle,
+            "vin_masked": order.get("vehicle_vin_masked"),
+            "parts_count": parts_count,
+            "parts_preview": parts_preview,
+            "source": order.get("source"),
+        }
+
+    help_items = [
+        {"source_id": s.get("source_id"), "title": s.get("title")}
+        for s in (envelope.available_help_sources or [])[:max_help]
+        if s.get("source_id")
+    ]
+
+    return {
+        "screen_id": envelope.screen_id,
+        "screen_title": envelope.screen_title,
+        "selected_request": compact_order,
+        "allowed_next_statuses": list(envelope.allowed_next_statuses or [])[:10],
+        "evidence_summary": envelope.evidence_summary,
+        "blocking_reasons": list(envelope.blocking_reasons or [])[:8],
+        "allowed_user_actions": list(envelope.allowed_user_actions or [])[:6],
+        "available_help_sources": help_items,
+    }
+
+
+def build_hermes_instructions(envelope: ContextEnvelope) -> str:
+    """Compact Russian system instructions + slim context for Hermes runs."""
+    compact = compact_envelope_for_hermes(envelope)
+    compact_json = json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+    return (
+        "Ты Hermes — read-only операционный помощник PartsOps Admin Cockpit. "
+        "Отвечай только по-русски, кратко, в Markdown.\n"
+        "Правила:\n"
+        "1) READ-ONLY: не меняй статусы, не обещай закупки/списания, не вызывай write-tools.\n"
+        "2) Если selected_request есть — объясни статус, блокировки, Evidence Gates и allowed_next_statuses.\n"
+        "3) Если selected_request null — опиши экран и подскажи выбрать/ввести REQ-…\n"
+        "4) Не выводи сырой JSON, debug-дампы, allowlist-перечисления.\n"
+        "5) Навигацию предлагай только по allowed_user_actions.\n"
+        f"Контекст (JSON): {compact_json}"
+    )

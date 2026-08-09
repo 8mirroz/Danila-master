@@ -22,15 +22,28 @@ from models_copilot import CopilotConversation, CopilotMessage, CopilotRun
 from services.copilot_context import (
     CopilotContextRef,
     build_context_envelope,
+    build_hermes_instructions,
     validate_and_filter_sources,
 )
 from services.help_service import get_help_source_by_id
-from services.hermes_transport import HermesTransport, HermesTransportError
+from services.hermes_transport import HermesTransport, HermesTransportError, is_strong_api_key
+from services.local_copilot import build_local_reply, chunk_text
 
 router = APIRouter(prefix="/api/copilot", tags=["Copilot"])
 
 require_copilot_role = RoleChecker(allowed_roles=["admin", "manager"])
 PARTSOPS_SKILLS = ["partsops-navigation", "partsops-request-explainer", "partsops-troubleshooting"]
+_LOCAL_FALLBACK_CODES = {
+    "HERMES_KEY_NOT_CONFIGURED",
+    "HERMES_TIMEOUT",
+    "HERMES_START_TIMEOUT",
+    "HERMES_STREAM_TIMEOUT",
+    "HERMES_UPSTREAM_RETRYABLE",
+    "HERMES_AUTH_FAILED",
+    "HERMES_CONTRACT_MISMATCH",
+    "HERMES_UNAVAILABLE",
+    "HERMES_INVALID_RESPONSE",
+}
 
 # Global run memory lock for active runs and native upstream identifiers.
 _active_runs: Dict[str, asyncio.Task] = {}
@@ -65,11 +78,56 @@ ALLOWLISTED_ACTIONS = {"open_screen", "open_request", "focus_control"}
 async def check_hermes_health_async() -> Dict[str, Any]:
     transport = HermesTransport()
     started = datetime.now(timezone.utc)
+    key_ok = is_strong_api_key(settings.HERMES_API_KEY)
+    local_ok = bool(settings.COPILOT_LOCAL_FALLBACK)
+    prefer_local = bool(settings.COPILOT_PREFER_LOCAL)
+    base = {
+        "profile": "partsops",
+        "skills": PARTSOPS_SKILLS,
+        "local_fallback": local_ok,
+        "prefer_local": prefer_local,
+        "key_configured": key_ok,
+        "hermes_url": settings.HERMES_API_URL,
+    }
+    if prefer_local and local_ok:
+        # Operator-forced grounded path — still probe Hermes for honesty in diagnostics.
+        hermes_probe: Dict[str, Any] = {"reachable": False}
+        if key_ok:
+            try:
+                caps = await transport.capabilities()
+                hermes_probe = {
+                    "reachable": True,
+                    "model": caps.get("model"),
+                    "latency_ms": int((datetime.now(timezone.utc) - started).total_seconds() * 1000),
+                }
+            except HermesTransportError as probe_exc:
+                hermes_probe = {"reachable": False, "error": probe_exc.code}
+        return {
+            **base,
+            "status": "degraded",
+            "mode": "local",
+            "version": "local-grounded",
+            "model": "partsops-local",
+            "capabilities": ["local_grounded_reply", "context_envelope", "help_corpus"],
+            "hint": "COPILOT_PREFER_LOCAL=1 — ответы из ContextEnvelope/справки (Hermes sidecar не обязателен).",
+            "hermes_probe": hermes_probe,
+        }
+    if not key_ok:
+        return {
+            **base,
+            "status": "degraded" if local_ok else "offline",
+            "mode": "local" if local_ok else "unavailable",
+            "version": "unknown",
+            "capabilities": ["local_grounded_reply"] if local_ok else [],
+            "error": "HERMES_KEY_NOT_CONFIGURED",
+            "hint": "Положите сильный ключ в .hermes_api_key или export HERMES_API_KEY, затем: hermes --profile partsops gateway run",
+        }
     try:
         capabilities = await transport.capabilities()
         return {
+            **base,
             "status": "online",
-            "profile": "partsops",
+            "mode": "hermes",
             "version": capabilities.get("version") or capabilities.get("platform_version") or "unknown",
             "model": capabilities.get("model"),
             "capabilities": [key for key, enabled in capabilities.get("features", {}).items() if enabled is True],
@@ -78,12 +136,17 @@ async def check_hermes_health_async() -> Dict[str, Any]:
         }
     except HermesTransportError as exc:
         return {
-            "status": "degraded" if exc.code == "HERMES_KEY_NOT_CONFIGURED" else "offline",
-            "profile": "partsops",
+            **base,
+            "status": "degraded" if local_ok else "offline",
+            "mode": "local" if local_ok else "unavailable",
             "version": "unknown",
-            "capabilities": [],
-            "skills": PARTSOPS_SKILLS,
+            "capabilities": ["local_grounded_reply"] if local_ok else [],
             "error": exc.code,
+            "hint": (
+                "Hermes sidecar offline. Локальный grounded-режим активен."
+                if local_ok
+                else f"Запустите: hermes --profile partsops gateway run  # URL {settings.HERMES_API_URL}"
+            ),
         }
 
 
@@ -302,43 +365,142 @@ async def stream_run_events(
             )
 
             history_for_model = history[:-1] if history and history[-1].role == "user" else history
-            conversation_history = [
-                {"role": msg.role, "content": msg.masked_content}
-                for msg in history_for_model[-12:]
-                if msg.role in {"user", "assistant"} and msg.masked_content
-            ]
-            instructions = (
-                "Ты Hermes — официальный операционный помощник PartsOps Admin Cockpit. "
-                "Отвечай только на русском языке вежливо, четко и понятным естественным языком.\n\n"
-                "Инструкции по формированию ответа:\n"
-                "1. Режим строго READ-ONLY: не вызывай инструменты изменения состояния, не совершай закупки или списания, не давай обещаний принудительно изменить статус.\n"
-                "2. Если заказ выбран (selected_request не null): объясни его текущий статус, причины блокировки (если есть), состояние Evidence Gates и допустимые следующие переходы.\n"
-                "3. Если заказ не выбран (selected_request is null): объясни оператору контекст текущего экрана, перечисли доступные статьи справки и кратко подскажи, что для детального разбора конкретного заказа нужно выбрать его в списке или ввести его номер (например, REQ-1001).\n"
-                "4. Запрещено выводить «отладочный» дамп переменных, технический JSON или сырые строки вроде 'selected_request = null' или 'allowlist'. Форматируй ответ в понятный Markdown.\n"
-                "5. Навигацию и действия предлагай только через allowlisted action objects.\n\n"
-                f"ContextEnvelope: {envelope.model_dump_json()}"
-            )
+            conversation_history = []
+            for msg in history_for_model[-6:]:
+                if msg.role not in {"user", "assistant"} or not msg.masked_content:
+                    continue
+                # Cap history turns so Hermes prompt stays within small token budget.
+                content = msg.masked_content
+                if len(content) > 600:
+                    content = content[:600].rstrip() + "…"
+                conversation_history.append({"role": msg.role, "content": content})
+            instructions = build_hermes_instructions(envelope)
+            # Also keep user message bounded (API already max_length=4000, but trim for speed).
+            if current_message and len(current_message) > 1500:
+                current_message = current_message[:1500].rstrip() + "…"
 
-            run_lock = _run_locks.setdefault(run_id, asyncio.Lock())
-            async with run_lock:
-                if not run.hermes_run_id:
-                    upstream = await transport.start_run(
-                        message=current_message,
-                        instructions=instructions,
-                        conversation_history=conversation_history,
-                        session_id=conv.hermes_session_id,
-                    )
-                    run.hermes_run_id = str(upstream["run_id"])
-                    conv.hermes_session_id = str(upstream.get("session_id") or upstream["run_id"])
-                    run.provider = "hermes"
-                    run.model = str(upstream.get("model") or "partsops")
-                    run.status = "running"
-                    _run_upstream_ids[run_id] = run.hermes_run_id
-                    session.add(conv)
-                    session.add(run)
-                    session.commit()
-                else:
-                    _run_upstream_ids[run_id] = run.hermes_run_id
+            async def stream_local_fallback(reason_code: str) -> AsyncGenerator[str, None]:
+                """Grounded local answer when Hermes is missing/offline."""
+                nonlocal assistant_text, terminal
+                yield encode(event(
+                    "run.progress",
+                    label="Локальный grounded-режим",
+                    detail=f"Hermes недоступен ({reason_code}) — отвечаем по ContextEnvelope",
+                ))
+                answer, valid_sources = await asyncio.to_thread(
+                    build_local_reply,
+                    envelope=envelope,
+                    user_message=current_message,
+                    # None → honor COPILOT_LOCAL_LLM env (default on; set 0 for pure grounded)
+                    prefer_llm=None,
+                )
+                assistant_text = answer
+                for piece in chunk_text(answer, size=64):
+                    if cancel_event.is_set():
+                        run.status = "stopped"
+                        run.error_code = "CANCELLED"
+                        session.add(run)
+                        session.commit()
+                        yield encode(event("run.stopped", code="CANCELLED", retryable=True))
+                        terminal = True
+                        return
+                    yield encode(event("assistant.delta", text=piece))
+                    await asyncio.sleep(0)  # let event loop flush SSE chunks
+
+                for source in valid_sources:
+                    yield encode(event(
+                        "source",
+                        source_id=source["source_id"],
+                        title=source.get("title") or source["source_id"],
+                    ))
+                for action in envelope.allowed_user_actions:
+                    if action.get("action") in ALLOWLISTED_ACTIONS and (
+                        action.get("screen_id") in {None, envelope.screen_id}
+                        or action.get("request_id") == context_ref.selected_request_id
+                    ):
+                        yield encode(event("navigation.action", action=action))
+
+                if assistant_text:
+                    session.add(CopilotMessage(
+                        id=f"msg-{uuid.uuid4().hex[:12]}",
+                        conversation_id=run.conversation_id,
+                        role="assistant",
+                        masked_content=assistant_text,
+                        sources_json=json.dumps(valid_sources, ensure_ascii=False),
+                        created_at=datetime.now(timezone.utc),
+                    ))
+                run.status = "completed"
+                run.provider = "local_fallback"
+                run.model = "partsops-local"
+                run.error_code = None
+                run.tokens_used = 0
+                run.cost_usd = 0.0
+                run.latency_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+                session.add(run)
+                session.commit()
+                yield encode(event(
+                    "run.completed",
+                    usage={
+                        "tokens": 0,
+                        "cost_usd": 0.0,
+                        "latency_ms": run.latency_ms,
+                        "mode": "local_fallback",
+                        "hermes_error": reason_code,
+                    },
+                ))
+                terminal = True
+
+            use_local = False
+            local_reason = ""
+            if settings.COPILOT_PREFER_LOCAL and settings.COPILOT_LOCAL_FALLBACK:
+                use_local = True
+                local_reason = "COPILOT_PREFER_LOCAL"
+            elif not is_strong_api_key(settings.HERMES_API_KEY) and settings.COPILOT_LOCAL_FALLBACK:
+                use_local = True
+                local_reason = "HERMES_KEY_NOT_CONFIGURED"
+            else:
+                try:
+                    run_lock = _run_locks.setdefault(run_id, asyncio.Lock())
+                    async with run_lock:
+                        if not run.hermes_run_id:
+                            try:
+                                upstream = await asyncio.wait_for(
+                                    transport.start_run(
+                                        message=current_message,
+                                        instructions=instructions,
+                                        conversation_history=conversation_history,
+                                        session_id=conv.hermes_session_id,
+                                    ),
+                                    timeout=settings.COPILOT_HERMES_START_TIMEOUT_SECONDS,
+                                )
+                            except asyncio.TimeoutError as te:
+                                raise HermesTransportError(
+                                    f"Hermes start exceeded {settings.COPILOT_HERMES_START_TIMEOUT_SECONDS}s",
+                                    code="HERMES_START_TIMEOUT",
+                                    retryable=True,
+                                ) from te
+                            run.hermes_run_id = str(upstream["run_id"])
+                            conv.hermes_session_id = str(upstream.get("session_id") or upstream["run_id"])
+                            run.provider = "hermes"
+                            run.model = str(upstream.get("model") or "partsops")
+                            run.status = "running"
+                            _run_upstream_ids[run_id] = run.hermes_run_id
+                            session.add(conv)
+                            session.add(run)
+                            session.commit()
+                        else:
+                            _run_upstream_ids[run_id] = run.hermes_run_id
+                except HermesTransportError as start_exc:
+                    if settings.COPILOT_LOCAL_FALLBACK and start_exc.code in _LOCAL_FALLBACK_CODES:
+                        use_local = True
+                        local_reason = start_exc.code
+                    else:
+                        raise
+
+            if use_local:
+                async for frame in stream_local_fallback(local_reason):
+                    yield frame
+                return
 
             async for upstream_event in transport.stream_run(_run_upstream_ids[run_id]):
                 if cancel_event.is_set():
@@ -384,6 +546,10 @@ async def stream_run_events(
                     return
                 elif upstream_type == "run.failed":
                     error_code = str(upstream_event.get("code") or "HERMES_RUN_FAILED")
+                    if settings.COPILOT_LOCAL_FALLBACK:
+                        async for frame in stream_local_fallback(error_code):
+                            yield frame
+                        return
                     run.status = "failed"
                     run.error_code = error_code
                     session.add(run)
@@ -430,6 +596,10 @@ async def stream_run_events(
                     return
 
             if not terminal:
+                if settings.COPILOT_LOCAL_FALLBACK:
+                    async for frame in stream_local_fallback("HERMES_UPSTREAM_EOF"):
+                        yield frame
+                    return
                 run.status = "failed"
                 run.error_code = "HERMES_UPSTREAM_EOF"
                 session.add(run)
@@ -437,12 +607,103 @@ async def stream_run_events(
                 yield encode(event("run.failed", code="HERMES_UPSTREAM_EOF", message="Поток Hermes завершился без terminal-события.", retryable=True))
 
         except HermesTransportError as exc:
-            run.status = "failed"
-            run.error_code = exc.code
-            run.latency_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
-            session.add(run)
-            session.commit()
-            yield encode(event("run.failed", code=exc.code, message=str(exc), retryable=exc.retryable))
+            if settings.COPILOT_LOCAL_FALLBACK and exc.code in _LOCAL_FALLBACK_CODES:
+                # Rebuild minimal envelope path already completed above if we got here
+                # mid-stream — re-enter local answer using last known message.
+                try:
+                    history_stmt = select(CopilotMessage).where(
+                        CopilotMessage.conversation_id == run.conversation_id,
+                    ).order_by(CopilotMessage.created_at.asc())
+                    history = session.exec(history_stmt).all()
+                    current_message = next((msg.masked_content for msg in reversed(history) if msg.role == "user"), "")
+                    context_ref = CopilotContextRef.model_validate_json(run.context_ref_json)
+                    envelope = build_context_envelope(
+                        session=session,
+                        tenant_id=tenant_id,
+                        context_ref=context_ref,
+                        user_role=role,
+                        query=current_message,
+                    )
+                    answer, valid_sources = build_local_reply(
+                        envelope=envelope,
+                        user_message=current_message,
+                        prefer_llm=None,
+                    )
+                    yield encode({
+                        "type": "run.progress",
+                        "run_id": run_id,
+                        "correlation_id": run.correlation_id,
+                        "sequence": sequence + 1,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "label": "Локальный grounded-режим",
+                        "detail": f"Hermes error {exc.code}",
+                    })
+                    sequence += 1
+                    for piece in chunk_text(answer, size=64):
+                        sequence += 1
+                        yield encode({
+                            "type": "assistant.delta",
+                            "run_id": run_id,
+                            "correlation_id": run.correlation_id,
+                            "sequence": sequence,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "text": piece,
+                        })
+                    for source in valid_sources:
+                        sequence += 1
+                        yield encode({
+                            "type": "source",
+                            "run_id": run_id,
+                            "correlation_id": run.correlation_id,
+                            "sequence": sequence,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "source_id": source["source_id"],
+                            "title": source.get("title") or source["source_id"],
+                        })
+                    session.add(CopilotMessage(
+                        id=f"msg-{uuid.uuid4().hex[:12]}",
+                        conversation_id=run.conversation_id,
+                        role="assistant",
+                        masked_content=answer,
+                        sources_json=json.dumps(valid_sources, ensure_ascii=False),
+                        created_at=datetime.now(timezone.utc),
+                    ))
+                    run.status = "completed"
+                    run.provider = "local_fallback"
+                    run.model = "partsops-local"
+                    run.error_code = None
+                    run.latency_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+                    session.add(run)
+                    session.commit()
+                    sequence += 1
+                    yield encode({
+                        "type": "run.completed",
+                        "run_id": run_id,
+                        "correlation_id": run.correlation_id,
+                        "sequence": sequence,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "usage": {
+                            "tokens": 0,
+                            "cost_usd": 0.0,
+                            "latency_ms": run.latency_ms,
+                            "mode": "local_fallback",
+                            "hermes_error": exc.code,
+                        },
+                    })
+                except Exception:
+                    run.status = "failed"
+                    run.error_code = exc.code
+                    run.latency_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+                    session.add(run)
+                    session.commit()
+                    yield encode(event("run.failed", code=exc.code, message=str(exc), retryable=exc.retryable))
+            else:
+                run.status = "failed"
+                run.error_code = exc.code
+                run.latency_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+                session.add(run)
+                session.commit()
+                yield encode(event("run.failed", code=exc.code, message=str(exc), retryable=exc.retryable))
         except asyncio.CancelledError:
             cancel_event.set()
             raise

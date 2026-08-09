@@ -9,6 +9,12 @@ export type HermesHealth = {
   skills: string[];
   latency_ms?: number;
   error?: string;
+  /** hermes | local | unavailable */
+  mode?: string;
+  local_fallback?: boolean;
+  key_configured?: boolean;
+  hermes_url?: string;
+  hint?: string;
 };
 
 export type HermesStreamEvent =

@@ -43,9 +43,42 @@ const emptyHealth: HermesHealth = {
 
 const statusLabel: Record<HermesHealth['status'], string> = {
   online: 'Онлайн',
-  degraded: 'Ограничен',
+  degraded: 'Локальный режим',
   offline: 'Недоступен',
 };
+
+function healthCaption(health: HermesHealth): string {
+  if (health.status === 'online' && health.mode !== 'local') {
+    return health.model ? `Hermes · ${health.model}` : 'Hermes sidecar · online';
+  }
+  if (health.mode === 'local' || health.status === 'degraded') {
+    return health.hint || 'Локальный grounded fallback · ContextEnvelope + справка';
+  }
+  return health.hint || health.error || 'Канал агента недоступен';
+}
+
+/** Map cockpit nav ids → Copilot ContextEnvelope screen_id. */
+function mapContextScreenId(navOrScreen: string): string {
+  const map: Record<string, string> = {
+    dashboard: 'kanban_board',
+    kanban: 'kanban_board',
+    attention: 'kanban_board',
+    orders: 'kanban_board',
+    report: 'kanban_board',
+    hermes: 'kanban_board',
+    matching: 'order_details',
+    suppliers: 'suppliers_page',
+    quotes: 'invoices_registry',
+    contract_control: 'contract_control',
+    agent_os: 'agent_os_panel',
+    agent_os_panel: 'agent_os_panel',
+    kanban_board: 'kanban_board',
+    order_details: 'order_details',
+    suppliers_page: 'suppliers_page',
+    invoices_registry: 'invoices_registry',
+  };
+  return map[navOrScreen] || 'kanban_board';
+}
 
 const statusTone: Record<HermesHealth['status'], string> = {
   online: 'hermes-status--online',
@@ -75,6 +108,9 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [progressLabel, setProgressLabel] = useState('Готов к работе');
   const [selectedSourceDoc, setSelectedSourceDoc] = useState<{ title: string; content: string } | null>(null);
+  /** Last completed run path — drives channel badge (not mere fallback *availability*). */
+  const [lastRunMode, setLastRunMode] = useState<'hermes' | 'local' | null>(null);
+  const contextScreenId = mapContextScreenId(activeScreen);
 
   const drawerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -120,7 +156,10 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
       setMessages([{
         id: 'init-msg',
         role: 'assistant',
-        content: 'Привет! Я **Hermes**, read-only операционный помощник PartsOps.\n\nОбъясню статус, блокировки и доступные шаги по текущему экрану.',
+        content:
+          'Привет! Я **Hermes**, read-only операционный помощник PartsOps.\n\n'
+          + 'Объясню статус, блокировки и доступные шаги по текущему экрану.\n\n'
+          + 'Если sidecar Hermes offline — отвечу в **локальном grounded-режиме** по ContextEnvelope и справке.',
         state: 'complete',
       }]);
     } catch (error) {
@@ -162,7 +201,10 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
     } else if (event.type === 'run.progress') {
       setProgressLabel(event.detail || event.label || 'Hermes анализирует контекст');
     } else if (event.type === 'run.completed') {
-      setProgressLabel('Ответ подтверждён');
+      const mode = (event.usage as { mode?: string } | undefined)?.mode;
+      const isLocal = mode === 'local_fallback';
+      setLastRunMode(isLocal ? 'local' : 'hermes');
+      setProgressLabel(isLocal ? 'Ответ (локальный grounded-режим)' : 'Ответ подтверждён');
       updateAssistant(assistantMsgId, { isStreaming: false, state: 'complete' });
     } else if (event.type === 'run.failed') {
       setProgressLabel(event.message || 'Hermes завершил запрос с ошибкой');
@@ -196,7 +238,7 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: query,
-          context_ref: { screen_id: activeScreen, selected_request_id: selectedRequestId || undefined },
+          context_ref: { screen_id: contextScreenId, selected_request_id: selectedRequestId || undefined },
         }),
         signal: abortController.signal,
       });
@@ -268,8 +310,19 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
   };
 
   const handleActionClick = (action: NavigationAction) => {
-    if (action.action === 'open_screen' && action.screen_id) onNavigate?.(action.screen_id);
-    if (action.action === 'open_request' && action.request_id) onNavigate?.('order_details', action.request_id);
+    if (action.action === 'open_screen' && action.screen_id) {
+      // Context screen ids → cockpit nav ids
+      const navMap: Record<string, string> = {
+        kanban_board: 'kanban',
+        order_details: 'matching',
+        suppliers_page: 'suppliers',
+        invoices_registry: 'quotes',
+        contract_control: 'contract_control',
+        agent_os_panel: 'agent_os',
+      };
+      onNavigate?.(navMap[action.screen_id] || action.screen_id);
+    }
+    if (action.action === 'open_request' && action.request_id) onNavigate?.('matching', action.request_id);
   };
 
   const resizeInput = (element: HTMLTextAreaElement) => {
@@ -300,7 +353,7 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
                 <div className="hermes-avatar"><Icon name="robot" size={19} weight="duotone" /></div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2"><h3 className="truncate text-sm font-extrabold text-white">Hermes</h3><span className={`hermes-status ${statusTone[health.status]}`}><span className="hermes-status__dot" />{statusLabel[health.status]}</span></div>
-                  <span className="text-[10px] text-ink-muted">PartsOps Copilot · профиль {health.profile}</span>
+                  <span className="text-[10px] text-ink-muted" title={health.hint || health.error || undefined}>PartsOps Copilot · {healthCaption(health)}</span>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -310,11 +363,22 @@ export const HermesChatDrawer: React.FC<HermesChatDrawerProps> = ({
             </div>
 
             <div data-hermes-stagger className="hermes-context mx-4 mt-4 flex items-center justify-between gap-3 rounded-2xl px-3.5 py-3">
-              <div className="flex min-w-0 items-center gap-2 text-[11px] text-emerald-200"><Icon name="wave-square" size={14} className="shrink-0 text-emerald-400" /><span className="truncate">Экран <strong className="text-white">{activeScreen}</strong>{selectedRequestId && <> · заказ <strong className="font-mono text-emerald-300">#{selectedRequestId}</strong></>}</span></div>
+              <div className="flex min-w-0 items-center gap-2 text-[11px] text-emerald-200"><Icon name="wave-square" size={14} className="shrink-0 text-emerald-400" /><span className="truncate">Экран <strong className="text-white">{contextScreenId}</strong>{selectedRequestId && <> · заказ <strong className="font-mono text-emerald-300">#{selectedRequestId}</strong></>}</span></div>
               <span className="hermes-readonly shrink-0">READ-ONLY</span>
             </div>
 
-            <div className="mx-4 mt-3 flex items-center justify-between text-[10px] text-ink-muted"><span className="flex items-center gap-1.5"><span className={`hermes-health-dot ${statusTone[health.status]}`} />{progressLabel}</span><span>{health.capabilities.length ? `${health.capabilities.length} capabilities` : 'Проверка канала'}</span></div>
+            <div className="mx-4 mt-3 flex items-center justify-between gap-2 text-[10px] text-ink-muted">
+              <span className="flex min-w-0 items-center gap-1.5"><span className={`hermes-health-dot ${statusTone[health.status]}`} /><span className="truncate">{progressLabel}</span></span>
+              <span className="shrink-0">
+                {health.mode === 'local' || lastRunMode === 'local'
+                  ? 'local fallback'
+                  : health.status === 'online' && health.capabilities.length
+                    ? `${health.capabilities.length} capabilities`
+                    : health.local_fallback
+                      ? 'fallback ready'
+                      : 'Проверка канала'}
+              </span>
+            </div>
 
             <div className="hermes-messages flex-1 space-y-4 overflow-y-auto px-4 py-5" aria-live="polite">
               {messages.map((msg) => (
