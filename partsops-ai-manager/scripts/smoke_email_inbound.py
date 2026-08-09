@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Local smoke: config → signed webhook → list → ingest → print request_id.
+
+Usage:
+  export PARTSOPS_API_TOKEN=test-token
+  export PARTSOPS_EMAIL_WEBHOOK_SECRET=dev-secret-at-least-16
+  export BASE_URL=http://127.0.0.1:8000
+  python scripts/smoke_email_inbound.py
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+BASE = os.environ.get("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+TOKEN = os.environ.get("PARTSOPS_API_TOKEN", "test-token")
+SECRET = os.environ.get("PARTSOPS_EMAIL_WEBHOOK_SECRET", "")
+TENANT = os.environ.get("PARTSOPS_TENANT_ID", "default")
+SLUG = os.environ.get("EMAIL_ORG_SLUG", "default")
+ADDRESS = os.environ.get("EMAIL_INBOX_ADDRESS", f"rfq+{SLUG}@inbound.local")
+
+
+def _req(method: str, path: str, body: dict | None = None, *, signed: bool = False, role: str = "admin") -> dict:
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": TENANT,
+        "X-User-Role": role,
+        "Authorization": f"Bearer {TOKEN}",
+    }
+    if signed:
+        if not SECRET:
+            print("ERROR: set PARTSOPS_EMAIL_WEBHOOK_SECRET", file=sys.stderr)
+            sys.exit(2)
+        headers["X-PartsOps-Signature"] = "sha256=" + hmac.new(
+            SECRET.encode("utf-8"), data or b"", hashlib.sha256
+        ).hexdigest()
+        # webhook does not need tenant role headers but harmless
+    req = urllib.request.Request(f"{BASE}{path}", data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as exc:
+        err = exc.read().decode("utf-8", errors="replace")
+        print(f"HTTP {exc.code} {path}: {err}", file=sys.stderr)
+        raise
+
+
+def main() -> int:
+    print(f"== smoke email inbound @ {BASE} tenant={TENANT}")
+
+    cfg = _req(
+        "PUT",
+        "/api/email/config",
+        {
+            "org_slug": SLUG,
+            "address": ADDRESS,
+            "provider": "mailgun",
+            "auto_ingest": False,
+            "default_priority": "normal",
+            "allowed_senders": [],
+        },
+        role="admin",
+    )
+    print("config:", json.dumps(cfg, ensure_ascii=False)[:200])
+
+    csv = "Артикул;Наименование;Количество\nSMK-1;Smoke pad;1\n"
+    payload = {
+        "provider": "mailgun",
+        "message_id": f"<smoke-{os.getpid()}@local>",
+        "from": "smoke@partner.example",
+        "to": [ADDRESS],
+        "subject": "Smoke RFQ email",
+        "text_body": "Smoke free-text: oil filter x1 OEM 11427566327",
+        "attachments": [
+            {
+                "filename": "smoke.csv",
+                "content_type": "text/csv",
+                "bytes_base64": base64.b64encode(csv.encode("utf-8")).decode(),
+            }
+        ],
+    }
+    inbound = _req("POST", "/api/integrations/email/inbound", payload, signed=True, role="manager")
+    print("inbound:", inbound)
+    emsg = inbound.get("email_message_id")
+    if not emsg:
+        print("FAIL: no email_message_id", file=sys.stderr)
+        return 1
+
+    listed = _req("GET", "/api/email/messages", role="manager")
+    print("list count:", len(listed) if isinstance(listed, list) else listed)
+
+    ingested = _req("POST", f"/api/email/messages/{emsg}/ingest", {}, role="manager")
+    print("ingest:", ingested)
+    rid = ingested.get("request_id")
+    if not rid:
+        print("FAIL: no request_id", file=sys.stderr)
+        return 1
+
+    print(f"OK request_id={rid} email_message_id={emsg}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

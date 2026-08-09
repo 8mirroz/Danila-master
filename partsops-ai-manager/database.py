@@ -47,6 +47,7 @@ def init_db():
                         ContractWorkflowEvent, PipelineRun, PipelineRunEvent)  # noqa
     from suppliers import Supplier, SupplierCatalogItem, Invoice  # noqa
     from models_copilot import CopilotConversation, CopilotMessage, CopilotRun  # noqa
+    from models_email import EmailInboxConfig, EmailMessage  # noqa
     SQLModel.metadata.create_all(engine)
 
 def get_session():

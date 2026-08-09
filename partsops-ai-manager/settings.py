@@ -252,6 +252,14 @@ class Settings:
             return 15
 
     @property
+    def EMAIL_WEBHOOK_RPM(self) -> int:
+        """Max inbound webhook posts per IP per minute (0 = unlimited)."""
+        try:
+            return max(0, int(os.environ.get("PARTSOPS_EMAIL_WEBHOOK_RPM", "60")))
+        except ValueError:
+            return 60
+
+    @property
     def OUTBOUND_WEBHOOK_SECRET(self) -> str:
         return os.environ.get("PARTSOPS_OUTBOUND_WEBHOOK_SECRET", "")
 

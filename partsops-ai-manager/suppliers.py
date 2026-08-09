@@ -463,6 +463,28 @@ def seed_database(session) -> dict:
             succeeded_at=datetime.now(timezone.utc).replace(tzinfo=None)
         ))
 
+    # Optional default email inbox (dev/staging). Enable with SEED_EMAIL_INBOX=1.
+    import os
+    if os.environ.get("SEED_EMAIL_INBOX", "").strip().lower() in {"1", "true", "yes"}:
+        try:
+            from services.email_ingest import get_inbox_config, upsert_inbox_config
+
+            if not get_inbox_config(session, "default"):
+                upsert_inbox_config(
+                    session,
+                    tenant_id="default",
+                    org_slug="default",
+                    address=os.environ.get(
+                        "SEED_EMAIL_INBOX_ADDRESS",
+                        "rfq+default@inbound.local",
+                    ),
+                    provider="mailgun",
+                    auto_ingest=False,
+                )
+        except Exception:
+            # Email tables may be absent before migration — never block seed.
+            pass
+
     session.commit()
     return {
         "added_suppliers": added_suppliers,

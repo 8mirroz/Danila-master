@@ -130,3 +130,11 @@ provisioned, onboarding can be completed within two working days, and the
 product owner has captured a baseline for Automation Rate, time-to-quote and
 AI/storage gross margin. Marketplace, inventory and additional ERP connectors
 remain explicitly out of this gate.
+
+## RFQ inbound email (2026-08-10)
+
+- Design: `docs/design-rfq-inbound-email.md`
+- Staging runbook: `docs/runbook-email-inbound-staging.md`
+- Golden path: `docs/golden-path-email-to-quote.md`
+- Smoke: `python scripts/smoke_email_inbound.py` (local API + webhook secret)
+- Migration: `a9e4f1b2c3d0` (email_inbox_configs, email_messages)

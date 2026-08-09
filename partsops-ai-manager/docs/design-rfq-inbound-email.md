@@ -217,8 +217,8 @@ PARTSOPS_EMAIL_IMAP_URL=
 | **C0** | This design + ADR | 0.5 d | — | **done 2026-08-09** |
 | **C1** | Models, migration, webhook verify + idempotency tests | 2–3 d | C0 | **done 2026-08-09** |
 | **C2** | Attachments → artifacts → ingest → `create_request` | 2 d | C1, S3/local storage | **done 2026-08-09** |
-| **C3** | Cockpit inbox UI | 2–3 d | C2 | **done 2026-08-10** (`EmailInboxPage`, nav «Входящие email») |
-| **C4** | Staging DNS + vendor + design-partner mailbox | 1–2 d ops | C3, beta secrets | |
+| **C3** | Cockpit inbox UI | 2–3 d | C2 | **done 2026-08-10** |
+| **C4** | Staging DNS + vendor + design-partner mailbox | 1–2 d ops | C3, beta secrets | **code-ready 2026-08-10** (runbook + smoke + rate limit); live DNS remains ops |
 
 ## 13. Acceptance criteria (C1–C3)
 
@@ -229,6 +229,11 @@ PARTSOPS_EMAIL_IMAP_URL=
 - [x] Free-text body can create request with `source=EMAIL` via `POST …/ingest` (idempotent).
 - [x] `auto_ingest=false` never auto-creates; `auto_ingest=true` promotes when content usable.
 - [x] Unit + isolation tests in CI (`tests/test_email_inbound.py`).
+- [x] Integration test with real `RequestService.create_request` (`tests/test_email_inbound_integration.py`).
+- [x] Local smoke script (`scripts/smoke_email_inbound.py`).
+- [x] Staging runbook (`docs/runbook-email-inbound-staging.md`).
+- [x] Golden path (`docs/golden-path-email-to-quote.md`).
+- [ ] Live Mailgun/SES DNS + production secret (ops only).
 
 ## 14. Open decisions (defaults if not overridden)
 

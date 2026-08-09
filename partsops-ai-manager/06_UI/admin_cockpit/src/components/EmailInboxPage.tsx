@@ -340,6 +340,11 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                     Причина: {detail.rejection_reason}
                   </p>
                 )}
+                {typeof detail.auth_results?.auto_ingest_error === 'string' && (
+                  <p className="mb-2 text-[11px] text-amber-800">
+                    auto_ingest error: {detail.auth_results.auto_ingest_error}
+                  </p>
+                )}
 
                 <div className="mb-3 max-h-40 overflow-y-auto rounded-md border border-line bg-surface-1 p-2 text-[11px] leading-relaxed text-ink-secondary whitespace-pre-wrap">
                   {detail.body_masked_excerpt || '— пустое тело —'}

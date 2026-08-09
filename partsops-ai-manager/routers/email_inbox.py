@@ -1,7 +1,9 @@
-"""RFQ inbound email API — webhook + operator inbox (C1)."""
+"""RFQ inbound email API — webhook + operator inbox (C1–C3)."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
+from typing import Any, Deque, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -10,11 +12,45 @@ from sqlmodel import Session
 from database import get_session
 from rbac import RoleChecker, get_current_principal, get_current_tenant, CurrentPrincipal
 from services import email_ingest as ingest
+from settings import settings
 
 router = APIRouter(tags=["Email Inbox"])
 
 require_manager = RoleChecker(allowed_roles=["admin", "manager"])
 require_admin = RoleChecker(allowed_roles=["admin", "platform_admin"])
+
+# Soft in-memory RPM guard for webhook (per process).
+_webhook_hits: Dict[str, Deque[datetime]] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip() or "unknown"
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _enforce_webhook_rpm(request: Request) -> None:
+    limit = int(settings.EMAIL_WEBHOOK_RPM or 0)
+    if limit <= 0:
+        return
+    ip = _client_ip(request)
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(minutes=1)
+    q = _webhook_hits[ip]
+    while q and q[0] < window_start:
+        q.popleft()
+    if len(q) >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "EMAIL_WEBHOOK_RATE_LIMIT",
+                "message": f"Webhook rate limit exceeded ({limit}/min)",
+            },
+        )
+    q.append(now)
 
 
 class InboundEmailAttachment(BaseModel):
@@ -64,6 +100,7 @@ async def inbound_email_webhook(
     x_partsops_signature: Optional[str] = Header(default=None, alias="X-PartsOps-Signature"),
 ):
     """Provider webhook — HMAC verified; tenant from recipient map only."""
+    _enforce_webhook_rpm(request)
     raw = await request.body()
     try:
         ingest.verify_webhook_signature(raw, x_partsops_signature)
