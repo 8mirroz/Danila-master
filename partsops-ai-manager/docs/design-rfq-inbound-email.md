@@ -216,8 +216,8 @@ PARTSOPS_EMAIL_IMAP_URL=
 |-------|-------------|--------|---------|
 | **C0** | This design + ADR | 0.5 d | — | **done 2026-08-09** |
 | **C1** | Models, migration, webhook verify + idempotency tests | 2–3 d | C0 | **done 2026-08-09** |
-| **C2** | Attachments → artifacts → ingest → `create_request` | 2 d | C1, S3/local storage | **done 2026-08-09** (`store_attachments`, `POST …/ingest`, `auto_ingest`, tests) |
-| **C3** | Cockpit inbox UI | 2–3 d | C2 | next |
+| **C2** | Attachments → artifacts → ingest → `create_request` | 2 d | C1, S3/local storage | **done 2026-08-09** |
+| **C3** | Cockpit inbox UI | 2–3 d | C2 | **done 2026-08-10** (`EmailInboxPage`, nav «Входящие email») |
 | **C4** | Staging DNS + vendor + design-partner mailbox | 1–2 d ops | C3, beta secrets | |
 
 ## 13. Acceptance criteria (C1–C3)

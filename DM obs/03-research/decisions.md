@@ -14,9 +14,10 @@
 - **Idempotency:** unique `(tenant_id, Message-ID)`; no double usage on duplicates.
 - **PII:** raw MIME in tenant object storage; LLM/agent only masked excerpt.
 - **Design doc:** `partsops-ai-manager/docs/design-rfq-inbound-email.md`
-- **Next build phases:** ~~C1~~ ~~C2~~ → C3 UI → C4 staging DNS.
+- **Next build phases:** ~~C1~~ ~~C2~~ ~~C3~~ → C4 staging DNS.
 - **C1 shipped:** models, migration, webhook, list/reject/config.
-- **C2 shipped:** attachments→`UploadArtifact`, `POST /api/email/messages/{id}/ingest`, optional `auto_ingest`.
+- **C2 shipped:** attachments→`UploadArtifact`, `POST …/ingest`, optional `auto_ingest`.
+- **C3 shipped:** cockpit `EmailInboxPage` + nav «Входящие email».
 
 ## ⚖️ Decision | 2026-06-26T13:23:27+03:00
 

@@ -39,6 +39,7 @@ const AgentOSPanel = lazy(() => import('./components/AgentOSPanel').then((m) => 
 const MultiAgentOrchestraView = lazy(() => import('./components/MultiAgentOrchestraView').then((m) => ({ default: m.MultiAgentOrchestraView })));
 const CrawlerIntakePanel = lazy(() => import('./components/CrawlerIntakePanel').then((m) => ({ default: m.CrawlerIntakePanel })));
 const RFQFileImportPanel = lazy(() => import('./components/RFQFileImportPanel').then((m) => ({ default: m.RFQFileImportPanel })));
+const EmailInboxPage = lazy(() => import('./components/EmailInboxPage').then((m) => ({ default: m.EmailInboxPage })));
 const ContractControlPanel = lazy(() => import('./components/ContractControlPanel').then((m) => ({ default: m.ContractControlPanel })));
 const BlockedQueue = lazy(() => import('./components/BlockedQueue').then((m) => ({ default: m.BlockedQueue })));
 const JobReportView = lazy(() => import('./components/JobReportView').then((m) => ({ default: m.JobReportView })));
@@ -525,6 +526,7 @@ function App() {
     { id: 'kanban', label: 'Канбан-доска', icon: 'list', group: 'main' as const },
     { id: 'suppliers', label: 'Каталог поставщиков', icon: 'car', group: 'main' as const },
     { id: 'orders', label: 'Загрузка заказа', icon: 'cloud-arrow-up', group: 'main' as const },
+    { id: 'email_inbox', label: 'Входящие email', icon: 'envelope', group: 'main' as const },
     { id: 'matching', label: 'Матрица подбора и цен', icon: 'rotate', group: 'main' as const },
     { id: 'quotes', label: 'Коммерческие предложения', icon: 'document', group: 'main' as const },
     { id: 'pipeline', label: 'Мультиагентный пайплайн', icon: 'robot', group: 'admin' as const },
@@ -1051,6 +1053,22 @@ function App() {
                       setFetchTrigger((prev) => prev + 1);
                     }}
                   />
+                </div>
+              )}
+
+              {activeNav === 'email_inbox' && (
+                <div className="mx-auto max-w-6xl">
+                  <Suspense fallback={<div className="p-6 text-xs text-ink-muted">Загрузка inbox…</div>}>
+                    <EmailInboxPage
+                      onOpenRequest={(requestId) => {
+                        setFetchTrigger((value) => value + 1);
+                        const match = requests.find((r) => r.request_id === requestId);
+                        if (match) setSelectedReq(match);
+                        setActiveNav('kanban');
+                        notify.success(`Открыта заявка ${requestId}`);
+                      }}
+                    />
+                  </Suspense>
                 </div>
               )}
 

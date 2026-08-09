@@ -64,6 +64,7 @@ function mapContextScreenId(navOrScreen: string): string {
     kanban: 'kanban_board',
     attention: 'kanban_board',
     orders: 'kanban_board',
+    email_inbox: 'kanban_board',
     report: 'kanban_board',
     hermes: 'kanban_board',
     matching: 'order_details',
