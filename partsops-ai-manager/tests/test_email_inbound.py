@@ -455,6 +455,41 @@ def test_ingest_cross_tenant_forbidden(client: TestClient, session: Session):
     assert res.status_code == 404
 
 
+def test_webhook_rate_limit(client: TestClient, session: Session, monkeypatch):
+    from settings import settings as settings_mod
+    import routers.email_inbox as email_router
+
+    monkeypatch.setattr(type(settings_mod), "EMAIL_WEBHOOK_RPM", property(lambda self: 2))
+    # Isolate from other tests that hit the same in-memory RPM buckets.
+    email_router._webhook_hits.clear()
+
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    def post_once(mid: str):
+        payload = {
+            "message_id": mid,
+            "from": "a@b.com",
+            "to": ["rfq+default@inbound.example"],
+            "text_body": "rate",
+        }
+        raw = json.dumps(payload).encode()
+        return client.post(
+            "/api/integrations/email/inbound",
+            content=raw,
+            headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+        )
+
+    assert post_once("<rl-1@x>").status_code == 202
+    assert post_once("<rl-2@x>").status_code == 202
+    third = post_once("<rl-3@x>")
+    assert third.status_code == 429
+    assert third.json()["detail"]["code"] == "EMAIL_WEBHOOK_RATE_LIMIT"
+
+
 def test_auto_ingest_creates_request(client: TestClient, session: Session):
     upsert_inbox_config(
         session,

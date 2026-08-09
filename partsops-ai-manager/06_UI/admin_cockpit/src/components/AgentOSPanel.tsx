@@ -21,17 +21,26 @@ type HermesHealth = {
   model: string;
   skills: string[];
   error?: string;
+  mode?: string;
+  local_fallback?: boolean;
+  prefer_local?: boolean;
+  key_configured?: boolean;
+  hermes_url?: string;
+  hint?: string;
+  latency_ms?: number;
 };
 
 export const AgentOSPanel: React.FC = () => {
   const [traces, setTraces] = useState<Trace[]>([]);
   const [hermesHealth, setHermesHealth] = useState<HermesHealth>({
     status: 'offline',
-    version: '0.19.0',
+    version: 'unknown',
     profile: 'partsops',
     capabilities: [],
-    model: 'anthropic/claude-3-5-haiku',
+    model: 'partsops',
     skills: ['partsops-navigation', 'partsops-request-explainer', 'partsops-troubleshooting'],
+    mode: 'unavailable',
+    local_fallback: true,
   });
 
   const fetchHealth = useCallback(async () => {
@@ -39,10 +48,15 @@ export const AgentOSPanel: React.FC = () => {
       const res = await apiFetch('/api/copilot/health');
       if (res.ok) {
         const data = await res.json();
-        setHermesHealth(data);
+        setHermesHealth((prev) => ({
+          ...prev,
+          ...data,
+          capabilities: Array.isArray(data.capabilities) ? data.capabilities : prev.capabilities,
+          skills: Array.isArray(data.skills) ? data.skills : prev.skills,
+        }));
       }
     } catch {
-      setHermesHealth((prev) => ({ ...prev, status: 'offline' }));
+      setHermesHealth((prev) => ({ ...prev, status: 'offline', mode: 'unavailable' }));
     }
   }, []);
 
@@ -96,15 +110,25 @@ export const AgentOSPanel: React.FC = () => {
                 {hermesHealth.status === 'online'
                   ? 'Hermes API Server готов (Online)'
                   : hermesHealth.status === 'degraded'
-                  ? 'Ограниченный режим (Degraded)'
+                  ? hermesHealth.mode === 'local'
+                    ? 'Локальный grounded fallback'
+                    : 'Ограниченный режим (Degraded)'
                   : 'Сервис оффлайн (Offline)'}
               </span>
+              {hermesHealth.mode && (
+                <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-muted">
+                  mode:{hermesHealth.mode}
+                </span>
+              )}
             </div>
             <h2 className="font-sans text-xl font-bold tracking-tight text-ink-primary sm:text-2xl">
               Операторская консоль и трассировка Hermes
             </h2>
             <p className="max-w-xl text-xs leading-relaxed text-ink-secondary">
               Реальный мониторинг состояния изолированного профиля Hermes (`partsops`), доступных навыков, трассировки LLM вызовов и бюджета.
+              {hermesHealth.hint ? (
+                <span className="mt-1 block text-[11px] text-ink-muted">{hermesHealth.hint}</span>
+              ) : null}
             </p>
           </div>
 
@@ -151,11 +175,15 @@ export const AgentOSPanel: React.FC = () => {
         </div>
 
         <div className="bg-surface-1 border border-line rounded-xl p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Версия Hermes</span>
+          <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Версия / канал</span>
           <b className="text-xl font-extrabold text-ink-primary font-mono block mt-1">
-            v{hermesHealth.version}
+            v{hermesHealth.version || '—'}
           </b>
-          <span className="text-[9px] text-ink-secondary mt-1.5">порт 127.0.0.1:8642</span>
+          <span className="text-[9px] text-ink-secondary mt-1.5">
+            {hermesHealth.hermes_url || 'http://127.0.0.1:8642'}
+            {typeof hermesHealth.latency_ms === 'number' ? ` · ${hermesHealth.latency_ms}ms` : ''}
+            {hermesHealth.local_fallback ? ' · fallback ready' : ''}
+          </span>
         </div>
       </div>
 
