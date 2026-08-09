@@ -84,6 +84,7 @@ captured as part of the worker-restart release gate below.
   so a preliminary document can never be sent without a quote snapshot.
 - [ ] Configure the S3-compatible production bucket, credentials, lifecycle
   retention and signed-access policy, then capture an upload/restore drill.
+  **Ops checklist:** `docs/design-partner-erp-s3-checklist.md` §1.
   Local staging storage was proven on 2026-08-01 with
   `python scripts/verify_staging_s3_storage.py` inside `backend-staging`:
   upload, tenant metadata, materialization/SHA-256 and cleanup all passed.
@@ -91,7 +92,8 @@ captured as part of the worker-restart release gate below.
   MinIO bootstrap account; production must use a separate least-privilege
   bucket credential and documented retention/access policies.
 - [ ] Provision the ERPNext connector with scoped credentials and prove an
-  outbox retry/DLQ run against an authorized non-production endpoint. On
+  outbox retry/DLQ run against an authorized non-production endpoint.
+  **Ops checklist:** `docs/design-partner-erp-s3-checklist.md` §2. On
   2026-08-01 `python scripts/verify_staging_erp_dlq.py` proved the adapter's
   actual HTTP retry path against a controlled in-container failure endpoint:
   three attempts, one idempotent record and one DLQ entry, with all temporary

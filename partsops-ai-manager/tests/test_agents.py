@@ -171,6 +171,16 @@ class TestE2EAgentWorkflow:
         assert len(res["extracted_parts"]) > 0
         assert res["validation_status"] == "PASSED"
 
+    def test_intake_facade_parse_intake_text_matches_shim(self):
+        """Single public entry app.agents.intake_facade must match agents shim."""
+        from app.agents.intake_facade import parse_intake_text
+
+        text = "Нужны тормозные колодки на BMW"
+        via_facade = parse_intake_text(text, tenant_id="default")
+        via_shim = process_intake_request(text, tenant_id="default")
+        assert via_facade["validation_status"] == via_shim["validation_status"]
+        assert via_facade.get("extracted_parts") == via_shim.get("extracted_parts")
+
     def test_process_intake_request_applies_pii_masking(self):
         from unittest.mock import patch
         

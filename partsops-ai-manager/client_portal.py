@@ -110,11 +110,11 @@ def get_public_request_view(token: str, session: Session, tenant_id: str) -> Opt
             import json
             parts_data = json.loads(req.parts_json)
             for p in parts_data:
+                # Public client view: sale price + qty only (no match_score / purchase / margin)
                 parts.append({
-                    "name": p.get("name"),
+                    "name": p.get("name") or p.get("part_name"),
                     "quantity": p.get("quantity"),
                     "sale_price": p.get("sale_price"),
-                    "match_score": p.get("match_score")
                 })
         
         return {
@@ -129,7 +129,7 @@ def get_public_request_view(token: str, session: Session, tenant_id: str) -> Opt
             "updated_at": req.updated_at.isoformat() if req.updated_at else None,
             "erp_quotation_ref": req.erp_quotation_ref,
             "erp_invoice_ref": req.erp_invoice_ref,
-            "tracking_token": req.tracking_token
+            # Do not echo tracking_token back in public JSON (reduces leakage if response cached)
         }
     except Exception:
         return None

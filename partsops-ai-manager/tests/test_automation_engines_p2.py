@@ -191,6 +191,23 @@ def test_erp_hub_and_vendor_query_not_wired():
     assert vendor.get("reason") != "stub"
 
 
+def test_vendor_query_with_session_empty_catalog_partial():
+    """Session + query without catalog rows → implemented partial, not silent stub."""
+    with Session(engine) as session:
+        result = query_vendor(
+            {
+                "session": session,
+                "tenant_id": "default",
+                "article": "34116852253",
+            }
+        )
+    assert result["implemented"] is True
+    assert result["status"] == "partial"
+    assert result["reason"] == "no_catalog_matches"
+    assert result["results"] == []
+    assert result.get("reason") != "stub"
+
+
 # ── extras: PO + escalate honesty ────────────────────────────────
 
 

@@ -9,7 +9,7 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from agents import process_intake_request
+from app.agents.intake_facade import parse_intake_text
 from database import engine
 from event_store import emit_event, emit_state_change, get_events, verify_event_chain
 from learning import save_manual_correction
@@ -446,7 +446,7 @@ class RequestService:
 
         # 2. RUN LLM / EXTERNAL CALLS - outside of active db transaction (Rule R7 compliance)
         pre_parse = secure_pre_parse(payload_data["text"])
-        agent_result = process_intake_request(
+        agent_result = parse_intake_text(
             pre_parse["masked_text"],
             vehicle_context=pre_parse["vehicle_context"],
             tenant_id=tenant_id,

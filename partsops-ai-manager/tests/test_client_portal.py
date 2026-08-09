@@ -55,6 +55,8 @@ def test_public_view_returns_masked_data():
         assert view["request_id"] == "REQ-VIEW"
         assert "purchase_price" not in str(view["parts"])
         assert "margin" not in str(view)
+        assert "match_score" not in str(view["parts"])
+        assert "tracking_token" not in view
         assert view["customer_name"] == "John Doe"
         assert view["vehicle_make"] == "BMW"
 

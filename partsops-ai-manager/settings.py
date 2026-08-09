@@ -156,7 +156,8 @@ class Settings:
 
     @property
     def PHASE_LABEL(self) -> str:
-        return os.environ.get("PARTSOPS_PHASE_LABEL") or "Phase 0 — Stabilization"
+        # Reflect current product stage (override via PARTSOPS_PHASE_LABEL)
+        return os.environ.get("PARTSOPS_PHASE_LABEL") or "Phase 2 — QuoteOps Beta Hardening"
 
     @property
     def HERMES_API_URL(self) -> str:

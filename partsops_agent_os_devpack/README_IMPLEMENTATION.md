@@ -2,7 +2,10 @@
 
 > **STATUS: SPEC / SCAFFOLD ONLY (2026-07-28)**  
 > Это **не** production runtime.  
-> - Backend agents в `04_BACKEND_CONTRACTS/agents/*` возвращают `ok=False`, `status=not_implemented`.  
+> - Backend agents в `04_BACKEND_CONTRACTS/agents/*` возвращают `ok=False`, `status=not_implemented`.
+> - **2026-08-08:** Devpack remains scaffold-only. Runtime agents live in `partsops-ai-manager/app/agents/*`.
+>   Decision: do **not** implement parallel agents here — either archive this pack or re-export
+>   wrappers over ai-manager after QuoteOps beta.  
 > - Frontend `05_FRONTEND` использует **static mock data** (Phase 1 console).  
 > - Реальный runtime: **`partsops-ai-manager/`** (`app/agents/*`, FastAPI, admin_cockpit).  
 > Не подключайте Devpack agents к живым заказам/ERP/клиентам.

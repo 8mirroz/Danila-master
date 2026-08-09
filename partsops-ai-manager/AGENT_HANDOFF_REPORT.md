@@ -300,8 +300,8 @@ Important job groups:
 
 ### Current automation gap
 
-- `app/automation/jobs/outbound_dispatch_job.py` exists in the worktree and implements outbox dispatch with retry/backoff.
-- It is **not yet registered** in `app/automation/registry.py`.
+- `app/automation/jobs/outbound_dispatch_job.py` implements outbox dispatch with retry/backoff.
+- **2026-08-08:** registered as `outbound_dispatch` in `app/automation/registry.py` (gap closed).
 
 ## 8. Frontend Surfaces
 
@@ -414,12 +414,11 @@ Relevant env vars:
 - `docker-compose.yml` runs backend + frontend + optional Postgres.
 - `Dockerfile.backend` expects `requirements.txt`.
 - `Dockerfile.frontend` builds the admin cockpit.
-- `start.sh` launches backend on port 8000 and frontend on port 3000.
+- `start.sh` launches backend on port 8000 and admin cockpit Vite on port **5173** (aligned with CORS defaults).
 
 ### Important runtime mismatch
 
-- `requirements.txt` is **missing** from `partsops-ai-manager/`, but `Dockerfile.backend` still copies and installs it.
-- That makes the backend Docker build path inconsistent in the current tree.
+- `requirements.txt` is present in `partsops-ai-manager/` and used by `Dockerfile.backend` (**2026-08-08:** gap closed).
 - `start.sh` uses port 3000, while the cockpit tooling and CORS defaults are centered on 5173/5174/5176/4173.
 
 ## 10. Testing and Validation
@@ -468,11 +467,10 @@ Relevant env vars:
 
 | Risk | Why it matters |
 |---|---|
-| Missing `requirements.txt` with a backend Dockerfile reference | Dockerized backend build will fail unless this is fixed or the Dockerfile is updated |
-| Dual agent stacks (legacy + new) | Easy to change one path and miss the other |
-| `outbound_dispatch_job.py` not registered | Outbox dispatch looks present but is not yet part of the automation registry |
-| `start.sh` port mismatch | Confusing local dev startup and UI access |
-| Health endpoint still says Phase 1 | Status banner is stale relative to the current feature set |
+| Dual agent stacks (legacy graph + `app.agents`) | Mitigated 2026-08-08 via `intake_facade.parse_intake_text` single parse entry; full graph rewrite still open |
+| Prod ERPNext / S3 authorized drills | Ops checklist: `docs/design-partner-erp-s3-checklist.md` — evidence still required |
+| Client portal was showing fake delivery tiers | Fixed 2026-08-08 — live rows only |
+| `quote_collect` external pull | Honest: payload-only, `external_pull=false` (use crawler/scraper for live) |
 | Worktree already has local edits | A new agent should avoid clobbering in-progress changes |
 
 ## 12. Handoff Notes for the Next Agent

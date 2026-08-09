@@ -9,10 +9,23 @@ logger = logging.getLogger("router")
 
 class Router:
     def __init__(self, token: str, operators: set[int]):
+        from config import CFG
+
         self.token = token
         self.operators = operators
-        self.api_base_url = os.environ.get("PARTSOPS_API_URL", "http://localhost:8000")
-        self.api_token = os.environ.get("PARTSOPS_API_TOKEN", "test-token")
+        self.api_base_url = (CFG.get("api_base_url") or os.environ.get("PARTSOPS_API_URL") or "http://localhost:8000").rstrip("/")
+        self.api_token = CFG.get("api_token") or os.environ.get("PARTSOPS_API_TOKEN") or ""
+        self.tenant_id = CFG.get("tenant_id") or os.environ.get("PARTSOPS_TENANT_ID") or "default"
+        self.insecure_ssl = bool(CFG.get("insecure_ssl")) or os.environ.get("PARTSOPS_INSECURE_SSL", "0") in {"1", "true", "yes"}
+
+    def _ssl_context(self):
+        import ssl
+
+        ctx = ssl.create_default_context()
+        if self.insecure_ssl:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        return ctx
 
     def send_message(self, chat_id: int, text: str, reply_to_message_id: int = None):
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
@@ -29,17 +42,15 @@ class Router:
             headers={"Content-Type": "application/json"}
         )
         try:
-            import ssl
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            with urllib.request.urlopen(req, context=ctx) as r:
+            with urllib.request.urlopen(req, context=self._ssl_context()) as r:
                 return json.loads(r.read().decode())
         except Exception as e:
             logger.error("Failed to send message: %r", e)
 
     def _call_pipeline_api(self, endpoint: str, payload: dict) -> dict:
         """Call the PartsOps AI Manager pipeline API"""
+        if not self.api_token:
+            return {"success": False, "error": "PARTSOPS_API_TOKEN is not configured"}
         url = f"{self.api_base_url}/api{endpoint}"
         req = urllib.request.Request(
             url,
@@ -47,15 +58,11 @@ class Router:
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_token}",
-                "X-Tenant-ID": "default",
+                "X-Tenant-ID": self.tenant_id,
             }
         )
         try:
-            import ssl
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            with urllib.request.urlopen(req, context=ctx, timeout=60) as r:
+            with urllib.request.urlopen(req, context=self._ssl_context(), timeout=60) as r:
                 return json.loads(r.read().decode())
         except Exception as e:
             logger.error("API call failed: %r", e)

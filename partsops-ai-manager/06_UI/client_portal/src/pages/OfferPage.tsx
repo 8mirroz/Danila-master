@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 interface LineItem {
-  part_name: string
-  sale_price: number
+  name?: string
+  part_name?: string
+  sale_price?: number
+  quantity?: number
   match_score?: number
 }
 
@@ -12,6 +14,16 @@ interface OfferView {
   status: string
   parts?: LineItem[]
   erp_invoice_ref?: string
+  erp_quotation_ref?: string
+}
+
+function formatRub(value: number | undefined): string {
+  if (value == null || Number.isNaN(Number(value))) return '—'
+  return `${Number(value).toLocaleString('ru-RU')} ₽`
+}
+
+function lineName(p: LineItem): string {
+  return p.part_name || p.name || 'Позиция'
 }
 
 export function OfferPage({ action }: { action?: 'accept' | 'reject' }) {
@@ -19,51 +31,118 @@ export function OfferPage({ action }: { action?: 'accept' | 'reject' }) {
   const navigate = useNavigate()
   const [offer, setOffer] = useState<OfferView | null>(null)
   const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!token) return
+    if (!token || token === 'default') {
+      setError('Укажите ссылку из письма или мессенджера (токен трекинга).')
+      setLoading(false)
+      return
+    }
     fetch(`/api/client/track/${token}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Not found')
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.detail || body.error || 'Предложение не найдено или ссылка истекла')
+        }
         return res.json()
       })
       .then(setOffer)
-      .catch(err => setError(err.message))
+      .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [token])
 
   const handleAccept = async () => {
-    const res = await fetch(`/api/client/track/${token}/accept`, { method: 'POST' })
-    if (res.ok) navigate(`/track/${token}`)
+    if (!token || busy) return
+    setBusy(true)
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/client/track/${token}/accept`, { method: 'POST' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.detail || body.error || 'Не удалось принять предложение')
+      }
+      navigate(`/track/${token}`)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const handleReject = async () => {
-    const res = await fetch(`/api/client/track/${token}/reject`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: rejectReason })
-    })
-    if (res.ok) navigate(`/track/${token}`)
+    if (!token || busy) return
+    setBusy(true)
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/client/track/${token}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: rejectReason }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.detail || body.error || 'Не удалось отклонить предложение')
+      }
+      navigate(`/track/${token}`)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  if (loading) return <div className="p-4">Loading...</div>
-  if (error) return <div className="p-4 text-red-400">Error: {error}</div>
-  if (!offer) return <div className="p-4">Offer not found</div>
+  if (loading) {
+    return (
+      <div className="p-6 text-center text-gray-300" role="status">
+        Загрузка предложения…
+      </div>
+    )
+  }
+  if (error) {
+    return (
+      <div className="max-w-xl mx-auto p-6">
+        <div className="rounded-lg border border-red-500/40 bg-red-950/30 p-5 text-red-200">
+          <p className="font-semibold">Нет данных предложения</p>
+          <p className="mt-1 text-sm text-red-200/80">{error}</p>
+          <p className="mt-3 text-xs text-gray-400">
+            Демо-пакеты и вымышленные сроки не показываются. Нужна действующая ссылка от оператора.
+          </p>
+        </div>
+      </div>
+    )
+  }
+  if (!offer) {
+    return <div className="p-6 text-gray-300">Предложение не найдено</div>
+  }
 
   if (action === 'accept') {
     return (
       <div className="max-w-xl mx-auto">
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-xl font-bold mb-4">Confirm Acceptance</h2>
-          <p className="mb-6">Are you sure you want to accept the offer for {offer.request_id}?</p>
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <h2 className="text-xl font-bold mb-4">Подтвердить принятие</h2>
+          <p className="mb-6 text-gray-300">
+            Принять коммерческое предложение по заявке <strong>{offer.request_id}</strong>?
+          </p>
+          {actionError && <p className="mb-4 text-sm text-red-400">{actionError}</p>}
           <div className="flex gap-4">
-            <button onClick={handleAccept} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded">
-              Yes, Accept
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleAccept()}
+              className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-4 py-2 rounded font-semibold"
+            >
+              {busy ? 'Отправка…' : 'Да, принять'}
             </button>
-            <button onClick={() => navigate(-1)} className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded">
-              Cancel
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded"
+            >
+              Отмена
             </button>
           </div>
         </div>
@@ -74,21 +153,31 @@ export function OfferPage({ action }: { action?: 'accept' | 'reject' }) {
   if (action === 'reject') {
     return (
       <div className="max-w-xl mx-auto">
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-xl font-bold mb-4">Reject Offer</h2>
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <h2 className="text-xl font-bold mb-4">Отклонить предложение</h2>
           <textarea
-            className="w-full bg-gray-700 text-white p-3 rounded mb-4"
+            className="w-full bg-gray-700 text-white p-3 rounded mb-4 border border-gray-600"
             rows={3}
-            placeholder="Reason for rejection (optional)"
+            placeholder="Причина отклонения (необязательно)"
             value={rejectReason}
-            onChange={e => setRejectReason(e.target.value)}
+            onChange={(e) => setRejectReason(e.target.value)}
           />
+          {actionError && <p className="mb-4 text-sm text-red-400">{actionError}</p>}
           <div className="flex gap-4">
-            <button onClick={handleReject} className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
-              Confirm Rejection
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleReject()}
+              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 px-4 py-2 rounded font-semibold"
+            >
+              {busy ? 'Отправка…' : 'Подтвердить отклонение'}
             </button>
-            <button onClick={() => navigate(-1)} className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded">
-              Cancel
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded"
+            >
+              Отмена
             </button>
           </div>
         </div>
@@ -96,73 +185,83 @@ export function OfferPage({ action }: { action?: 'accept' | 'reject' }) {
     )
   }
 
+  const parts = offer.parts || []
+  const canAct = offer.status === 'SENT_TO_CLIENT'
+
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="bg-gray-800 rounded-lg p-6 mb-4">
-        <h2 className="text-2xl font-bold mb-2">Your Offer</h2>
-        <p className="text-gray-400">Request: {offer.request_id}</p>
-        {offer.erp_invoice_ref && <p className="text-gray-400">Invoice: {offer.erp_invoice_ref}</p>}
+      <div className="bg-gray-800 rounded-lg p-6 mb-4 border border-gray-700">
+        <h2 className="text-2xl font-bold mb-2">Ваше предложение</h2>
+        <p className="text-gray-400">Заявка: {offer.request_id}</p>
+        <p className="text-gray-400">Статус: {offer.status}</p>
+        {offer.erp_invoice_ref && (
+          <p className="text-gray-400">Счёт: {offer.erp_invoice_ref}</p>
+        )}
+        {offer.erp_quotation_ref && (
+          <p className="text-gray-400">КП: {offer.erp_quotation_ref}</p>
+        )}
       </div>
 
-      {offer.parts && (
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h3 className="text-lg font-bold mb-4">Line Items</h3>
+      {parts.length === 0 ? (
+        <div
+          className="bg-gray-800/80 rounded-lg p-6 mb-6 border border-dashed border-gray-600 text-center"
+          role="status"
+        >
+          <p className="font-semibold text-gray-200">Позиции ещё не заполнены</p>
+          <p className="mt-1 text-sm text-gray-400">
+            Оператор не опубликовал строки заказа. Вымышленные пакеты «Оригинал / Tier-1 / Эконом» не
+            показываются.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
+          <h3 className="text-lg font-bold mb-4">Позиции</h3>
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-gray-700">
-                <th className="pb-2">Part</th>
-                <th className="pb-2">Price</th>
-                <th className="pb-2">Match</th>
+              <tr className="border-b border-gray-700 text-gray-400 text-sm">
+                <th className="pb-2 font-medium">Деталь</th>
+                <th className="pb-2 font-medium">Кол-во</th>
+                <th className="pb-2 font-medium">Цена</th>
               </tr>
             </thead>
             <tbody>
-              {offer.parts.map((p, i) => (
+              {parts.map((p, i) => (
                 <tr key={i} className="border-b border-gray-800">
-                  <td className="py-2">{p.part_name}</td>
-                  <td className="py-2 text-green-400 font-bold">${p.sale_price}</td>
-                  <td>{p.match_score ? `${Math.round(p.match_score)}%` : 'N/A'}</td>
+                  <td className="py-2">{lineName(p)}</td>
+                  <td className="py-2">{p.quantity ?? 1}</td>
+                  <td className="py-2 text-emerald-400 font-semibold">{formatRub(p.sale_price)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <p className="mt-3 text-[11px] text-gray-500">
+            Цены клиентские; закупка и маржа скрыты. Совпадение match_score не показывается клиенту.
+          </p>
         </div>
       )}
 
-      {/* Multi-tier packages */}
-      <div className="mb-6">
-        <h3 className="text-xl font-bold mb-4">Выберите вариант поставки</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="border border-blue-500/30 bg-blue-950/20 rounded-lg p-4 cursor-pointer hover:border-blue-500 transition-all">
-            <span className="bg-blue-600 text-xs px-2 py-0.5 rounded font-bold uppercase">Оригинал OEM</span>
-            <h4 className="text-lg font-bold mt-2">100% Заводское качество</h4>
-            <p className="text-xs text-gray-400 mt-1">Официальные комплектующие от производителя</p>
-            <div className="mt-4 text-xl font-extrabold text-blue-400">Срок: 1 дн.</div>
-          </div>
-
-          <div className="border border-emerald-500 bg-emerald-950/30 rounded-lg p-4 cursor-pointer ring-2 ring-emerald-500">
-            <span className="bg-emerald-600 text-xs px-2 py-0.5 rounded font-bold uppercase">Оптимум (Tier-1)</span>
-            <h4 className="text-lg font-bold mt-2">Европейские аналоги</h4>
-            <p className="text-xs text-gray-400 mt-1">Bosch, Lemforder, Sachs — максимальная надёжность</p>
-            <div className="mt-4 text-xl font-extrabold text-emerald-400">Срок: 2 дн.</div>
-          </div>
-
-          <div className="border border-amber-500/30 bg-amber-950/20 rounded-lg p-4 cursor-pointer hover:border-amber-500 transition-all">
-            <span className="bg-amber-600 text-xs px-2 py-0.5 rounded font-bold uppercase">Эконом</span>
-            <h4 className="text-lg font-bold mt-2">Бюджетная выгода</h4>
-            <p className="text-xs text-gray-400 mt-1">Проверенные дубликаты в наличии</p>
-            <div className="mt-4 text-xl font-extrabold text-amber-400">Срок: 1 дн.</div>
-          </div>
+      {canAct ? (
+        <div className="mt-2 flex flex-wrap gap-4">
+          <button
+            type="button"
+            onClick={() => navigate(`/offer/${token}/accept`)}
+            className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded font-bold"
+          >
+            Принять
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(`/offer/${token}/reject`)}
+            className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded font-bold"
+          >
+            Отклонить
+          </button>
         </div>
-      </div>
-
-      <div className="mt-6 flex gap-4">
-        <button onClick={() => navigate(`/offer/${token}/accept`)} className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded font-bold">
-          Accept Offer
-        </button>
-        <button onClick={() => navigate(`/offer/${token}/reject`)} className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded font-bold">
-          Reject Offer
-        </button>
-      </div>
+      ) : (
+        <p className="text-sm text-gray-400">
+          Действия accept/reject доступны только в статусе SENT_TO_CLIENT (текущий: {offer.status}).
+        </p>
+      )}
     </div>
   )
 }

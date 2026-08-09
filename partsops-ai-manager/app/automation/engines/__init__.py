@@ -90,14 +90,14 @@ ENGINE_REGISTRY = {
     "erp_hub": {
         "module": "app.automation.engines.erp_hub_engine",
         "entry": "route_erp",
-        "wired": False,
-        "description": "Not wired — use erp_adapter / erp_sync_job",
+        "wired": True,
+        "description": "Routes to erp_connector when session+request_id; else not_wired",
     },
     "vendor_query": {
         "module": "app.automation.engines.vendor_query_engine",
         "entry": "query_vendor",
-        "wired": False,
-        "description": "Not wired — use my-crawler / supplier tables",
+        "wired": True,
+        "description": "DB catalog match via matcher when session+query; live scrape stays in crawler",
     },
 }
 

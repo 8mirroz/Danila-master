@@ -7,9 +7,14 @@ import pytest
 from sqlmodel import Session, SQLModel, select
 
 from database import engine
-from models import OutboundMessage, PartRequest, RequestState
+from models import ERPSyncLog, OutboundMessage, PartRequest, RequestState
 from app.automation.context import AutomationContext
-from app.automation.jobs import notify_owner_job, dead_letter_cleanup_job
+from app.automation.jobs import (
+    notify_owner_job,
+    dead_letter_cleanup_job,
+    po_create_job,
+    quote_collect_job,
+)
 from app.automation.engines.vin_query_engine import decode_vin
 
 
@@ -243,3 +248,70 @@ def test_decode_vin_empty():
     assert result["decoded"] is False
     assert result["reason"] == "empty_vin"
     assert result.get("reason") != "stub"
+
+
+# ── B-PO po_create honesty ───────────────────────────────────────
+
+
+def test_po_create_local_draft_not_success():
+    with Session(engine) as session:
+        _make_request(session, request_id="REQ-PO-1")
+        ctx = AutomationContext(
+            tenant_id="default",
+            actor_id="test",
+            dry_run=False,
+            payload={"items": [{"request_id": "REQ-PO-1"}]},
+        )
+        result = po_create_job.run(session, ctx)
+        assert result["ok"] is True
+        assert result["created"] == 1
+        assert result["local_draft_only"] is True
+        assert result["erp_synced"] is False
+        assert result["status"] == "LOCAL_DRAFT"
+
+        log = session.exec(select(ERPSyncLog).where(ERPSyncLog.request_id == "REQ-PO-1")).first()
+        assert log is not None
+        assert log.status == "LOCAL_DRAFT"
+        assert log.status != "SUCCESS"
+        assert log.last_error == "local_draft_only_not_sent_to_erp"
+
+
+def test_quote_collect_empty_payload_is_partial_no_external_pull():
+    with Session(engine) as session:
+        ctx = AutomationContext(
+            tenant_id="default",
+            actor_id="test",
+            dry_run=False,
+            payload={},
+        )
+        result = quote_collect_job.run(session, ctx)
+        assert result["ok"] is True
+        assert result["collected"] == 0
+        assert result["status"] == "partial"
+        assert result["external_pull"] is False
+        assert "empty_offers" in (result.get("reason") or "")
+
+
+def test_quote_collect_records_payload_offers():
+    with Session(engine) as session:
+        _make_request(session, request_id="REQ-QC-1")
+        ctx = AutomationContext(
+            tenant_id="default",
+            actor_id="test",
+            dry_run=False,
+            payload={
+                "offers": [
+                    {
+                        "request_id": "REQ-QC-1",
+                        "offer_id": "OFF-1",
+                        "supplier_id": "SUP-1",
+                        "amount": 1200,
+                    }
+                ]
+            },
+        )
+        result = quote_collect_job.run(session, ctx)
+        assert result["ok"] is True
+        assert result["collected"] == 1
+        assert result["status"] == "ok"
+        assert result["external_pull"] is False

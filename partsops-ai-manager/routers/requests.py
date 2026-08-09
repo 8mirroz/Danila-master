@@ -259,7 +259,7 @@ async def import_from_artifact(
     stored_path = artifact.stored_path
     
     def _do_import() -> dict:
-        from agents import process_intake_request
+        from app.agents.intake_facade import parse_intake_text
         from services.supplier_service import _parse_supplier_table_file, _extract_supplier_table_rows
         from event_store import emit_event, EventType
         
@@ -277,8 +277,8 @@ async def import_from_artifact(
         
         text_content = "\n".join(text_parts) if text_parts else f"File upload: {filename}"
         
-        intake_result = process_intake_request(
-            text=text_content,
+        intake_result = parse_intake_text(
+            text_content,
             priority=payload.priority,
             tenant_id=tenant_id,
         )

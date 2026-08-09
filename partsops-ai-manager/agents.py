@@ -1,10 +1,11 @@
 """
 PartsOps AI Manager v3 — Agent Graph (legacy compatibility shim).
 
-Original intake graph and helpers were moved to
-``app.agents.legacy_intake_pipeline``; this file re-exports the same symbols
-so existing ``from agents import ...`` call sites keep working without
-regression.  New code should import from ``app.agents.*`` instead.
+Original intake graph and helpers live in ``app.agents.legacy_intake_pipeline``.
+Public parse entry is ``app.agents.intake_facade.parse_intake_text`` (re-exported
+as ``process_intake_request`` for backward compatibility).
+
+New code should import from ``app.agents.intake_facade`` or ``app.agents``.
 """
 from __future__ import annotations
 
@@ -26,6 +27,11 @@ _LEGACY_ATTRS: set[str] = {
 
 
 def __getattr__(name: str) -> Any:
+    if name == "process_intake_request":
+        from app.agents.intake_facade import parse_intake_text
+
+        globals()[name] = parse_intake_text
+        return parse_intake_text
     if name in _LEGACY_ATTRS:
         mod = importlib.import_module("app.agents.legacy_intake_pipeline")
         value = getattr(mod, name)

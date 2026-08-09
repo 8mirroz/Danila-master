@@ -24,11 +24,10 @@ from router import Router
 
 
 def _ssl_ctx() -> ssl.SSLContext:
-    # pyhon-telegram-bot trusts default CA; Mac python3.14 + corp proxy sometimes
-    # hiccups with self-signed MITM CA. We don't ship a CA bundle, so we relax
-    # only for outbound Telegram calls. Production deployments should pin CA.
+    # Default: verify TLS. Opt-in insecure only via PARTSOPS_INSECURE_SSL=1
+    # (corp MITM proxies / local debug). Production should pin CA / leave default.
     ctx = ssl.create_default_context()
-    if os.environ.get("PARTSOPS_INSECURE_SSL"):
+    if os.environ.get("PARTSOPS_INSECURE_SSL", "0").lower() in {"1", "true", "yes", "on"}:
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     return ctx

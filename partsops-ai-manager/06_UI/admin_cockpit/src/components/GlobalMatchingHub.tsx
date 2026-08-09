@@ -303,14 +303,17 @@ export const GlobalMatchingHub: React.FC<GlobalMatchingHubProps> = ({
 
               <div className="pt-2">
                 <button
+                  type="button"
                   onClick={() => {
-                    const demoOem = '34116852253';
-                    setSearchOem(demoOem);
-                    void performSearch(demoOem);
+                    // Example OEM only seeds the search field; results come from live API/catalog.
+                    const exampleOem = '34116852253';
+                    setSearchOem(exampleOem);
+                    void performSearch(exampleOem);
                   }}
                   className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                  title="Запускает реальный поиск по каталогу, не подставляет fake rows"
                 >
-                  Попробовать демо-поиск (34116852253)
+                  Пример поиска OEM 34116852253 (live API)
                 </button>
               </div>
             </div>

@@ -87,10 +87,10 @@ class IntakeAgent(BaseAgent):
         masked_text = pii_result.get("masked_text", source_input.raw_text)
         vehicle_context = pii_result.get("vehicle_context", {})
         
-        # Extract structured data using the existing intake pipeline
-        from agents import process_intake_request
-        intake_result = process_intake_request(
-            text=masked_text,
+        # Extract structured data via single public intake facade
+        from app.agents.intake_facade import parse_intake_text
+        intake_result = parse_intake_text(
+            masked_text,
             priority=source_input.priority,
             vehicle_context=vehicle_context,
             tenant_id=context.tenant_id,

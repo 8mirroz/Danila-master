@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 
 from app.agents.base_agent import BaseAgent, AgentContext, AgentResult, AgentType
 from models import PartRequest, EventType, RequestState, ApprovalTicket
-from agents import process_intake_request
 from policy_engine import policy_engine
 from pricing import compute_price, check_margin_guard, PricingContext
 from intelligence import get_90d_median_price, assess_return_risk

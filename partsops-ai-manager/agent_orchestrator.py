@@ -33,32 +33,31 @@ class OrchestrationResponse(BaseModel):
 
 class AgentOrchestrator:
     """
-    Оркестратор агентов: запускает LangGraph workflow и возвращает структурированный результат.
-    Инкапсулирует импорт из agents.py для единообразия API.
+    Оркестратор агентов: intake parse через единый facade (app.agents.intake_facade).
     """
 
     def __init__(self) -> None:
-        # Импортируем реальную функцую из agents.py
-        from agents import process_intake_request
-        self._process = process_intake_request
+        from app.agents.intake_facade import parse_intake_text
+        self._process = parse_intake_text
 
     def run(self, req: OrchestrationRequest) -> OrchestrationResponse:
         """
-        Выполнить workflow для инфо-запроса.
+        Выполнить intake parse для инфо-запроса.
         """
         try:
+            vehicle_context = None
+            if req.vehicle_vin:
+                vehicle_context = {"vin": req.vehicle_vin}
             result = self._process(
-                raw_request=req.raw_request,
-                customer_name=req.customer_name,
-                customer_phone=req.customer_phone,
-                customer_email=req.customer_email,
-                vehicle_vin=req.vehicle_vin,
+                req.raw_request,
                 priority=req.priority,
+                vehicle_context=vehicle_context,
+                tenant_id=req.tenant_id,
             )
 
             return OrchestrationResponse(
                 request_id=result.get("request_id", "unknown"),
-                status=result.get("status", "processed"),
+                status=result.get("status") or result.get("validation_status") or "processed",
                 result=result,
                 trace=result.get("agent_trace", []),
             )

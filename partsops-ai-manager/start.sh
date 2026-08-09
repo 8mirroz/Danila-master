@@ -120,27 +120,38 @@ else
   echo "    Queued pipeline runs stay in 'queued' until a worker claims them."
 fi
 
-# 3. Start Frontend (Vite - Port 5173)
-echo "Starting Frontend (Vite)..."
+# 3. Start Frontend (admin_cockpit Vite — default 5173, matches CORS + vite.config)
+FRONTEND_PORT="${PARTSOPS_FRONTEND_PORT:-5173}"
+echo "Starting Frontend (Vite :${FRONTEND_PORT})..."
 if [ -d "06_UI/admin_cockpit" ]; then
   cd 06_UI/admin_cockpit
-  npm run dev -- --host 0.0.0.0 --port 5173 &
+  if [ ! -d "node_modules" ]; then
+    echo "[i] admin_cockpit/node_modules missing — run npm ci in 06_UI/admin_cockpit if UI fails to start"
+  fi
+  npm run dev -- --host 0.0.0.0 --port "${FRONTEND_PORT}" &
   FRONTEND_PID=$!
-  cd ../..
+  cd "${SCRIPT_DIR}"
+else
+  echo "[!] 06_UI/admin_cockpit not found — UI not started"
+  FRONTEND_PID=""
 fi
 
 echo "======================================================="
 echo " All services running:"
 echo " Backend:  http://localhost:8000"
-echo " Frontend: http://localhost:5173"
+echo " Frontend: http://localhost:${FRONTEND_PORT}  (admin_cockpit; not :3000)"
 echo " Hermes:   http://127.0.0.1:8642 (Internal)"
 if [ -n "${PIPELINE_WORKER_PID}" ]; then
   echo " Worker:   pipeline_worker PID ${PIPELINE_WORKER_PID}"
 fi
+echo " CORS:     PARTSOPS_CORS_ORIGINS includes :5173/:5174/:4173"
 echo "======================================================="
 
-if [ -n "${PIPELINE_WORKER_PID}" ]; then
-  wait ${BACKEND_PID} ${FRONTEND_PID} ${PIPELINE_WORKER_PID}
-else
-  wait ${BACKEND_PID} ${FRONTEND_PID}
+WAIT_PIDS=("${BACKEND_PID}")
+if [ -n "${FRONTEND_PID:-}" ]; then
+  WAIT_PIDS+=("${FRONTEND_PID}")
 fi
+if [ -n "${PIPELINE_WORKER_PID:-}" ]; then
+  WAIT_PIDS+=("${PIPELINE_WORKER_PID}")
+fi
+wait "${WAIT_PIDS[@]}"

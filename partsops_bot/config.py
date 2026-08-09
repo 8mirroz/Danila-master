@@ -70,6 +70,13 @@ def _level(name: str, fallback: str) -> str:
     return {"DEBUG": "DEBUG", "INFO": "INFO", "WARN": "WARNING", "WARNING": "WARNING", "ERROR": "ERROR", "CRITICAL": "CRITICAL"}.get(v, fallback)
 
 
+def _bool_env(name: str, default: bool = False) -> bool:
+    raw = _first(name)
+    if raw is None or raw == "":
+        return default
+    return str(raw).lower() in {"1", "true", "yes", "on"}
+
+
 CFG: dict = {
     "token": _first("PARTSOPS_TG_TOKEN") or "",
     "bot_username": _first("PARTSOPS_TG_BOT_USERNAME") or "bot",
@@ -84,6 +91,12 @@ CFG: dict = {
     "webhook_path": _first("PARTSOPS_WEBHOOK_PATH", "/partsops/tg"),
     "webhook_port": int(_first("PARTSOPS_WEBHOOK_PORT") or 8777),
     "debug": os.environ.get("PARTSOPS_DEBUG", "0").lower() in {"1", "true", "yes"},
+    # API client
+    "api_base_url": _first("PARTSOPS_API_URL", "http://localhost:8000"),
+    "api_token": _first("PARTSOPS_API_TOKEN") or "",
+    "tenant_id": _first("PARTSOPS_TENANT_ID", "default"),
+    # TLS: default secure; only relax when PARTSOPS_INSECURE_SSL=1 explicitly
+    "insecure_ssl": _bool_env("PARTSOPS_INSECURE_SSL", False),
 }
 
 

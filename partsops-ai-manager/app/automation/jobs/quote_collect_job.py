@@ -1,4 +1,10 @@
-"""Collects incoming supplier offers/quotes and emits OFFER_RECEIVED."""
+"""Collects incoming supplier offers/quotes and emits OFFER_RECEIVED.
+
+Honesty:
+- This job does **not** pull from external supplier APIs or the crawler.
+- It only records offers provided in ``context.payload["offers"]``.
+- Empty payload → partial, not a silent success that implies market coverage.
+"""
 from __future__ import annotations
 
 import logging
@@ -17,7 +23,28 @@ logger = logging.getLogger("automation.jobs.quote_collect")
 def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
     offers = context.payload.get("offers") or []
     if context.dry_run:
-        return {"ok": True, "dry_run": True, "collected": 0, "skipped": len(offers)}
+        return {
+            "ok": True,
+            "dry_run": True,
+            "collected": 0,
+            "skipped": len(offers),
+            "external_pull": False,
+            "reason": "dry_run",
+        }
+
+    if not offers:
+        logger.info(
+            "quote_collect: empty offers payload (no external supplier pull); tenant=%s",
+            context.tenant_id,
+        )
+        return {
+            "ok": True,
+            "collected": 0,
+            "skipped": 0,
+            "status": "partial",
+            "external_pull": False,
+            "reason": "empty_offers_payload; pass offers[] or use live_scraper / crawler bridge",
+        }
 
     collected = 0
     skipped = 0
@@ -44,7 +71,15 @@ def run(session: Session, context: AutomationContext) -> Dict[str, Any]:
                 "offer_id": offer.get("offer_id"),
                 "supplier_id": offer.get("supplier_id"),
                 "amount": offer.get("amount"),
+                "source": offer.get("source") or "payload",
             },
         )
         collected += 1
-    return {"ok": True, "collected": collected, "skipped": skipped}
+    return {
+        "ok": True,
+        "collected": collected,
+        "skipped": skipped,
+        "status": "ok" if collected else "partial",
+        "external_pull": False,
+        "reason": None if collected else "no_offers_applied",
+    }

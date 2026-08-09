@@ -436,7 +436,7 @@ class ERPSyncLog(SQLModel, table=True):
     erp_document_name: Optional[str] = None
     idempotency_key: str = Field(index=True)
 
-    status: str = Field(default="PENDING")  # PENDING|SUCCESS|FAILED|RETRYING
+    status: str = Field(default="PENDING")  # PENDING|SUCCESS|FAILED|RETRYING|LOCAL_DRAFT
     attempt_count: int = Field(default=0)
     last_error: Optional[str] = None
     erp_response_json: Optional[str] = None
