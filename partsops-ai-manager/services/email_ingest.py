@@ -1,21 +1,25 @@
-"""Inbound RFQ email ingest (C1): verify webhook, map tenant, idempotent store.
+"""Inbound RFQ email ingest.
 
-C2 will attach artifacts and call create_request; this module stops at parsed/rejected.
+C1: verify webhook, map tenant, idempotent store.
+C2: attachments → UploadArtifact; ingest → RequestService.create_request (source=EMAIL).
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
 import re
 import uuid
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
+from models import UploadArtifact
 from models_email import EmailInboxConfig, EmailMessage
 from pii import mask_email, secure_pre_parse
 from settings import settings
@@ -215,17 +219,19 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
     excerpt = (parsed.get("masked_text") or "")[:MAX_EXCERPT]
 
     attachments_meta = payload.get("attachments") or []
+    if not isinstance(attachments_meta, list):
+        attachments_meta = []
     attachment_names: list[str] = []
-    if isinstance(attachments_meta, list):
-        for att in attachments_meta:
-            if not isinstance(att, dict):
-                continue
-            name = str(att.get("filename") or "")
-            ext = Path(name).suffix.lower()
-            if ext and ext not in ALLOWED_ATTACHMENT_EXT:
-                if status != "rejected":
-                    status = "rejected"
-                    rejection = f"disallowed_attachment:{ext or 'unknown'}"
+    for att in attachments_meta:
+        if not isinstance(att, dict):
+            continue
+        name = str(att.get("filename") or "")
+        ext = Path(name).suffix.lower()
+        if ext and ext not in ALLOWED_ATTACHMENT_EXT:
+            if status != "rejected":
+                status = "rejected"
+                rejection = f"disallowed_attachment:{ext or 'unknown'}"
+        if name:
             attachment_names.append(name)
 
     uri, digest = _store_raw_payload(cfg.tenant_id, message_id, payload)
@@ -242,8 +248,27 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
     else:
         received_at = now_naive
 
+    emsg_id = f"emsg-{uuid.uuid4().hex[:12]}"
+    artifact_ids: list[str] = []
+    if status != "rejected":
+        artifact_ids, attach_errors = store_attachments(
+            session,
+            tenant_id=cfg.tenant_id,
+            email_message_id=emsg_id,
+            attachments=attachments_meta,
+        )
+        if attach_errors and not artifact_ids and not excerpt.strip():
+            # only attachments and all failed
+            status = "rejected"
+            rejection = attach_errors[0]
+        elif attach_errors:
+            # keep parsed but record honesty flags
+            pass
+    else:
+        attach_errors = []
+
     msg = EmailMessage(
-        id=f"emsg-{uuid.uuid4().hex[:12]}",
+        id=emsg_id,
         tenant_id=cfg.tenant_id,
         provider_message_id=message_id,
         provider=provider,
@@ -256,31 +281,309 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
         body_masked_excerpt=excerpt,
         status=status,
         rejection_reason=rejection,
-        attachment_artifact_ids_json="[]",  # C2 binds UploadArtifact ids
+        attachment_artifact_ids_json=json.dumps(artifact_ids, ensure_ascii=False),
         auth_results_json=json.dumps(payload.get("auth_results") or {}, ensure_ascii=False),
         created_at=now_naive,
         updated_at=now_naive,
     )
-    # stash attachment filenames in auth_results side channel for C1 visibility
+    ar = msg.auth_results
     if attachment_names:
-        ar = msg.auth_results
         ar["attachment_filenames"] = attachment_names
-        msg.auth_results = ar
+    if attach_errors:
+        ar["attachment_errors"] = attach_errors
+    msg.auth_results = ar
 
+    session.add(msg)
+    session.commit()
+    session.refresh(msg)
+
+    result: dict[str, Any] = {
+        "email_message_id": msg.id,
+        "status": msg.status,
+        "tenant_id": msg.tenant_id,
+        "auto_ingest": cfg.auto_ingest,
+        "attachment_artifact_ids": artifact_ids,
+        "note": None,
+    }
+
+    # C2: optional auto promote when configured and content is usable
+    if cfg.auto_ingest and msg.status == "parsed" and _has_usable_ingest_content(msg):
+        try:
+            ingested = ingest_message(session, cfg.tenant_id, msg.id)
+            result.update({
+                "status": ingested.get("status"),
+                "request_id": ingested.get("request_id"),
+                "auto_ingested": True,
+                "note": "auto_ingest created request",
+            })
+        except Exception as exc:  # honesty: leave parsed, surface error
+            session.refresh(msg)
+            ar = msg.auth_results
+            ar["auto_ingest_error"] = str(exc)[:500]
+            msg.auth_results = ar
+            msg.updated_at = utc_now().replace(tzinfo=None)
+            session.add(msg)
+            session.commit()
+            result["note"] = f"auto_ingest failed: {exc}"
+            result["auto_ingested"] = False
+    elif msg.status == "parsed":
+        result["note"] = "stored for operator review; POST …/ingest to create_request"
+
+    return result
+
+
+def _max_attachment_bytes() -> int:
+    mb = min(int(settings.EMAIL_MAX_ATTACHMENT_MB), int(settings.MAX_UPLOAD_SIZE_MB))
+    return max(1, mb) * 1024 * 1024
+
+
+def _safe_filename(name: str) -> str:
+    base = Path(name or "attachment.bin").name
+    cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", base).strip("._") or "attachment.bin"
+    return cleaned[:180]
+
+
+def store_attachments(
+    session: Session,
+    *,
+    tenant_id: str,
+    email_message_id: str,
+    attachments: list[Any],
+) -> tuple[list[str], list[str]]:
+    """Decode base64 attachments → UploadArtifact rows. Returns (ids, errors)."""
+    artifact_ids: list[str] = []
+    errors: list[str] = []
+    max_bytes = _max_attachment_bytes()
+    base = Path(settings.UPLOAD_DIR).absolute() / tenant_id / "emails" / email_message_id
+    now_naive = utc_now().replace(tzinfo=None)
+
+    for att in attachments:
+        if not isinstance(att, dict):
+            continue
+        filename = str(att.get("filename") or "attachment.bin")
+        ext = Path(filename).suffix.lower()
+        b64 = att.get("bytes_base64")
+        if not b64:
+            # metadata-only — no fake artifact
+            continue
+        if ext and ext not in ALLOWED_ATTACHMENT_EXT:
+            errors.append(f"disallowed_attachment:{ext}")
+            continue
+        try:
+            raw = base64.b64decode(str(b64), validate=False)
+        except Exception:
+            errors.append(f"invalid_base64:{filename}")
+            continue
+        if not raw:
+            errors.append(f"empty_attachment:{filename}")
+            continue
+        if len(raw) > max_bytes:
+            errors.append(f"attachment_too_large:{filename}")
+            continue
+
+        artifact_id = f"art_{uuid.uuid4().hex[:12]}"
+        safe = _safe_filename(filename)
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            stored = base / f"{artifact_id}_{safe}"
+            stored.write_bytes(raw)
+        except OSError as exc:
+            errors.append(f"store_failed:{filename}:{exc}")
+            continue
+
+        digest = hashlib.sha256(raw).hexdigest()
+        artifact = UploadArtifact(
+            artifact_id=artifact_id,
+            tenant_id=tenant_id,
+            request_id=None,
+            original_filename=filename,
+            safe_filename=safe,
+            stored_path=str(stored),
+            content_type=str(att.get("content_type") or ""),
+            size_bytes=len(raw),
+            sha256=digest,
+            source="email",
+            uploaded_by="email_webhook",
+            status="stored",
+            created_at=now_naive,
+        )
+        session.add(artifact)
+        artifact_ids.append(artifact_id)
+
+    if artifact_ids:
+        session.flush()
+    return artifact_ids, errors
+
+
+def _has_usable_ingest_content(msg: EmailMessage) -> bool:
+    if (msg.body_masked_excerpt or "").strip():
+        return True
+    return bool(msg.attachment_artifact_ids)
+
+
+def _text_from_spreadsheet_artifact(artifact: UploadArtifact) -> str:
+    """Best-effort row dump using supplier/RFQ table parser (honest empty on failure)."""
+    try:
+        from services.supplier_service import (
+            _extract_supplier_table_rows,
+            _parse_supplier_table_file,
+        )
+
+        raw_rows, _ = _parse_supplier_table_file(
+            artifact.stored_path,
+            artifact.original_filename,
+            artifact.content_type or "",
+        )
+        normalized_rows, _, _ = _extract_supplier_table_rows(raw_rows)
+        parts: list[str] = []
+        for row in normalized_rows:
+            part_name = row.get("part_name") or row.get("description") or ""
+            if not part_name:
+                continue
+            oem = row.get("oem_number", "")
+            brand = row.get("brand", "")
+            qty = row.get("stock_qty") or row.get("quantity") or 1
+            parts.append(f"{part_name} {oem} {brand} x{qty}".strip())
+        return "\n".join(parts)
+    except Exception:
+        return ""
+
+
+def _text_from_txt_artifact(artifact: UploadArtifact) -> str:
+    try:
+        path = Path(artifact.stored_path)
+        if not path.is_file():
+            return ""
+        if path.suffix.lower() not in {".txt", ".csv"}:
+            return ""
+        return path.read_text(encoding="utf-8", errors="replace")[:MAX_EXCERPT]
+    except OSError:
+        return ""
+
+
+def build_ingest_text(session: Session, msg: EmailMessage) -> str:
+    chunks: list[str] = []
+    subject = (msg.subject or "").strip()
+    body = (msg.body_masked_excerpt or "").strip()
+    if subject:
+        chunks.append(f"Subject: {subject}")
+    if body:
+        chunks.append(body)
+
+    for aid in msg.attachment_artifact_ids:
+        art = session.exec(
+            select(UploadArtifact).where(
+                UploadArtifact.artifact_id == aid,
+                UploadArtifact.tenant_id == msg.tenant_id,
+            )
+        ).first()
+        if not art:
+            continue
+        ext = Path(art.original_filename or "").suffix.lower()
+        extracted = ""
+        if ext in {".xlsx", ".xls", ".csv"}:
+            extracted = _text_from_spreadsheet_artifact(art)
+        if not extracted and ext in {".txt", ".csv"}:
+            extracted = _text_from_txt_artifact(art)
+        if extracted.strip():
+            chunks.append(f"[attachment {art.original_filename}]\n{extracted.strip()}")
+        else:
+            chunks.append(
+                f"[attachment {art.original_filename} stored as {art.artifact_id}; "
+                f"no text extract — may need manual parse]"
+            )
+
+    text = "\n\n".join(chunks).strip()
+    if not text:
+        text = (
+            f"Email RFQ {msg.id}: empty body and no extractable attachments. "
+            f"Subject was empty. Operator review required."
+        )
+    return text[: max(MAX_EXCERPT * 2, 16000)]
+
+
+def _invoke_create_request(
+    tenant_id: str,
+    payload: dict[str, Any],
+    idempotency_key: str,
+) -> dict[str, Any]:
+    """Indirection for tests (monkeypatch) and R7-compliant RequestService."""
+    from services.request_service import RequestService
+
+    return RequestService.create_request(tenant_id, payload, idempotency_key)
+
+
+def ingest_message(
+    session: Session,
+    tenant_id: str,
+    message_id: str,
+) -> dict[str, Any]:
+    """Promote EmailMessage → PartRequest (source=EMAIL), link artifacts."""
+    msg = session.get(EmailMessage, message_id)
+    if not msg or msg.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Email message not found")
+
+    if msg.status == "ingested" and msg.request_id:
+        return {
+            "email_message_id": msg.id,
+            "request_id": msg.request_id,
+            "status": "ingested",
+            "idempotent": True,
+            "attachment_artifact_ids": msg.attachment_artifact_ids,
+        }
+
+    if msg.status in {"rejected", "duplicate"}:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot ingest message in status={msg.status}",
+        )
+
+    cfg = get_inbox_config(session, tenant_id)
+    priority = (cfg.default_priority if cfg else None) or "normal"
+    text_content = build_ingest_text(session, msg)
+    idem_key = f"email:{tenant_id}:{msg.provider_message_id}"
+
+    payload = {
+        "source": "EMAIL",
+        "text": text_content,
+        "customer_name": "Email RFQ",
+        "priority": priority,
+    }
+
+    created = _invoke_create_request(tenant_id, payload, idem_key)
+    request_obj = created.get("request") or {}
+    request_id = request_obj.get("request_id")
+    if not request_id:
+        raise HTTPException(status_code=500, detail="create_request returned no request_id")
+
+    now_naive = utc_now().replace(tzinfo=None)
+    for aid in msg.attachment_artifact_ids:
+        art = session.exec(
+            select(UploadArtifact).where(
+                UploadArtifact.artifact_id == aid,
+                UploadArtifact.tenant_id == tenant_id,
+            )
+        ).first()
+        if not art:
+            continue
+        art.request_id = request_id
+        art.status = "attached"
+        session.add(art)
+
+    msg.status = "ingested"
+    msg.request_id = request_id
+    msg.updated_at = now_naive
     session.add(msg)
     session.commit()
     session.refresh(msg)
 
     return {
         "email_message_id": msg.id,
-        "status": msg.status,
-        "tenant_id": msg.tenant_id,
-        "auto_ingest": cfg.auto_ingest,
-        "note": (
-            "C1: stored for operator review; create_request is C2"
-            if msg.status == "parsed"
-            else None
-        ),
+        "request_id": request_id,
+        "status": "ingested",
+        "idempotent": bool(created.get("idempotent")),
+        "attachment_artifact_ids": msg.attachment_artifact_ids,
+        "request": request_obj,
     }
 
 

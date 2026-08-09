@@ -14,8 +14,9 @@
 - **Idempotency:** unique `(tenant_id, Message-ID)`; no double usage on duplicates.
 - **PII:** raw MIME in tenant object storage; LLM/agent only masked excerpt.
 - **Design doc:** `partsops-ai-manager/docs/design-rfq-inbound-email.md`
-- **Next build phases:** ~~C1 models+webhook~~ (done) → C2 ingest → C3 UI → C4 staging DNS.
-- **C1 shipped:** `models_email.py`, Alembic `a9e4f1b2c3d0`, `services/email_ingest.py`, `routers/email_inbox.py`, tests.
+- **Next build phases:** ~~C1~~ ~~C2~~ → C3 UI → C4 staging DNS.
+- **C1 shipped:** models, migration, webhook, list/reject/config.
+- **C2 shipped:** attachments→`UploadArtifact`, `POST /api/email/messages/{id}/ingest`, optional `auto_ingest`.
 
 ## ⚖️ Decision | 2026-06-26T13:23:27+03:00
 

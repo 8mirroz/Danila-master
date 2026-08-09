@@ -52,6 +52,11 @@ class RejectPayload(BaseModel):
     reason: str = Field(default="operator_rejected", max_length=500)
 
 
+class IngestPayload(BaseModel):
+    """Reserved for future force/re-ingest flags."""
+    force: bool = False
+
+
 @router.post("/api/integrations/email/inbound", status_code=202)
 async def inbound_email_webhook(
     request: Request,
@@ -116,6 +121,19 @@ def reject_email_message(
     session: Session = Depends(get_session),
 ):
     return ingest.reject_message(session, tenant_id, message_id, payload.reason)
+
+
+@router.post("/api/email/messages/{message_id}/ingest")
+def ingest_email_message(
+    message_id: str,
+    payload: IngestPayload = IngestPayload(),
+    tenant_id: str = Depends(get_current_tenant),
+    role: str = Depends(require_manager),
+    session: Session = Depends(get_session),
+):
+    """Promote a parsed email into PartRequest (source=EMAIL). Idempotent."""
+    _ = payload.force  # reserved
+    return ingest.ingest_message(session, tenant_id, message_id)
 
 
 @router.get("/api/email/config")

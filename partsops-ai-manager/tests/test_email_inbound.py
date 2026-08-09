@@ -1,19 +1,21 @@
-"""C1 tests: inbound email webhook, idempotency, tenant isolation."""
+"""C1/C2 tests: inbound email webhook, artifacts, ingest → create_request."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
-import os
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 import main
 from database import get_session
-from models_email import EmailInboxConfig, EmailMessage
+from models import UploadArtifact
+from models_email import EmailMessage
 from rbac import create_signed_token, _get_api_token
 from services.email_ingest import extract_org_slug_from_recipients, upsert_inbox_config
 
@@ -25,7 +27,7 @@ def session_fixture():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    # Ensure email models are in metadata
+    import models  # noqa: F401
     import models_email  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
@@ -34,12 +36,65 @@ def session_fixture():
 
 
 @pytest.fixture(name="client")
-def client_fixture(session: Session, monkeypatch):
+def client_fixture(session: Session, monkeypatch, tmp_path):
     monkeypatch.setenv("TESTING", "1")
     monkeypatch.setenv("PARTSOPS_EMAIL_WEBHOOK_SECRET", "test-email-webhook-secret-32chars!!")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+    # settings is property-based — patch module settings.UPLOAD_DIR via env already
+    # Force settings reload path: settings.UPLOAD_DIR reads env each time (property) OK
 
     def get_session_override():
         return session
+
+    def fake_create_request(tenant_id, payload_data, x_idempotency_key=None):
+        # Simulate RequestService.create_request without hitting global engine
+        from models import PartRequest
+        from sqlmodel import select as sel
+
+        if x_idempotency_key:
+            existing = session.exec(
+                sel(PartRequest).where(
+                    PartRequest.idempotency_key == x_idempotency_key,
+                    PartRequest.tenant_id == tenant_id,
+                )
+            ).first()
+            if existing:
+                return {
+                    "request": {
+                        "request_id": existing.request_id,
+                        "status": existing.status,
+                        "source": existing.source,
+                    },
+                    "idempotent": True,
+                }
+        rid = f"REQ-TEST-{PartRequest.__tablename__}-{x_idempotency_key or 'x'}"[-20:]
+        # stable short id
+        rid = "REQ-" + hashlib.sha256((x_idempotency_key or rid).encode()).hexdigest()[:8].upper()
+        req = PartRequest(
+            request_id=rid,
+            tenant_id=tenant_id,
+            idempotency_key=x_idempotency_key,
+            source=payload_data.get("source", "EMAIL"),
+            status="PART_EXTRACTION",
+            priority=payload_data.get("priority", "normal"),
+            customer_name=payload_data.get("customer_name", "Email RFQ"),
+            parts_json="[]",
+        )
+        session.add(req)
+        session.commit()
+        return {
+            "request": {
+                "request_id": rid,
+                "status": req.status,
+                "source": req.source,
+            },
+            "idempotent": False,
+        }
+
+    monkeypatch.setattr(
+        "services.email_ingest._invoke_create_request",
+        fake_create_request,
+    )
 
     main.app.dependency_overrides[get_session] = get_session_override
     client = TestClient(main.app)
@@ -279,3 +334,149 @@ def test_disallowed_attachment_rejected(client: TestClient, session: Session):
     )
     assert res.status_code == 202
     assert res.json()["status"] == "rejected"
+
+
+def test_attachment_base64_becomes_artifact(client: TestClient, session: Session, tmp_path):
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    content = b"pad,qty\nfront brake pad,2\n"
+    payload = {
+        "message_id": "<csv@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "subject": "CSV RFQ",
+        "text_body": "",
+        "attachments": [
+            {
+                "filename": "rfq.csv",
+                "content_type": "text/csv",
+                "bytes_base64": base64.b64encode(content).decode(),
+            }
+        ],
+    }
+    raw = json.dumps(payload).encode()
+    res = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    )
+    assert res.status_code == 202, res.text
+    body = res.json()
+    assert body["status"] == "parsed"
+    assert body["attachment_artifact_ids"]
+    aid = body["attachment_artifact_ids"][0]
+    art = session.exec(select(UploadArtifact).where(UploadArtifact.artifact_id == aid)).first()
+    assert art is not None
+    assert art.tenant_id == "default"
+    assert art.source == "email"
+    assert Path(art.stored_path).is_file()
+    assert Path(art.stored_path).read_bytes() == content
+
+
+def test_ingest_free_text_creates_request(client: TestClient, session: Session):
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    payload = {
+        "message_id": "<ingest-body@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "subject": "Need pads",
+        "text_body": "Need 2 front brake pads OEM 34116761280",
+    }
+    raw = json.dumps(payload).encode()
+    created = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    ).json()
+    mid = created["email_message_id"]
+    assert created["status"] == "parsed"
+
+    ing = client.post(
+        f"/api/email/messages/{mid}/ingest",
+        headers=auth_headers("default", "manager"),
+        json={},
+    )
+    assert ing.status_code == 200, ing.text
+    data = ing.json()
+    assert data["status"] == "ingested"
+    assert data["request_id"].startswith("REQ-")
+    assert data["idempotent"] is False
+
+    msg = session.get(EmailMessage, mid)
+    assert msg is not None
+    assert msg.status == "ingested"
+    assert msg.request_id == data["request_id"]
+
+    # second ingest is idempotent
+    again = client.post(
+        f"/api/email/messages/{mid}/ingest",
+        headers=auth_headers("default", "manager"),
+        json={},
+    )
+    assert again.status_code == 200
+    assert again.json()["request_id"] == data["request_id"]
+    assert again.json()["idempotent"] is True
+
+
+def test_ingest_cross_tenant_forbidden(client: TestClient, session: Session):
+    upsert_inbox_config(
+        session,
+        tenant_id="tenant-a",
+        org_slug="acme",
+        address="rfq+acme@inbound.example",
+    )
+    payload = {
+        "message_id": "<cross@x>",
+        "from": "a@b.com",
+        "to": ["rfq+acme@inbound.example"],
+        "text_body": "parts list",
+    }
+    raw = json.dumps(payload).encode()
+    mid = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    ).json()["email_message_id"]
+
+    res = client.post(
+        f"/api/email/messages/{mid}/ingest",
+        headers=auth_headers("tenant-b", "manager"),
+        json={},
+    )
+    assert res.status_code == 404
+
+
+def test_auto_ingest_creates_request(client: TestClient, session: Session):
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+        auto_ingest=True,
+    )
+    payload = {
+        "message_id": "<auto@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "text_body": "auto oil filter x1",
+    }
+    raw = json.dumps(payload).encode()
+    res = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    )
+    assert res.status_code == 202, res.text
+    body = res.json()
+    assert body.get("auto_ingested") is True
+    assert body["status"] == "ingested"
+    assert body.get("request_id", "").startswith("REQ-")

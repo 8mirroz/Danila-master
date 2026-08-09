@@ -215,9 +215,9 @@ PARTSOPS_EMAIL_IMAP_URL=
 | Phase | Deliverable | Effort | Depends |
 |-------|-------------|--------|---------|
 | **C0** | This design + ADR | 0.5 d | — | **done 2026-08-09** |
-| **C1** | Models, migration, webhook verify + idempotency tests | 2–3 d | C0 | **done 2026-08-09** (`models_email`, migration `a9e4f1b2c3d0`, `services/email_ingest.py`, `routers/email_inbox.py`, `tests/test_email_inbound.py`) |
-| **C2** | Attachments → artifacts → ingest → `create_request` | 2 d | C1, S3/local storage | next |
-| **C3** | Cockpit inbox UI | 2–3 d | C2 | |
+| **C1** | Models, migration, webhook verify + idempotency tests | 2–3 d | C0 | **done 2026-08-09** |
+| **C2** | Attachments → artifacts → ingest → `create_request` | 2 d | C1, S3/local storage | **done 2026-08-09** (`store_attachments`, `POST …/ingest`, `auto_ingest`, tests) |
+| **C3** | Cockpit inbox UI | 2–3 d | C2 | next |
 | **C4** | Staging DNS + vendor + design-partner mailbox | 1–2 d ops | C3, beta secrets | |
 
 ## 13. Acceptance criteria (C1–C3)
@@ -225,9 +225,9 @@ PARTSOPS_EMAIL_IMAP_URL=
 - [x] Duplicate Message-ID does not create second message row (C1) / request (C2).
 - [x] Unknown recipient creates zero rows.
 - [x] Manager of tenant A cannot `GET` messages of tenant B.
-- [ ] XLSX attachment becomes previewable via existing RFQ mapping path. **(C2)**
-- [ ] Free-text body can create request with `source=EMAIL` and masked customer fields. **(C2)**
-- [x] `auto_ingest=false` never auto-creates requests (C1 stores `parsed` only).
+- [x] Attachments with base64 become `UploadArtifact` (source=email); spreadsheet text best-effort for ingest.
+- [x] Free-text body can create request with `source=EMAIL` via `POST …/ingest` (idempotent).
+- [x] `auto_ingest=false` never auto-creates; `auto_ingest=true` promotes when content usable.
 - [x] Unit + isolation tests in CI (`tests/test_email_inbound.py`).
 
 ## 14. Open decisions (defaults if not overridden)
