@@ -154,3 +154,25 @@ No credit for unfixed code. Green tests do not close production edge cases.
 ---
 
 *Re-review appended 2026-08-09.*
+
+---
+
+## 10. Post-fix re-review (commit `1a5bec9`)
+
+**Reviewer:** `019fe5ec-d05a-7e23-ba49-af828e100f9d`  
+**Tests:** 68 passed (matcher, llm, health, api, stubs)
+
+| # | Blocker | Status |
+|---|---------|--------|
+| 1 | Matcher LIMIT / fallback | **FIXED** |
+| 2 | Pricing top-K re-validate | **FIXED** |
+| 3 | `/health` live ERP | **FIXED** (`/health`+`/live` DB-only; `/ready` ERP cached) |
+| 4 | Budget keys / multi-worker | **FIXED** (+ nits: legacy exact config keys) |
+
+### Verdict: **APPROVE_WITH_NITS**
+
+Optional cleanup: drop legacy exact `BudgetConfig` entries so only family keys apply limits.
+
+---
+
+*Post-fix re-review 2026-08-09.*
