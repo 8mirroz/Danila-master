@@ -232,6 +232,26 @@ class Settings:
             return 2
 
     @property
+    def EMAIL_WEBHOOK_SECRET(self) -> str:
+        """HMAC secret for POST /api/integrations/email/inbound."""
+        return (
+            os.environ.get("PARTSOPS_EMAIL_WEBHOOK_SECRET")
+            or os.environ.get("EMAIL_WEBHOOK_SECRET")
+            or ""
+        ).strip()
+
+    @property
+    def EMAIL_PROVIDER(self) -> str:
+        return (os.environ.get("PARTSOPS_EMAIL_PROVIDER") or "mailgun").strip().lower()
+
+    @property
+    def EMAIL_MAX_ATTACHMENT_MB(self) -> int:
+        try:
+            return max(1, int(os.environ.get("PARTSOPS_EMAIL_MAX_ATTACHMENT_MB", "15")))
+        except ValueError:
+            return 15
+
+    @property
     def OUTBOUND_WEBHOOK_SECRET(self) -> str:
         return os.environ.get("PARTSOPS_OUTBOUND_WEBHOOK_SECRET", "")
 

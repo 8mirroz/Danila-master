@@ -36,7 +36,9 @@ from routers.rfq_imports import router as rfq_imports_router
 from routers.quotes import router as quotes_router
 from routers.integrations import router as integrations_router
 from routers.analytics import router as analytics_router
+from routers.email_inbox import router as email_inbox_router
 import models_copilot
+import models_email  # noqa: F401 — register email tables in SQLModel metadata
 
 load_dotenv()
 
@@ -122,6 +124,7 @@ app.include_router(copilot_router)
 app.include_router(rfq_imports_router)
 app.include_router(quotes_router)
 app.include_router(integrations_router)
+app.include_router(email_inbox_router)
 app.include_router(analytics_router)
 
 @app.get("/")
