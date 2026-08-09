@@ -85,3 +85,6 @@ uploads/
 *.log
 *.pid
 .pipeline_worker.lock
+
+# Golden regression job reports
+storage/exports/golden_regression_*.json
