@@ -64,9 +64,9 @@ Respond ONLY with a JSON object: {"is_spam": true/false, "confidence": float, "r
         res_text = call_llm(
             prompt=f"Analyze text: {raw}",
             system_prompt=system_prompt,
-            model="fast",
+            model="classify",
             response_format={"type": "json_object"},
-            priority=priority,
+            priority="classify",  # cheap model + short TTL prompt cache
         )
         res_json = json.loads(res_text)
         is_spam = res_json.get("is_spam", False)

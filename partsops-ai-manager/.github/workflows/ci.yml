@@ -51,11 +51,12 @@ jobs:
       - name: Run backend lint (broader SaaS + matcher/app slice)
         run: |
           pip install ruff
-          ruff check app/ rbac.py matcher.py budget_guard.py \
+          ruff check app/ rbac.py matcher.py budget_guard.py llm.py \
             routers/analytics.py routers/erp.py routers/integrations.py routers/saas.py \
-            routers/rfq_imports.py routers/quotes.py \
+            routers/rfq_imports.py routers/quotes.py routers/request_schemas.py \
             services/quoteops_analytics.py services/service_api_keys.py services/saas.py \
             services/rfq_imports.py services/quotes.py services/pipeline_runs.py \
+            services/health_readiness.py \
             --select=E,F,W,I --ignore=E501
 
   # Frontend tests

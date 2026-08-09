@@ -11,7 +11,9 @@ import logging
 import json
 import time
 import asyncio
-from typing import Optional, Dict, List, Any
+import hashlib
+import threading
+from typing import Optional, Dict, List, Any, Tuple
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -207,6 +209,14 @@ _MODEL_ALIASES: Dict[str, Dict[str, str]] = {
         "lm_studio":  "llama-3.1-8b-instruct",
         "mock":       "mock-model",
     },
+    # classify/spam — same as fast (cheap path for intake classifier)
+    "classify": {
+        "openrouter": "meta-llama/llama-3.2-3b-instruct:free",
+        "nvidia_nim": "mistralai/mistral-large-3-675b-instruct-2512",
+        "ollama":     "llama3.2:3b",
+        "lm_studio":  "llama-3.1-8b-instruct",
+        "mock":       "mock-model",
+    },
     "reasoning": {
         "openrouter": "meta-llama/llama-3.3-70b-instruct:free",  # 70B для рассуждений
         "nvidia_nim": "meta/llama-3.3-70b-instruct",
@@ -215,6 +225,45 @@ _MODEL_ALIASES: Dict[str, Dict[str, str]] = {
         "mock":       "mock-model",
     },
 }
+
+# Short-TTL response cache for identical classify/spam prompts (multi-line RFQs not cached)
+_PROMPT_CACHE: Dict[str, Tuple[float, str]] = {}
+_PROMPT_CACHE_LOCK = threading.Lock()
+_PROMPT_CACHE_TTL_SEC = float(os.environ.get("PARTSOPS_LLM_CACHE_TTL", "300"))
+_PROMPT_CACHE_MAX = int(os.environ.get("PARTSOPS_LLM_CACHE_MAX", "128"))
+
+
+def _prompt_cache_key(
+    prompt: str,
+    system_prompt: str,
+    model: str,
+    response_format: Optional[dict],
+) -> str:
+    raw = f"{model}|{system_prompt}|{prompt}|{json.dumps(response_format, sort_keys=True) if response_format else ''}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _prompt_cache_get(key: str) -> Optional[str]:
+    now = time.time()
+    with _PROMPT_CACHE_LOCK:
+        hit = _PROMPT_CACHE.get(key)
+        if not hit:
+            return None
+        ts, value = hit
+        if now - ts > _PROMPT_CACHE_TTL_SEC:
+            _PROMPT_CACHE.pop(key, None)
+            return None
+        return value
+
+
+def _prompt_cache_set(key: str, value: str) -> None:
+    with _PROMPT_CACHE_LOCK:
+        if len(_PROMPT_CACHE) >= _PROMPT_CACHE_MAX:
+            # Drop oldest ~25%
+            ordered = sorted(_PROMPT_CACHE.items(), key=lambda kv: kv[1][0])
+            for k, _ in ordered[: max(1, _PROMPT_CACHE_MAX // 4)]:
+                _PROMPT_CACHE.pop(k, None)
+        _PROMPT_CACHE[key] = (time.time(), value)
 
 
 def resolve_model(alias: str, provider_name: str) -> str:
@@ -355,12 +404,35 @@ def call_llm(
     # Route model via ModelRouter + BudgetGuard if using alias
     if model in _MODEL_ALIASES:
         router = _get_model_router()
-        route_result = router.route_with_budget(priority=priority, estimated_tokens=500)
+        # classify/spam priority forces cheap model even if caller passed "default"
+        route_priority = priority
+        if model in ("fast", "classify") or priority in ("fast", "low", "classify", "spam"):
+            route_priority = "classify"
+        route_result = router.route_with_budget(priority=route_priority, estimated_tokens=500)
         if not route_result["allowed"]:
             logger.warning("Budget guard blocked: %s", route_result["reason"])
             raise RuntimeError(f"Budget limit: {route_result['reason']}")
-        # Use the router-selected alias (may upgrade for vip/urgent)
-        model = route_result["model"]
+        # Prefer explicit fast/classify aliases; otherwise router pick
+        if model not in ("fast", "classify"):
+            model = "fast" if route_priority == "classify" else route_result["model"]
+            # Map router concrete names back to alias keys when possible
+            if model not in _MODEL_ALIASES:
+                model = "classify" if route_priority == "classify" else "default"
+        # Keep alias key for resolve_model per provider
+
+    use_cache = (
+        os.environ.get("PARTSOPS_LLM_CACHE", "1") not in {"0", "false", "no"}
+        and priority in ("classify", "spam", "fast", "low")
+        and len(prompt) < 4000
+    )
+    cache_key = (
+        _prompt_cache_key(prompt, system_prompt, model, response_format) if use_cache else None
+    )
+    if cache_key:
+        cached = _prompt_cache_get(cache_key)
+        if cached is not None:
+            logger.debug("LLM prompt cache hit (priority=%s)", priority)
+            return cached
 
     last_error = None
 
@@ -374,6 +446,8 @@ def call_llm(
        if provider.name == "mock" and client is None:
            mock_response = _mock_llm_response(prompt, response_format)
            logger.debug("MOCK provider — returned deterministic stub in <1ms")
+           if cache_key:
+               _prompt_cache_set(cache_key, mock_response)
            return mock_response
 
        provider_models = provider.get_models()
@@ -458,6 +532,8 @@ def call_llm(
 
                    # Reset circuit breaker on success
                    _provider_failures.pop(provider.name, None)
+                   if cache_key:
+                       _prompt_cache_set(cache_key, content)
                    return content
                except Exception as e:
                    latency_ms = int((time.time() - start_time) * 1000)

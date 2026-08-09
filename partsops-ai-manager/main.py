@@ -136,8 +136,12 @@ def read_root():
 
 @app.get("/health")
 def health_check():
+    from services.health_readiness import collect_readiness
+
+    readiness = collect_readiness()
     return {
-        "status": "healthy",
+        "status": readiness.get("status") or "healthy",
         "version": "3.0",
         "phase": settings.PHASE_LABEL,
+        "checks": readiness.get("checks") or {},
     }

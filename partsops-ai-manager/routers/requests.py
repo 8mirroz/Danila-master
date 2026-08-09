@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from typing import Any, Optional, List, Dict
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Body, File, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field as PydanticField
 from sqlmodel import Session, select, desc, col
 
 from database import get_session
@@ -25,6 +24,19 @@ from services.pipeline_runs import (
     run_once,
     serialize_run,
     start_pipeline_run,
+)
+from routers.request_schemas import (
+    ApprovalActionPayload,
+    ClientPortalActionPayload,
+    ClientPortalViewPayload,
+    ImportFromArtifactPayload,
+    ManualCorrectionPayload,
+    MatchSelectionPayload,
+    PipelineContinuePayload,
+    PipelineRequestPayload,
+    PipelineRunPayload,
+    RawRequestPayload,
+    WorkspaceActionPayload,
 )
 
 # Import the new agent orchestrator
@@ -50,47 +62,6 @@ def _rate_limit(request: Optional[Request], tenant_id: str):
 
 
 router = APIRouter(prefix="/api", tags=["Requests & Attachments"])
-
-
-class RawRequestPayload(BaseModel):
-    source: str
-    text: str
-    customer_name: str = "Unknown"
-    customer_phone: Optional[str] = None
-    customer_email: Optional[str] = None
-    vehicle_vin: Optional[str] = None
-    priority: str = "normal"
-
-
-class ManualCorrectionPayload(BaseModel):
-    source_text: str
-    corrected_parts_json: str
-    corrected_position_indexes: Optional[list[int]] = None
-    correction_reason_tags: list[str] = []
-    corrected_vehicle_json: Optional[str] = None
-
-
-class MatchSelectionPayload(BaseModel):
-    part_name: str = PydanticField(min_length=1)
-    offer: dict[str, Any]
-
-
-class WorkspaceActionPayload(BaseModel):
-    target_state: Optional[str] = None
-    reason: str = ""
-    part_name: Optional[str] = None
-    offer: Optional[dict[str, Any]] = None
-
-
-class PipelineRunPayload(BaseModel):
-    requested_lane: Optional[str] = PydanticField(default=None, max_length=64)
-
-
-class ImportFromArtifactPayload(BaseModel):
-    artifact_id: str
-    source: str = "FILE_UPLOAD"
-    customer_name: str = "File Upload Client"
-    priority: str = "normal"
 
 
 def _utcnow() -> datetime:
@@ -559,30 +530,6 @@ def audit_event_chain(
 # MULTI-AGENT PIPELINE ENDPOINTS
 # ──────────────────────────────────────────────
 
-class PipelineRequestPayload(BaseModel):
-    """Payload for running the full multi-agent pipeline"""
-    source: str  # telegram, email, crm, web, manual, api
-    text: str
-    customer_name: Optional[str] = None
-    customer_phone: Optional[str] = None
-    customer_email: Optional[str] = None
-    customer_erp_id: Optional[str] = None
-    vehicle_vin: Optional[str] = None
-    vehicle_make: Optional[str] = None
-    vehicle_model: Optional[str] = None
-    vehicle_year: Optional[int] = None
-    vehicle_generation: Optional[str] = None
-    vehicle_engine: Optional[str] = None
-    parts_data: Optional[List[Dict[str, Any]]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    priority: str = "normal"
-
-
-class PipelineContinuePayload(BaseModel):
-    """Payload for continuing a pipeline from a specific stage"""
-    start_from: str = "processing"  # intake, processing, delivery, reporting
-
-
 @router.post("/pipeline/run")
 def run_full_pipeline(
     payload: PipelineRequestPayload,
@@ -893,12 +840,6 @@ def send_invoice(
 # APPROVAL WORKFLOW ENDPOINTS
 # ──────────────────────────────────────────────
 
-class ApprovalActionPayload(BaseModel):
-    """Payload for approve/reject actions"""
-    action: str  # "approve" or "reject"
-    comment: Optional[str] = None
-
-
 @router.post("/requests/{request_id}/approve")
 def approve_request(
     request_id: str,
@@ -1054,19 +995,6 @@ def get_approval_tickets(
 # ──────────────────────────────────────────────
 # CLIENT PORTAL ENDPOINTS (Public tracking)
 # ──────────────────────────────────────────────
-
-from pydantic import BaseModel
-
-class ClientPortalViewPayload(BaseModel):
-    """Public view of request for client portal"""
-    tracking_token: str
-
-class ClientPortalActionPayload(BaseModel):
-    """Action from client (accept/reject)"""
-    tracking_token: str
-    action: str  # "accept" or "reject"
-    reason: Optional[str] = None
-
 
 @router.get("/client/track/{token}")
 def client_track_request(

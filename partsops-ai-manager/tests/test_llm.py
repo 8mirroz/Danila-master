@@ -99,6 +99,13 @@ class TestModelRouter:
         model = router.select_model("vip")
         assert model == router.MODEL_POOL["reasoning"]
 
+    def test_classify_priority_selects_fast_pool(self):
+        from budget_guard import ModelRouter
+        router = ModelRouter()
+        model = router.select_model("classify")
+        assert model == router.MODEL_POOL["classify"]
+        assert model == router.MODEL_POOL["fast"]
+
     def test_fast_priority_selects_fast_model(self):
         from budget_guard import ModelRouter
         router = ModelRouter()

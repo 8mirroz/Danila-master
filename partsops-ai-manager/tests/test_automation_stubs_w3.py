@@ -292,6 +292,17 @@ def test_quote_collect_empty_payload_is_partial_no_external_pull():
         assert "empty_offers" in (result.get("reason") or "")
 
 
+def test_golden_regression_ok_without_data():
+    from app.automation.jobs import golden_regression_job
+
+    with Session(engine) as session:
+        ctx = AutomationContext(tenant_id="default", actor_id="test", dry_run=False, payload={})
+        result = golden_regression_job.run(session, ctx)
+        assert result.get("metrics") is not None
+        assert result.get("regression") is False
+        assert result.get("status") == "ok"
+
+
 def test_quote_collect_records_payload_offers():
     with Session(engine) as session:
         _make_request(session, request_id="REQ-QC-1")

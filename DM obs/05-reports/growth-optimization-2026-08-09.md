@@ -1,19 +1,23 @@
 # Growth & Optimization Snapshot — 2026-08-09
 
-## Executed (S1 partial)
+## Executed
 
 | ID | Change |
 |----|--------|
-| **D-CI** | CI runs full `pytest tests/` (was partial file list) |
-| **S-MATCH** | Matcher SQL prefilter by OEM/brand/name tokens + `MAX_CATALOG_CANDIDATES` cap |
-| **S-OEM-IDX** | Indexes on `oem_number`, `brand`, `(tenant_id, oem_number)` + model Field index |
+| **D-CI** | CI full `pytest tests/` |
+| **S-MATCH** | Matcher SQL prefilter + candidate cap |
+| **S-OEM-IDX** | Catalog OEM/brand indexes |
+| **S-BUDGET** | BudgetGuard reads `LLMUsageLog` (multi-worker) |
+| **S-LLM** | `classify` route + short TTL prompt cache |
+| **I-GOLD** | Golden regression report JSON + accuracy alert |
+| **A-GOD** | `routers/request_schemas.py` extracted from requests |
+| **R-OBS** | `/health` readiness checks (db/storage/erp/budget) |
 
-## Still open (priority)
+## Still open (needs ops credentials / larger refactors)
 
-- **P-OPS** prod S3 + ERPNext checklist execution  
-- **S-BUDGET** persist BudgetGuard across workers  
-- **A-GOD** split contract_operations / requests router  
-- **I-GOLD** nightly golden regression  
+- **P-OPS** prod S3 + ERPNext drills (checklist only)  
+- **A-GOD** deeper split of `contract_operations` (2.2k LOC)  
+- **P-RFQ-EMAIL** inbound email RFQ
 
 ## Metrics to track post-matcher
 
