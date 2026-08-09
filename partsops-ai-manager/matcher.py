@@ -91,6 +91,46 @@ def clean_string(s: str) -> str:
     return re.sub(r"[^a-zA-Z0-9а-яА-Я]", "", s).lower()
 
 
+def normalize_oem(s: str) -> str:
+    """Normalize OEM / article tokens for equality and index-friendly compare."""
+    if not s:
+        return ""
+    return re.sub(r"[^A-Za-z0-9]", "", s).upper()
+
+
+def extract_search_tokens(query: str) -> List[str]:
+    """
+    Extract OEM-like / brand-like tokens used for SQL prefilter.
+
+    - alnum runs of length >= 5 (e.g. 34116852253, OC90AB)
+    - shorter pure letter brands (len >= 3) for brand prefilter
+    """
+    if not query or not str(query).strip():
+        return []
+    raw = str(query)
+    tokens: List[str] = []
+    for m in re.finditer(r"[A-Za-z0-9А-Яа-я]{3,}", raw):
+        tok = m.group(0)
+        digits = sum(c.isdigit() for c in tok)
+        # Prefer long tokens / digit-heavy OEM; keep short brands (Bosch, TRW, ATE)
+        if len(tok) >= 5 or digits >= 4 or (tok.isalpha() and len(tok) >= 3):
+            tokens.append(tok)
+    # de-dupe preserving order
+    seen: set[str] = set()
+    out: List[str] = []
+    for t in tokens:
+        key = t.upper()
+        if key not in seen:
+            seen.add(key)
+            out.append(t)
+    return out[:12]
+
+
+# Soft cap: even without OEM tokens never load unbounded catalogs into memory.
+# Scoring remains fuzzy over this candidate pool.
+MAX_CATALOG_CANDIDATES = int(os.environ.get("PARTSOPS_MATCHER_MAX_CANDIDATES", "2500"))
+
+
 def levenshtein(a: str, b: str) -> int:
     if len(a) < len(b):
         return levenshtein(b, a)
@@ -187,6 +227,7 @@ def match_part_from_db(
         tenant_id: Optional tenant filter
     """
     from suppliers import SupplierCatalogItem, Supplier
+    from sqlalchemy import or_
 
     # Load keywords from config
     kw = load_keywords()
@@ -201,7 +242,23 @@ def match_part_from_db(
         catalog_query = catalog_query.where(SupplierCatalogItem.tenant_id == tenant_id)
         supplier_query = supplier_query.where(Supplier.tenant_id == tenant_id)
 
-    catalog_items = session.exec(catalog_query).all()
+    # SQL prefilter: avoid loading entire tenant catalog into RAM when OEM/brand tokens exist
+    tokens = extract_search_tokens(query)
+    if tokens:
+        clauses = []
+        for tok in tokens:
+            like = f"%{tok}%"
+            clauses.append(SupplierCatalogItem.oem_number.ilike(like))  # type: ignore[attr-defined]
+            clauses.append(SupplierCatalogItem.brand.ilike(like))  # type: ignore[attr-defined]
+            clauses.append(SupplierCatalogItem.part_name.ilike(like))  # type: ignore[attr-defined]
+            # Also match normalized-ish variants without separators when token is long
+            norm = normalize_oem(tok)
+            if norm and norm != tok.upper() and len(norm) >= 5:
+                clauses.append(SupplierCatalogItem.oem_number.ilike(f"%{norm}%"))  # type: ignore[attr-defined]
+        catalog_query = catalog_query.where(or_(*clauses))
+
+    catalog_query = catalog_query.limit(MAX_CATALOG_CANDIDATES)
+    catalog_items = list(session.exec(catalog_query).all())
     if not catalog_items:
         return []
 

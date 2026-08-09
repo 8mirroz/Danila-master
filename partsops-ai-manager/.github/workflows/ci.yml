@@ -32,11 +32,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
+          # pytest / pytest-asyncio are pinned in requirements.txt; keep httpx for TestClient
 
-      - name: Run backend tests
+      - name: Run backend tests (full suite)
         run: |
-          python -m pytest tests/test_api.py tests/test_events.py tests/test_state_machine.py tests/test_rbac_isolation.py tests/test_observability.py tests/test_saas_foundation.py tests/test_oidc_rbac.py tests/test_keycloak_realm.py tests/test_learning.py tests/test_rfq_imports.py tests/test_outbound_webhook.py tests/test_quotes.py tests/test_s3_storage.py tests/test_service_api_keys.py tests/test_quoteops_analytics.py -v
+          python -m pytest tests/ -q --tb=line
+        env:
+          TESTING: "1"
+          PARTSOPS_API_TOKEN: test-token
 
       - name: Verify migrations round trip
         run: |
@@ -45,10 +48,15 @@ jobs:
           python -m alembic downgrade base
           python -m alembic upgrade head
 
-      - name: Run SaaS backend lint
+      - name: Run backend lint (broader SaaS + matcher/app slice)
         run: |
           pip install ruff
-          ruff check app/automation/storage.py rbac.py routers/analytics.py routers/erp.py routers/integrations.py routers/saas.py routers/rfq_imports.py routers/quotes.py services/quoteops_analytics.py services/service_api_keys.py services/saas.py services/rfq_imports.py services/quotes.py services/pipeline_runs.py --select=E,F,W,I --ignore=E501
+          ruff check app/ rbac.py matcher.py budget_guard.py \
+            routers/analytics.py routers/erp.py routers/integrations.py routers/saas.py \
+            routers/rfq_imports.py routers/quotes.py \
+            services/quoteops_analytics.py services/service_api_keys.py services/saas.py \
+            services/rfq_imports.py services/quotes.py services/pipeline_runs.py \
+            --select=E,F,W,I --ignore=E501
 
   # Frontend tests
   frontend-tests:

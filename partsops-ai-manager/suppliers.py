@@ -90,8 +90,8 @@ class SupplierCatalogItem(SQLModel, table=True):
     catalog_id: str = Field(index=True, unique=True)
     supplier_id: str = Field(index=True)
     part_name: str
-    oem_number: str = ""  # OEM part number
-    brand: str = ""
+    oem_number: str = Field(default="", index=True)  # OEM part number (indexed for matcher prefilter)
+    brand: str = Field(default="", index=True)
     price: float = 0.0
     currency: str = "RUB"
     stock_qty: int = 0
