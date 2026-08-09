@@ -100,10 +100,11 @@ def normalize_oem(s: str) -> str:
 
 def extract_search_tokens(query: str) -> List[str]:
     """
-    Extract OEM-like / brand-like tokens used for SQL prefilter.
+    Extract tokens for soft ranking hints (not hard SQL filter alone).
 
-    - alnum runs of length >= 5 (e.g. 34116852253, OC90AB)
-    - shorter pure letter brands (len >= 3) for brand prefilter
+    - alnum runs of length >= 5 (e.g. 34116852253)
+    - digit-heavy OEM (digits >= 4)
+    - brands len >= 3
     """
     if not query or not str(query).strip():
         return []
@@ -112,10 +113,8 @@ def extract_search_tokens(query: str) -> List[str]:
     for m in re.finditer(r"[A-Za-z0-9А-Яа-я]{3,}", raw):
         tok = m.group(0)
         digits = sum(c.isdigit() for c in tok)
-        # Prefer long tokens / digit-heavy OEM; keep short brands (Bosch, TRW, ATE)
         if len(tok) >= 5 or digits >= 4 or (tok.isalpha() and len(tok) >= 3):
             tokens.append(tok)
-    # de-dupe preserving order
     seen: set[str] = set()
     out: List[str] = []
     for t in tokens:
@@ -126,9 +125,24 @@ def extract_search_tokens(query: str) -> List[str]:
     return out[:12]
 
 
-# Soft cap: even without OEM tokens never load unbounded catalogs into memory.
+def extract_strong_oem_tokens(query: str) -> List[str]:
+    """
+    Strong OEM tokens safe for hard SQL prefilter (digit-heavy / long alnum).
+
+    Soft brand-only tokens are excluded so fuzzy name matching is not skipped.
+    """
+    strong: List[str] = []
+    for tok in extract_search_tokens(query):
+        digits = sum(c.isdigit() for c in tok)
+        if digits >= 5 or (len(tok) >= 8 and digits >= 3) or (len(normalize_oem(tok)) >= 8):
+            strong.append(tok)
+    return strong
+
+
+# Soft cap: never load unbounded catalogs into memory.
 # Scoring remains fuzzy over this candidate pool.
 MAX_CATALOG_CANDIDATES = int(os.environ.get("PARTSOPS_MATCHER_MAX_CANDIDATES", "2500"))
+MIN_PREFILTER_CANDIDATES = int(os.environ.get("PARTSOPS_MATCHER_MIN_PREFILTER", "3"))
 
 
 def levenshtein(a: str, b: str) -> int:
@@ -236,29 +250,37 @@ def match_part_from_db(
     synonym_map: dict = kw["synonym_map"]
     known_brands: list = kw["known_brands"]
 
-    catalog_query = select(SupplierCatalogItem)
+    base_catalog = select(SupplierCatalogItem)
     supplier_query = select(Supplier)
     if tenant_id is not None:
-        catalog_query = catalog_query.where(SupplierCatalogItem.tenant_id == tenant_id)
+        base_catalog = base_catalog.where(SupplierCatalogItem.tenant_id == tenant_id)
         supplier_query = supplier_query.where(Supplier.tenant_id == tenant_id)
 
-    # SQL prefilter: avoid loading entire tenant catalog into RAM when OEM/brand tokens exist
-    tokens = extract_search_tokens(query)
-    if tokens:
+    # Deterministic order before any LIMIT (stable across SQLite/Postgres).
+    try:
+        base_catalog = base_catalog.order_by(SupplierCatalogItem.catalog_id)  # type: ignore[arg-type]
+    except Exception:
+        pass
+
+    # Hard SQL prefilter only for strong OEM tokens. Brand/name fuzzy needs broader pool.
+    strong_oems = extract_strong_oem_tokens(query)
+    catalog_items: list = []
+    if strong_oems:
         clauses = []
-        for tok in tokens:
+        for tok in strong_oems:
             like = f"%{tok}%"
             clauses.append(SupplierCatalogItem.oem_number.ilike(like))  # type: ignore[attr-defined]
-            clauses.append(SupplierCatalogItem.brand.ilike(like))  # type: ignore[attr-defined]
-            clauses.append(SupplierCatalogItem.part_name.ilike(like))  # type: ignore[attr-defined]
-            # Also match normalized-ish variants without separators when token is long
             norm = normalize_oem(tok)
-            if norm and norm != tok.upper() and len(norm) >= 5:
+            if norm and len(norm) >= 5:
                 clauses.append(SupplierCatalogItem.oem_number.ilike(f"%{norm}%"))  # type: ignore[attr-defined]
-        catalog_query = catalog_query.where(or_(*clauses))
+        filtered = base_catalog.where(or_(*clauses)).limit(MAX_CATALOG_CANDIDATES)
+        catalog_items = list(session.exec(filtered).all())
 
-    catalog_query = catalog_query.limit(MAX_CATALOG_CANDIDATES)
-    catalog_items = list(session.exec(catalog_query).all())
+    # Fallback: empty / too-thin prefilter → tenant-scoped ordered pool (fuzzy path)
+    if len(catalog_items) < MIN_PREFILTER_CANDIDATES:
+        fallback = base_catalog.limit(MAX_CATALOG_CANDIDATES)
+        catalog_items = list(session.exec(fallback).all())
+
     if not catalog_items:
         return []
 

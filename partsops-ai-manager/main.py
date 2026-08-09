@@ -135,13 +135,31 @@ def read_root():
 
 
 @app.get("/health")
-def health_check():
+@app.get("/health/live")
+def health_live():
+    """Liveness: process + DB only (no ERP/outbound HTTP)."""
+    from services.health_readiness import collect_liveness
+
+    live = collect_liveness()
+    return {
+        "status": live.get("status") or "healthy",
+        "version": "3.0",
+        "phase": settings.PHASE_LABEL,
+        "probe": "live",
+        "checks": live.get("checks") or {},
+    }
+
+
+@app.get("/health/ready")
+def health_ready():
+    """Readiness: DB + storage flags + cached ERP + LLM budget snapshot."""
     from services.health_readiness import collect_readiness
 
-    readiness = collect_readiness()
+    readiness = collect_readiness(include_erp=True)
     return {
         "status": readiness.get("status") or "healthy",
         "version": "3.0",
         "phase": settings.PHASE_LABEL,
+        "probe": "ready",
         "checks": readiness.get("checks") or {},
     }

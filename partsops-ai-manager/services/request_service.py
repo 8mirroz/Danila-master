@@ -24,7 +24,7 @@ from models import (
     PriceEvidence,
     RequestState,
 )
-from suppliers import Invoice, SupplierCatalogItem
+from suppliers import Invoice, Supplier, SupplierCatalogItem
 from state_machine import validate_transition
 from policy_engine import EvidenceGates
 from pricing import PricingContext, check_margin_guard, compute_price
@@ -32,6 +32,56 @@ from matcher import match_part_from_db
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _offer_from_catalog_id(
+    session: Session,
+    *,
+    catalog_id: str,
+    tenant_id: str,
+    selected_fallback: Optional[dict[str, Any]] = None,
+) -> Optional[dict[str, Any]]:
+    """Build a match-shaped offer from live catalog row (PK lookup, not matcher top-K)."""
+    catalog_item = session.exec(
+        select(SupplierCatalogItem).where(
+            SupplierCatalogItem.catalog_id == catalog_id,
+            SupplierCatalogItem.tenant_id == tenant_id,
+        )
+    ).first()
+    if not catalog_item:
+        return None
+    supplier = session.exec(
+        select(Supplier).where(
+            Supplier.supplier_id == catalog_item.supplier_id,
+            Supplier.tenant_id == tenant_id,
+        )
+    ).first()
+    reliability = float(supplier.reliability_score) if supplier else 0.80
+    # Prefer live catalog prices; keep selection metadata when present
+    score = 100.0
+    if isinstance(selected_fallback, dict) and selected_fallback.get("score") is not None:
+        try:
+            score = float(selected_fallback["score"])
+        except (TypeError, ValueError):
+            score = 100.0
+    return {
+        "item": {
+            "catalog_id": catalog_item.catalog_id,
+            "name": catalog_item.part_name,
+            "oem_number": catalog_item.oem_number,
+            "brand": catalog_item.brand,
+            "price": catalog_item.price,
+            "stock_qty": catalog_item.stock_qty,
+            "delivery_days": catalog_item.delivery_days,
+            "category": catalog_item.category,
+        },
+        "supplier": {
+            "supplier_id": catalog_item.supplier_id,
+            "name": supplier.name if supplier else "Неизвестный поставщик",
+            "reliability_score": reliability,
+        },
+        "score": score,
+    }
 
 def _json_load(raw_value: Optional[str], default: Any) -> Any:
     if not raw_value:
@@ -76,12 +126,19 @@ def _build_pricing_context(req: PartRequest, session: Session):
             selected_catalog_id = str((selected.get("item") or {}).get("catalog_id") or "").strip()
             if not selected_catalog_id:
                 raise HTTPException(status_code=422, detail=f"Выбранный оффер для '{part_name}' повреждён")
-            matches = [
-                match for match in match_part_from_db(part_name, session, threshold=0.0, limit=25, tenant_id=req.tenant_id)
-                if match.get("item", {}).get("catalog_id") == selected_catalog_id
-            ]
-            if not matches:
-                raise HTTPException(status_code=422, detail=f"Выбранный оффер для '{part_name}' больше недоступен")
+            # P0: load selected offer by catalog_id PK (never re-discover via top-K matcher)
+            best = _offer_from_catalog_id(
+                session,
+                catalog_id=selected_catalog_id,
+                tenant_id=req.tenant_id,
+                selected_fallback=selected,
+            )
+            if not best:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Выбранный оффер для '{part_name}' больше недоступен",
+                )
+            matches = [best]
         else:
             matches = match_part_from_db(part_name, session, threshold=50.0, limit=1, tenant_id=req.tenant_id)
         if not matches:

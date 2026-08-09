@@ -89,3 +89,14 @@ def test_oem_query_prefers_exact_catalog_row(session):
     # Prefilter should not return only noise rows when OEM is specific
     oems = {r["item"]["oem_number"] for r in results}
     assert "34116852253" in oems
+
+
+def test_russian_name_query_uses_fallback_pool(session):
+    """Without strong OEM tokens, matcher must still find name matches (fallback path)."""
+    from matcher import extract_strong_oem_tokens
+
+    assert extract_strong_oem_tokens("Тормозные колодки BMW X5") == []
+    results = match_part_from_db("Тормозные колодки BMW X5", session, threshold=40.0, limit=5)
+    assert results
+    names = " ".join(r["item"]["name"] for r in results).lower()
+    assert "колодк" in names or "bmw" in names

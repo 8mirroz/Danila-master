@@ -16,23 +16,32 @@ os.environ.setdefault("LM_STUDIO_MODEL", "llama-3.1-8b-instruct")
 # ──────────────────────────────────────────────
 
 class TestBudgetGuard:
-    def test_check_budget_no_config_returns_allowed(self):
-        """Model with no budget config should always be allowed."""
-        from budget_guard import BudgetGuard
+    def test_unknown_model_maps_to_family_other_and_is_bounded(self):
+        """Unknown models map to family:other (never silent unlimited)."""
+        from budget_guard import BudgetGuard, normalize_budget_key
+        assert normalize_budget_key("unknown-model-xyz") == "family:other"
         guard = BudgetGuard()
+        guard._db_enabled = False
         result = guard.check_budget("unknown-model-xyz", 1000)
         assert result["allowed"] is True
+        assert result.get("budget_key") == "family:other"
+
+    def test_openrouter_concrete_maps_to_family(self):
+        from budget_guard import normalize_budget_key
+        assert normalize_budget_key("meta-llama/llama-3.2-3b-instruct:free") == "family:fast"
+        assert normalize_budget_key("meta-llama/llama-3.3-70b-instruct:free") == "family:default"
 
     def test_check_budget_within_limits(self):
         """Request within hourly token and daily cost limits should pass."""
         from budget_guard import BudgetGuard, BudgetConfig
         guard = BudgetGuard()
+        guard._db_enabled = False
         guard.register_config(BudgetConfig(
-            model_name="test-model",
+            model_name="family:other",
             token_budget_per_hour=100_000,
             cost_budget_per_day_usd=10.0,
         ))
-        result = guard.check_budget("test-model", 5000)
+        result = guard.check_budget("custom-corp-model", 5000)
         assert result["allowed"] is True
         assert "within budget" in result["reason"]
 
@@ -40,12 +49,12 @@ class TestBudgetGuard:
         """Request exceeding hourly token budget should be blocked."""
         from budget_guard import BudgetGuard, BudgetConfig
         guard = BudgetGuard()
+        guard._db_enabled = False
         guard.register_config(BudgetConfig(
-            model_name="limited-model",
+            model_name="family:other",
             token_budget_per_hour=1000,
             cost_budget_per_day_usd=100.0,
         ))
-        # Simulate prior usage
         guard.record_usage("limited-model", prompt_tokens=500, completion_tokens=500, cost_usd=0.01)
         result = guard.check_budget("limited-model", 100)
         assert result["allowed"] is False
@@ -55,12 +64,12 @@ class TestBudgetGuard:
         """Request exceeding daily cost budget should be blocked."""
         from budget_guard import BudgetGuard, BudgetConfig
         guard = BudgetGuard()
+        guard._db_enabled = False
         guard.register_config(BudgetConfig(
-            model_name="expensive-model",
+            model_name="family:other",
             token_budget_per_hour=1_000_000,
             cost_budget_per_day_usd=0.01,
         ))
-        # Simulate prior usage that pushes cost over daily limit
         guard.record_usage("expensive-model", prompt_tokens=10000, completion_tokens=10000, cost_usd=0.01)
         result = guard.check_budget("expensive-model", 1000)
         assert result["allowed"] is False
@@ -70,6 +79,7 @@ class TestBudgetGuard:
         """record_usage should be reflected in get_usage_stats."""
         from budget_guard import BudgetGuard
         guard = BudgetGuard()
+        guard._db_enabled = False
         guard.record_usage("stats-model", prompt_tokens=100, completion_tokens=50, cost_usd=0.05)
         stats = guard.get_usage_stats()
         assert stats["hourly_tokens_used"] >= 150
