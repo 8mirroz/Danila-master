@@ -3,6 +3,19 @@
 ## ✅ Validated Decisions
 - TBD
 
+## ⚖️ Decision | 2026-08-09 | P-RFQ-EMAIL
+
+**Inbound RFQ email for QuoteOps (design approved for implementation).**
+
+- **Provider (beta):** signed inbound webhook (SES / Mailgun / Postmark), not per-tenant IMAP.
+- **Addressing:** `rfq+{org_slug}@inbound.<domain>` with server-side `org_slug → tenant_id` map (`EmailInboxConfig`).
+- **Default mode:** `auto_ingest=false` (operator review in cockpit inbox); optional auto later.
+- **Write path:** reuse `rfq_imports` + `request_service.create_request` / intake; `source=EMAIL`.
+- **Idempotency:** unique `(tenant_id, Message-ID)`; no double usage on duplicates.
+- **PII:** raw MIME in tenant object storage; LLM/agent only masked excerpt.
+- **Design doc:** `partsops-ai-manager/docs/design-rfq-inbound-email.md`
+- **Next build phases:** C1 models+webhook → C2 ingest → C3 UI → C4 staging DNS.
+
 ## ⚖️ Decision | 2026-06-26T13:23:27+03:00
 
 Инициализация интеграции с Obsidian

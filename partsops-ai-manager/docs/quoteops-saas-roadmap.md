@@ -64,6 +64,7 @@ Weeks 3-4:
 Weeks 5-6:
 
 - Build RFQ inbox for manual, drag/drop, CSV/XLSX and inbound email.
+  - Design (2026-08-09): `docs/design-rfq-inbound-email.md` (webhook + review-first inbox).
 - Add reusable supplier feed mappings and importer preview.
 - Make one backend pricing result the source of truth for UI, quote documents and ERP export.
 - Generate versioned PDF/XLSX quotes with validity and change history.
