@@ -284,6 +284,58 @@ def test_invalid_signature(client: TestClient, session: Session):
     assert res.status_code == 401
 
 
+def test_signature_wrong_length_is_401_not_500(client: TestClient, session: Session):
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    payload = {
+        "message_id": "<short-sig@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "text_body": "x",
+    }
+    raw = json.dumps(payload).encode()
+    res = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": "sha256=ab"},
+    )
+    assert res.status_code == 401
+    assert res.json()["detail"]["code"] == "EMAIL_SIGNATURE_INVALID"
+
+
+def test_extensionless_attachment_with_bytes_rejected(client: TestClient, session: Session):
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    payload = {
+        "message_id": "<noext@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "text_body": "see attach",
+        "attachments": [
+            {
+                "filename": "malware",
+                "bytes_base64": base64.b64encode(b"MZ").decode(),
+            }
+        ],
+    }
+    raw = json.dumps(payload).encode()
+    res = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    )
+    assert res.status_code == 202
+    assert res.json()["status"] == "rejected"
+
+
 def test_admin_config_put_get(client: TestClient):
     put = client.put(
         "/api/email/config",

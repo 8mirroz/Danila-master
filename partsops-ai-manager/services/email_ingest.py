@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from fastapi import HTTPException
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from models import UploadArtifact
@@ -50,7 +52,11 @@ def utc_now() -> datetime:
 
 
 def verify_webhook_signature(raw_body: bytes, signature_header: Optional[str]) -> None:
-    """HMAC-SHA256 over raw body; header forms: `sha256=<hex>` or bare hex."""
+    """HMAC-SHA256 over raw body; header forms: `sha256=<hex>` or bare hex.
+
+    Always returns 401-class EmailIngestError on bad signatures (never 500 from
+    hmac.compare_digest length mismatch).
+    """
     secret = (settings.EMAIL_WEBHOOK_SECRET or "").strip()
     if not secret:
         # Dev convenience: only when TESTING=1 and secret unset
@@ -69,9 +75,12 @@ def verify_webhook_signature(raw_body: bytes, signature_header: Optional[str]) -
     provided = signature_header.strip()
     if provided.lower().startswith("sha256="):
         provided = provided.split("=", 1)[1].strip()
-
+    # Normalize: accept only lowercase hex of digest length (sha256 = 64).
+    provided_norm = provided.lower()
     expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, provided):
+    if len(provided_norm) != len(expected) or any(c not in "0123456789abcdef" for c in provided_norm):
+        raise EmailIngestError("Invalid webhook signature", code="EMAIL_SIGNATURE_INVALID", status_code=401)
+    if not hmac.compare_digest(expected, provided_norm):
         raise EmailIngestError("Invalid webhook signature", code="EMAIL_SIGNATURE_INVALID", status_code=401)
 
 
@@ -137,15 +146,35 @@ def _sender_allowed(cfg: EmailInboxConfig, from_addr: str) -> bool:
     return False
 
 
+def _payload_for_raw_store(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop attachment bytes from raw audit JSON (artifacts store the files)."""
+    safe = dict(payload)
+    atts = safe.get("attachments")
+    if isinstance(atts, list):
+        stripped = []
+        for att in atts:
+            if not isinstance(att, dict):
+                continue
+            item = {k: v for k, v in att.items() if k != "bytes_base64"}
+            if "bytes_base64" in att:
+                item["bytes_base64_omitted"] = True
+                item["bytes_base64_len"] = len(str(att.get("bytes_base64") or ""))
+            stripped.append(item)
+        safe["attachments"] = stripped
+    return safe
+
+
 def _store_raw_payload(tenant_id: str, message_id: str, payload: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
-    """Best-effort local raw store; C2 may redirect to S3."""
+    """Best-effort local raw store (without attachment base64); C4 may use S3."""
     try:
         base = Path(settings.UPLOAD_DIR or "08_DATA/uploads")
-        dest_dir = base / tenant_id / "emails"
+        # sanitize tenant segment
+        clean_tenant = re.sub(r"[^a-zA-Z0-9._-]+", "_", tenant_id)[:80] or "tenant"
+        dest_dir = base / clean_tenant / "emails"
         dest_dir.mkdir(parents=True, exist_ok=True)
         safe_id = re.sub(r"[^a-zA-Z0-9._-]+", "_", message_id)[:80]
         path = dest_dir / f"{safe_id}.json"
-        raw = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+        raw = json.dumps(_payload_for_raw_store(payload), ensure_ascii=False, default=str).encode("utf-8")
         path.write_bytes(raw)
         digest = hashlib.sha256(raw).hexdigest()
         return str(path), digest
@@ -154,6 +183,9 @@ def _store_raw_payload(tenant_id: str, message_id: str, payload: dict[str, Any])
 
 
 def message_to_dict(msg: EmailMessage) -> dict[str, Any]:
+    # Do not expose full filesystem paths to operators — only presence + digest.
+    raw_uri = msg.raw_storage_uri
+    raw_name = Path(raw_uri).name if raw_uri else None
     return {
         "id": msg.id,
         "tenant_id": msg.tenant_id,
@@ -163,7 +195,7 @@ def message_to_dict(msg: EmailMessage) -> dict[str, Any]:
         "to_address": msg.to_address,
         "subject": msg.subject,
         "received_at": msg.received_at.isoformat() if msg.received_at else None,
-        "raw_storage_uri": msg.raw_storage_uri,
+        "raw_storage_uri": raw_name,
         "raw_sha256": msg.raw_sha256,
         "body_masked_excerpt": msg.body_masked_excerpt,
         "status": msg.status,
@@ -227,10 +259,16 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
             continue
         name = str(att.get("filename") or "")
         ext = Path(name).suffix.lower()
-        if ext and ext not in ALLOWED_ATTACHMENT_EXT:
+        # Reject missing extension when binary payload is present (policy bypass).
+        has_b64 = bool(att.get("bytes_base64"))
+        if has_b64 and (not ext or ext not in ALLOWED_ATTACHMENT_EXT):
             if status != "rejected":
                 status = "rejected"
-                rejection = f"disallowed_attachment:{ext or 'unknown'}"
+                rejection = f"disallowed_attachment:{ext or 'missing_ext'}"
+        elif ext and ext not in ALLOWED_ATTACHMENT_EXT:
+            if status != "rejected":
+                status = "rejected"
+                rejection = f"disallowed_attachment:{ext}"
         if name:
             attachment_names.append(name)
 
@@ -249,24 +287,8 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
         received_at = now_naive
 
     emsg_id = f"emsg-{uuid.uuid4().hex[:12]}"
-    artifact_ids: list[str] = []
-    if status != "rejected":
-        artifact_ids, attach_errors = store_attachments(
-            session,
-            tenant_id=cfg.tenant_id,
-            email_message_id=emsg_id,
-            attachments=attachments_meta,
-        )
-        if attach_errors and not artifact_ids and not excerpt.strip():
-            # only attachments and all failed
-            status = "rejected"
-            rejection = attach_errors[0]
-        elif attach_errors:
-            # keep parsed but record honesty flags
-            pass
-    else:
-        attach_errors = []
-
+    # Insert message first (empty artifacts) so unique(tenant, message_id) races
+    # resolve to IntegrityError → duplicate without orphan files.
     msg = EmailMessage(
         id=emsg_id,
         tenant_id=cfg.tenant_id,
@@ -279,9 +301,9 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
         raw_storage_uri=uri,
         raw_sha256=digest,
         body_masked_excerpt=excerpt,
-        status=status,
+        status=status if status == "rejected" else "received",
         rejection_reason=rejection,
-        attachment_artifact_ids_json=json.dumps(artifact_ids, ensure_ascii=False),
+        attachment_artifact_ids_json="[]",
         auth_results_json=json.dumps(payload.get("auth_results") or {}, ensure_ascii=False),
         created_at=now_naive,
         updated_at=now_naive,
@@ -289,13 +311,53 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
     ar = msg.auth_results
     if attachment_names:
         ar["attachment_filenames"] = attachment_names
-    if attach_errors:
-        ar["attachment_errors"] = attach_errors
     msg.auth_results = ar
 
     session.add(msg)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        existing = session.exec(
+            select(EmailMessage).where(
+                EmailMessage.tenant_id == cfg.tenant_id,
+                EmailMessage.provider_message_id == message_id,
+            )
+        ).first()
+        if existing:
+            return {
+                "email_message_id": existing.id,
+                "status": "duplicate",
+                "tenant_id": existing.tenant_id,
+                "duplicate_of": existing.id,
+            }
+        raise
+
     session.refresh(msg)
+
+    artifact_ids: list[str] = []
+    attach_errors: list[str] = []
+    if msg.status != "rejected":
+        artifact_ids, attach_errors = store_attachments(
+            session,
+            tenant_id=cfg.tenant_id,
+            email_message_id=msg.id,
+            attachments=attachments_meta,
+        )
+        if attach_errors and not artifact_ids and not excerpt.strip():
+            msg.status = "rejected"
+            msg.rejection_reason = attach_errors[0]
+        else:
+            msg.status = "parsed"
+        msg.attachment_artifact_ids_json = json.dumps(artifact_ids, ensure_ascii=False)
+        ar = msg.auth_results
+        if attach_errors:
+            ar["attachment_errors"] = attach_errors
+        msg.auth_results = ar
+        msg.updated_at = utc_now().replace(tzinfo=None)
+        session.add(msg)
+        session.commit()
+        session.refresh(msg)
 
     result: dict[str, Any] = {
         "email_message_id": msg.id,
@@ -366,8 +428,8 @@ def store_attachments(
         if not b64:
             # metadata-only — no fake artifact
             continue
-        if ext and ext not in ALLOWED_ATTACHMENT_EXT:
-            errors.append(f"disallowed_attachment:{ext}")
+        if not ext or ext not in ALLOWED_ATTACHMENT_EXT:
+            errors.append(f"disallowed_attachment:{ext or 'missing_ext'}")
             continue
         try:
             raw = base64.b64decode(str(b64), validate=False)
@@ -518,7 +580,10 @@ def ingest_message(
     tenant_id: str,
     message_id: str,
 ) -> dict[str, Any]:
-    """Promote EmailMessage → PartRequest (source=EMAIL), link artifacts."""
+    """Promote EmailMessage → PartRequest (source=EMAIL), link artifacts.
+
+    CAS: only one worker transitions parsed/received → ingesting → ingested.
+    """
     msg = session.get(EmailMessage, message_id)
     if not msg or msg.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Email message not found")
@@ -532,11 +597,50 @@ def ingest_message(
             "attachment_artifact_ids": msg.attachment_artifact_ids,
         }
 
-    if msg.status in {"rejected", "duplicate"}:
+    if msg.status in {"rejected", "duplicate", "ingesting"}:
+        # ingesting: concurrent worker owns the promote — re-read shortly for result
+        if msg.status == "ingesting":
+            raise HTTPException(
+                status_code=409,
+                detail="Ingest already in progress",
+            )
         raise HTTPException(
             status_code=422,
             detail=f"Cannot ingest message in status={msg.status}",
         )
+
+    now_naive = utc_now().replace(tzinfo=None)
+    # Atomic claim: only one concurrent ingest wins.
+    claim = session.execute(
+        update(EmailMessage.__table__)
+        .where(
+            EmailMessage.__table__.c.id == message_id,
+            EmailMessage.__table__.c.tenant_id == tenant_id,
+            EmailMessage.__table__.c.status.in_(("parsed", "received")),
+        )
+        .values(status="ingesting", updated_at=now_naive)
+    )
+    session.commit()
+    if claim.rowcount == 0:
+        session.expire_all()
+        msg = session.get(EmailMessage, message_id)
+        if msg and msg.status == "ingested" and msg.request_id:
+            return {
+                "email_message_id": msg.id,
+                "request_id": msg.request_id,
+                "status": "ingested",
+                "idempotent": True,
+                "attachment_artifact_ids": msg.attachment_artifact_ids,
+            }
+        raise HTTPException(
+            status_code=409,
+            detail="Ingest race lost or message not ready",
+        )
+
+    session.expire_all()
+    msg = session.get(EmailMessage, message_id)
+    if not msg or msg.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Email message not found")
 
     cfg = get_inbox_config(session, tenant_id)
     priority = (cfg.default_priority if cfg else None) or "normal"
@@ -550,10 +654,23 @@ def ingest_message(
         "priority": priority,
     }
 
-    created = _invoke_create_request(tenant_id, payload, idem_key)
+    try:
+        created = _invoke_create_request(tenant_id, payload, idem_key)
+    except Exception:
+        # Release claim so operator can retry.
+        msg.status = "parsed"
+        msg.updated_at = utc_now().replace(tzinfo=None)
+        session.add(msg)
+        session.commit()
+        raise
+
     request_obj = created.get("request") or {}
     request_id = request_obj.get("request_id")
     if not request_id:
+        msg.status = "parsed"
+        msg.updated_at = utc_now().replace(tzinfo=None)
+        session.add(msg)
+        session.commit()
         raise HTTPException(status_code=500, detail="create_request returned no request_id")
 
     now_naive = utc_now().replace(tzinfo=None)

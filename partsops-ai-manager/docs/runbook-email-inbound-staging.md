@@ -87,6 +87,10 @@ If vendor only supports their own signature, put a thin edge function that re-si
 
 **Rate limit:** `PARTSOPS_EMAIL_WEBHOOK_RPM` (default 60/IP/min).
 
+> Soft **per-process** limit (not shared across multi-worker). Client-supplied
+> `X-Forwarded-For` is **ignored** unless `PARTSOPS_TRUST_PROXY_XFF=1` (then the
+> *rightmost* hop is used). Put a real rate limit at the reverse proxy for prod.
+
 ---
 
 ## 5. Tenant config (API)

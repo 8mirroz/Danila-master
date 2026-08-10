@@ -24,9 +24,27 @@ _webhook_hits: Dict[str, Deque[datetime]] = defaultdict(deque)
 
 
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or "unknown"
+    """Best-effort client key for soft RPM.
+
+    By default trust only `request.client.host` (cannot be spoofed by client
+    headers). When behind a trusted reverse proxy set PARTSOPS_TRUST_PROXY_XFF=1
+    and use the *rightmost* X-Forwarded-For hop (proxy-appended).
+    """
+    import os
+
+    trust = os.environ.get("PARTSOPS_TRUST_PROXY_XFF", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if trust:
+        forwarded = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
+        if forwarded:
+            # Rightmost is typically the proxy-appended client IP when hop count is trusted.
+            parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+            if parts:
+                return parts[-1]
     if request.client and request.client.host:
         return request.client.host
     return "unknown"

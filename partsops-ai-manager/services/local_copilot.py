@@ -192,9 +192,25 @@ def _try_llm_polish(*, envelope: ContextEnvelope, user_message: str, draft: str)
         "Не предлагай менять статусы напрямую — только explain + allowed next steps. "
         "Не выводи сырой JSON."
     )
+    try:
+        from services.copilot_context import compact_envelope_for_hermes
+
+        facts = compact_envelope_for_hermes(envelope)
+    except Exception:
+        facts = {
+            "screen_id": envelope.screen_id,
+            "screen_title": envelope.screen_title,
+            "selected_request": (envelope.selected_request or {}).get("request_id")
+            if envelope.selected_request
+            else None,
+            "allowed_next_statuses": list(envelope.allowed_next_statuses or [])[:8],
+            "blocking_reasons": list(envelope.blocking_reasons or [])[:5],
+        }
+    import json as _json
+
     prompt = (
         f"Вопрос оператора:\n{user_message}\n\n"
-        f"ContextEnvelope (факты):\n{envelope.model_dump_json()}\n\n"
+        f"ContextEnvelope (факты, compact):\n{_json.dumps(facts, ensure_ascii=False)}\n\n"
         f"Черновик ответа (используй как основу, улучши формулировки):\n{draft}\n"
     )
     try:

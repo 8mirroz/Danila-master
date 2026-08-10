@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.agents.intake_facade import parse_intake_text
@@ -576,7 +577,36 @@ class RequestService:
                 tenant_id=tenant_id,
                 commit=False,
             )
-            write_session.commit()
+            try:
+                write_session.commit()
+            except IntegrityError:
+                # Concurrent create with same (tenant_id, idempotency_key).
+                write_session.rollback()
+                if x_idempotency_key:
+                    with Session(engine) as check_session:
+                        existing = check_session.exec(
+                            select(PartRequest).where(
+                                PartRequest.idempotency_key == x_idempotency_key,
+                                PartRequest.tenant_id == tenant_id,
+                            )
+                        ).first()
+                        if existing:
+                            return {
+                                "request": {
+                                    "request_id": existing.request_id,
+                                    "status": existing.status,
+                                    "priority": existing.priority,
+                                    "source": existing.source,
+                                    "customer_name": existing.customer_name,
+                                    "customer_phone_masked": existing.customer_phone_masked,
+                                    "customer_email_masked": existing.customer_email_masked,
+                                    "vehicle_vin_masked": existing.vehicle_vin_masked,
+                                    "created_at": existing.created_at.isoformat() if existing.created_at else None,
+                                },
+                                "agent_trace": agent_result,
+                                "idempotent": True,
+                            }
+                raise
             write_session.refresh(new_request)
 
             return {
