@@ -632,6 +632,16 @@ def ingest_message(
                 "idempotent": True,
                 "attachment_artifact_ids": msg.attachment_artifact_ids,
             }
+        if msg and msg.status == "ingesting":
+            raise HTTPException(
+                status_code=409,
+                detail="Ingest already in progress",
+            )
+        if msg and msg.status in {"rejected", "duplicate"}:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Cannot ingest message in status={msg.status}",
+            )
         raise HTTPException(
             status_code=409,
             detail="Ingest race lost or message not ready",
@@ -754,17 +764,66 @@ def reject_message(
     message_id: str,
     reason: str = "operator_rejected",
 ) -> dict[str, Any]:
+    """Operator reject with CAS: only parsed/received → rejected.
+
+    Prevents clobbering concurrent ingest (status=ingesting) or terminal states.
+    """
     msg = session.get(EmailMessage, message_id)
     if not msg or msg.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Email message not found")
     if msg.status == "ingested":
         raise HTTPException(status_code=409, detail="Already ingested")
-    msg.status = "rejected"
-    msg.rejection_reason = (reason or "operator_rejected")[:500]
-    msg.updated_at = utc_now().replace(tzinfo=None)
-    session.add(msg)
+    if msg.status == "ingesting":
+        raise HTTPException(
+            status_code=409,
+            detail="Ingest already in progress; cannot reject",
+        )
+    if msg.status == "rejected":
+        # Idempotent: already rejected
+        return message_to_dict(msg)
+    if msg.status not in {"parsed", "received"}:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot reject message in status={msg.status}",
+        )
+
+    reason_clean = (reason or "operator_rejected")[:500]
+    now_naive = utc_now().replace(tzinfo=None)
+    claim = session.execute(
+        update(EmailMessage.__table__)
+        .where(
+            EmailMessage.__table__.c.id == message_id,
+            EmailMessage.__table__.c.tenant_id == tenant_id,
+            EmailMessage.__table__.c.status.in_(("parsed", "received")),
+        )
+        .values(
+            status="rejected",
+            rejection_reason=reason_clean,
+            updated_at=now_naive,
+        )
+    )
     session.commit()
-    session.refresh(msg)
+    if claim.rowcount == 0:
+        session.expire_all()
+        msg = session.get(EmailMessage, message_id)
+        if msg and msg.tenant_id == tenant_id and msg.status == "rejected":
+            return message_to_dict(msg)
+        if msg and msg.status == "ingested":
+            raise HTTPException(status_code=409, detail="Already ingested")
+        if msg and msg.status == "ingesting":
+            raise HTTPException(
+                status_code=409,
+                detail="Ingest already in progress; cannot reject",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="Reject race lost or message not ready",
+        )
+
+    session.expire_all()
+    msg = session.get(EmailMessage, message_id)
+    if not msg or msg.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Email message not found")
     return message_to_dict(msg)
 
 

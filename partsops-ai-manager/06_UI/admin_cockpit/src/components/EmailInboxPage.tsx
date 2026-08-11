@@ -209,6 +209,9 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
       const msg = cause instanceof Error ? cause.message : 'Не удалось создать заявку';
       setError(msg);
       notify.error(msg);
+      // Race / concurrent claim: refresh so chips match server truth
+      void loadMessages();
+      void loadStats();
     } finally {
       setBusy(false);
     }
@@ -235,6 +238,8 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
       const msg = cause instanceof Error ? cause.message : 'Не удалось отклонить';
       setError(msg);
       notify.error(msg);
+      void loadMessages();
+      void loadStats();
     } finally {
       setBusy(false);
     }
@@ -281,8 +286,9 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
     }
   };
 
+  // Only parsed/received are operator-actionable; ingesting/duplicate/terminal are locked
   const canActOnDetail =
-    Boolean(detail) && detail!.status !== 'ingested' && detail!.status !== 'rejected';
+    Boolean(detail) && (detail!.status === 'parsed' || detail!.status === 'received');
 
   return (
     <section aria-label="Входящие email" className="space-y-4">
@@ -587,27 +593,39 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                   )}
                 </ul>
 
-                <div className="mt-auto flex flex-wrap gap-2 border-t border-line-subtle pt-3">
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    icon="plus"
-                    disabled={busy || !canActOnDetail}
-                    onClick={() => void ingest(detail.id)}
-                    aria-label="Создать заявку из письма"
-                  >
-                    Создать заявку
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon="x-mark"
-                    disabled={busy || !canActOnDetail}
-                    onClick={() => void reject(detail.id)}
-                    aria-label="Отклонить письмо"
-                  >
-                    Отклонить
-                  </Button>
+                <div className="mt-auto space-y-2 border-t border-line-subtle pt-3">
+                  {detail.status === 'ingesting' && (
+                    <p className="text-[11px] font-medium text-sky-800">
+                      Импорт уже выполняется — дождитесь статуса «В заявке» или обновите список.
+                    </p>
+                  )}
+                  {detail.status === 'duplicate' && (
+                    <p className="text-[11px] font-medium text-ink-muted">
+                      Дубликат webhook — действия недоступны.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      icon="plus"
+                      disabled={busy || !canActOnDetail}
+                      onClick={() => void ingest(detail.id)}
+                      aria-label="Создать заявку из письма"
+                    >
+                      Создать заявку
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon="x-mark"
+                      disabled={busy || !canActOnDetail}
+                      onClick={() => void reject(detail.id)}
+                      aria-label="Отклонить письмо"
+                    >
+                      Отклонить
+                    </Button>
+                  </div>
                 </div>
               </>
             )}

@@ -660,3 +660,191 @@ def test_get_message_stats_service_and_endpoint(client: TestClient, session: Ses
     res_b = client.get("/api/email/stats", headers=auth_headers("tenant-stats-b", "manager"))
     assert res_b.status_code == 200
     assert res_b.json()["total"] == 1
+
+
+def test_reject_while_ingesting_returns_409(client: TestClient, session: Session):
+    """CAS: operator must not clobber an in-flight ingest claim."""
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    payload = {
+        "message_id": "<race-rej@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "subject": "race",
+        "text_body": "parts",
+    }
+    raw = json.dumps(payload).encode()
+    mid = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    ).json()["email_message_id"]
+
+    msg = session.get(EmailMessage, mid)
+    assert msg is not None
+    msg.status = "ingesting"
+    session.add(msg)
+    session.commit()
+
+    res = client.post(
+        f"/api/email/messages/{mid}/reject",
+        headers=auth_headers("default", "manager"),
+        json={"reason": "too_late"},
+    )
+    assert res.status_code == 409, res.text
+    assert "in progress" in res.json()["detail"].lower()
+
+    session.refresh(msg)
+    assert msg.status == "ingesting"
+    assert msg.rejection_reason is None
+
+
+def test_ingest_while_ingesting_returns_409(client: TestClient, session: Session):
+    """Second ingest while claim held must not double-create a request."""
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    payload = {
+        "message_id": "<race-ing@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "text_body": "parts",
+    }
+    raw = json.dumps(payload).encode()
+    mid = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    ).json()["email_message_id"]
+
+    msg = session.get(EmailMessage, mid)
+    assert msg is not None
+    msg.status = "ingesting"
+    session.add(msg)
+    session.commit()
+
+    res = client.post(
+        f"/api/email/messages/{mid}/ingest",
+        headers=auth_headers("default", "manager"),
+        json={},
+    )
+    assert res.status_code == 409, res.text
+    assert "in progress" in res.json()["detail"].lower()
+
+
+def test_reject_idempotent_and_blocks_after_ingest(client: TestClient, session: Session):
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    payload = {
+        "message_id": "<rej-idem@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "text_body": "body",
+    }
+    raw = json.dumps(payload).encode()
+    mid = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    ).json()["email_message_id"]
+
+    first = client.post(
+        f"/api/email/messages/{mid}/reject",
+        headers=auth_headers("default", "manager"),
+        json={"reason": "spam"},
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "rejected"
+
+    second = client.post(
+        f"/api/email/messages/{mid}/reject",
+        headers=auth_headers("default", "manager"),
+        json={"reason": "spam_again"},
+    )
+    assert second.status_code == 200
+    assert second.json()["status"] == "rejected"
+    # first reason preserved (idempotent, no overwrite of terminal reject)
+    assert second.json()["rejection_reason"] == "spam"
+
+    # cannot ingest after reject
+    bad_ing = client.post(
+        f"/api/email/messages/{mid}/ingest",
+        headers=auth_headers("default", "manager"),
+        json={},
+    )
+    assert bad_ing.status_code == 422
+
+    # cannot reject after successful ingest of another message
+    payload2 = {
+        "message_id": "<rej-after-ing@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "text_body": "need oil filter",
+    }
+    raw2 = json.dumps(payload2).encode()
+    mid2 = client.post(
+        "/api/integrations/email/inbound",
+        content=raw2,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw2)},
+    ).json()["email_message_id"]
+    ing = client.post(
+        f"/api/email/messages/{mid2}/ingest",
+        headers=auth_headers("default", "manager"),
+        json={},
+    )
+    assert ing.status_code == 200
+    rej_after = client.post(
+        f"/api/email/messages/{mid2}/reject",
+        headers=auth_headers("default", "manager"),
+        json={"reason": "late"},
+    )
+    assert rej_after.status_code == 409
+
+
+def test_ingest_claim_lost_to_reject_returns_422(client: TestClient, session: Session):
+    """If reject wins CAS first, ingest must not create a request."""
+    upsert_inbox_config(
+        session,
+        tenant_id="default",
+        org_slug="default",
+        address="rfq+default@inbound.example",
+    )
+    payload = {
+        "message_id": "<claim-lost@x>",
+        "from": "a@b.com",
+        "to": ["rfq+default@inbound.example"],
+        "text_body": "parts",
+    }
+    raw = json.dumps(payload).encode()
+    mid = client.post(
+        "/api/integrations/email/inbound",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-PartsOps-Signature": sign(raw)},
+    ).json()["email_message_id"]
+
+    # Simulate concurrent reject winning before ingest claim
+    msg = session.get(EmailMessage, mid)
+    assert msg is not None
+    msg.status = "rejected"
+    msg.rejection_reason = "won_race"
+    session.add(msg)
+    session.commit()
+
+    res = client.post(
+        f"/api/email/messages/{mid}/ingest",
+        headers=auth_headers("default", "manager"),
+        json={},
+    )
+    assert res.status_code == 422, res.text
+    assert "rejected" in res.json()["detail"].lower()

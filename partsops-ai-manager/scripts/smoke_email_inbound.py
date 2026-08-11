@@ -97,12 +97,36 @@ def main() -> int:
     listed = _req("GET", "/api/email/messages", role="manager")
     print("list count:", len(listed) if isinstance(listed, list) else listed)
 
+    stats_before = _req("GET", "/api/email/stats", role="manager")
+    print("stats before ingest:", stats_before)
+    if not isinstance(stats_before, dict) or "total" not in stats_before:
+        print("FAIL: /api/email/stats missing total", file=sys.stderr)
+        return 1
+    for key in ("parsed", "ingested", "rejected", "received", "ingesting"):
+        if key not in stats_before:
+            print(f"FAIL: /api/email/stats missing key={key}", file=sys.stderr)
+            return 1
+
     ingested = _req("POST", f"/api/email/messages/{emsg}/ingest", {}, role="manager")
     print("ingest:", ingested)
     rid = ingested.get("request_id")
     if not rid:
         print("FAIL: no request_id", file=sys.stderr)
         return 1
+
+    stats_after = _req("GET", "/api/email/stats", role="manager")
+    print("stats after ingest:", stats_after)
+    if int(stats_after.get("ingested", 0)) < 1:
+        print("FAIL: stats.ingested did not increase after ingest", file=sys.stderr)
+        return 1
+
+    # Idempotent second ingest must not create a second request
+    again = _req("POST", f"/api/email/messages/{emsg}/ingest", {}, role="manager")
+    if again.get("request_id") != rid:
+        print(f"FAIL: second ingest request_id mismatch {again}", file=sys.stderr)
+        return 1
+    if again.get("idempotent") is not True:
+        print(f"WARN: second ingest idempotent flag={again.get('idempotent')}", file=sys.stderr)
 
     print(f"OK request_id={rid} email_message_id={emsg}")
     return 0
