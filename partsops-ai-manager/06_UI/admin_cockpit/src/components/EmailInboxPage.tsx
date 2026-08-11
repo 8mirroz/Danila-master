@@ -29,12 +29,22 @@ type EmailConfig = {
   allowed_senders?: string[];
 };
 
+type EmailStats = {
+  total: number;
+  parsed: number;
+  ingested: number;
+  rejected: number;
+  received: number;
+  ingesting: number;
+};
+
 const STATUS_LABEL: Record<string, string> = {
   parsed: 'К разбору',
   received: 'Получено',
   ingested: 'В заявке',
   rejected: 'Отклонено',
   duplicate: 'Дубликат',
+  ingesting: 'Импорт…',
 };
 
 const STATUS_CLASS: Record<string, string> = {
@@ -43,15 +53,37 @@ const STATUS_CLASS: Record<string, string> = {
   ingested: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   rejected: 'border-red-200 bg-red-50 text-red-800',
   duplicate: 'border-line bg-surface-2 text-ink-muted',
+  ingesting: 'border-sky-200 bg-sky-50 text-sky-800',
 };
+
+const STATS_CHIP_ORDER: Array<{ key: keyof EmailStats; label: string; className: string }> = [
+  { key: 'total', label: 'Всего', className: 'border-line bg-surface-2 text-ink-secondary' },
+  { key: 'parsed', label: 'К разбору', className: 'border-amber-200 bg-amber-50 text-amber-800' },
+  { key: 'received', label: 'Получено', className: 'border-line bg-surface-2 text-ink-secondary' },
+  { key: 'ingesting', label: 'Импорт', className: 'border-sky-200 bg-sky-50 text-sky-800' },
+  { key: 'ingested', label: 'В заявке', className: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+  { key: 'rejected', label: 'Отклонено', className: 'border-red-200 bg-red-50 text-red-800' },
+];
 
 function EmailStatusChip({ status }: { status: string }) {
   return (
     <span
-      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none ${
         STATUS_CLASS[status] || STATUS_CLASS.received
       }`}
     >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          status === 'parsed'
+            ? 'bg-amber-500'
+            : status === 'ingested'
+              ? 'bg-emerald-500'
+              : status === 'rejected'
+                ? 'bg-red-500'
+                : 'bg-slate-400'
+        }`}
+        aria-hidden
+      />
       {STATUS_LABEL[status] || status}
     </span>
   );
@@ -66,6 +98,7 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<EmailMessage | null>(null);
   const [config, setConfig] = useState<EmailConfig | null>(null);
+  const [stats, setStats] = useState<EmailStats | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +120,16 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
     }
   }, [statusFilter]);
 
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await apiJson<EmailStats>('/api/email/stats');
+      setStats(data);
+    } catch {
+      // non-critical — hide chips if endpoint fails
+      setStats(null);
+    }
+  }, []);
+
   const loadConfig = useCallback(async () => {
     try {
       const cfg = await apiJson<EmailConfig>('/api/email/config');
@@ -107,7 +150,19 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
   useEffect(() => {
     void loadMessages();
     void loadConfig();
-  }, [loadMessages, loadConfig]);
+    void loadStats();
+  }, [loadMessages, loadConfig, loadStats]);
+
+  // Auto-refresh list + stats every 20s while mounted
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadMessages();
+      void loadStats();
+    }, 20_000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [loadMessages, loadStats]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -127,6 +182,11 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
     };
   }, [selectedId]);
 
+  const patchLocalMessage = (id: string, patch: Partial<EmailMessage>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    setDetail((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
+  };
+
   const ingest = async (id: string) => {
     setBusy(true);
     setError(null);
@@ -136,9 +196,14 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
       );
       notify.success(`Создана заявка ${result.request_id}`);
-      await loadMessages();
+      // Optimistic detail/list update — avoid blank flash while list reloads
+      patchLocalMessage(id, {
+        status: result.status || 'ingested',
+        request_id: result.request_id ?? null,
+      });
       setSelectedId(id);
-      setDetail(await apiJson<EmailMessage>(`/api/email/messages/${id}`));
+      void loadMessages();
+      void loadStats();
       if (result.request_id) onOpenRequest?.(result.request_id);
     } catch (cause) {
       const msg = cause instanceof Error ? cause.message : 'Не удалось создать заявку';
@@ -153,15 +218,19 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await apiJson(`/api/email/messages/${id}/reject`, {
+      const rejected = await apiJson<EmailMessage>(`/api/email/messages/${id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'operator_rejected' }),
       });
       notify.success('Письмо отклонено');
-      await loadMessages();
+      patchLocalMessage(id, {
+        status: rejected.status || 'rejected',
+        rejection_reason: rejected.rejection_reason ?? 'operator_rejected',
+      });
       setSelectedId(id);
-      setDetail(await apiJson<EmailMessage>(`/api/email/messages/${id}`));
+      void loadMessages();
+      void loadStats();
     } catch (cause) {
       const msg = cause instanceof Error ? cause.message : 'Не удалось отклонить';
       setError(msg);
@@ -212,21 +281,39 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
     }
   };
 
+  const canActOnDetail =
+    Boolean(detail) && detail!.status !== 'ingested' && detail!.status !== 'rejected';
+
   return (
     <section aria-label="Входящие email" className="space-y-4">
       <SectionCard title="Входящие email (RFQ)" icon="envelope">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <p className="max-w-2xl text-xs leading-relaxed text-ink-secondary">
-            Письма с webhook <code className="font-mono text-[10px]">/api/integrations/email/inbound</code>
-            {' '}попадают сюда. По умолчанию review-first: оператор создаёт заявку кнопкой
-            «Создать заявку» (source=EMAIL).
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
+        {/* Header: meta + actions */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1.5">
+            <p className="max-w-2xl text-xs leading-relaxed text-ink-secondary">
+              Письма с webhook{' '}
+              <code className="rounded border border-line bg-surface-2 px-1 py-0.5 font-mono text-[10px] text-ink-primary">
+                /api/integrations/email/inbound
+              </code>{' '}
+              попадают сюда. По умолчанию review-first: оператор создаёт заявку кнопкой «Создать
+              заявку» (source=EMAIL).
+            </p>
+            <p className="text-[10px] font-semibold tabular-nums text-ink-muted">
+              {messages.length > 0
+                ? `${messages.length} ${messages.length === 1 ? 'письмо' : messages.length < 5 ? 'письма' : 'писем'}${
+                    statusFilter ? ` · фильтр: ${STATUS_LABEL[statusFilter] || statusFilter}` : ''
+                  }`
+                : statusFilter
+                  ? 'Нет писем с выбранным статусом'
+                  : 'Очередь пуста'}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <select
               aria-label="Фильтр статуса"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-control border border-line bg-surface-1 px-2 py-1.5 text-xs text-ink-primary"
+              className="rounded-control border border-line bg-surface-1 px-2.5 py-1.5 text-xs font-medium text-ink-primary"
             >
               <option value="">Все статусы</option>
               <option value="parsed">К разбору</option>
@@ -234,7 +321,17 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
               <option value="rejected">Отклонено</option>
               <option value="received">Получено</option>
             </select>
-            <Button size="sm" variant="secondary" icon="rotate" disabled={busy} onClick={() => void loadMessages()}>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon="rotate"
+              disabled={busy}
+              onClick={() => {
+                void loadMessages();
+                void loadStats();
+              }}
+              aria-label="Обновить список писем"
+            >
               Обновить
             </Button>
           </div>
@@ -246,82 +343,197 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
           </div>
         )}
 
+        {stats && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5" aria-label="Статистика inbox">
+            {STATS_CHIP_ORDER.map(({ key, label, className }) => (
+              <span
+                key={key}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${className}`}
+              >
+                <span className="font-semibold text-ink-muted">{label}</span>
+                <span className="font-mono tabular-nums">{stats[key]}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Config status strip */}
         {config && (
-          <div className="mt-3 rounded-control border border-line bg-surface-2 px-3 py-2 text-[11px] text-ink-secondary">
+          <div
+            className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-control border px-3 py-2.5 text-[11px] ${
+              config.configured
+                ? 'border-line bg-surface-2 text-ink-secondary'
+                : 'border-amber-200 bg-amber-50/80 text-amber-900'
+            }`}
+          >
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                config.configured
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-amber-300 bg-amber-100 text-amber-800'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${config.configured ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                aria-hidden
+              />
+              {config.configured ? 'Настроен' : 'Не настроен'}
+            </span>
             {config.configured ? (
               <>
-                Адрес: <strong className="font-mono text-ink-primary">{config.address}</strong>
-                {' · '}slug <strong className="font-mono">{config.org_slug}</strong>
-                {' · '}auto_ingest:{' '}
-                <strong>{config.auto_ingest ? 'on' : 'off'}</strong>
+                <span className="min-w-0 truncate">
+                  Адрес:{' '}
+                  <strong className="font-mono text-ink-primary">{config.address}</strong>
+                </span>
+                <span className="text-ink-muted">·</span>
+                <span>
+                  slug <strong className="font-mono text-ink-primary">{config.org_slug}</strong>
+                </span>
+                <span className="text-ink-muted">·</span>
+                <span>
+                  auto_ingest:{' '}
+                  <strong className={config.auto_ingest ? 'text-emerald-700' : 'text-ink-primary'}>
+                    {config.auto_ingest ? 'on' : 'off'}
+                  </strong>
+                </span>
               </>
             ) : (
-              <span>Inbox не настроен для tenant (admin: сохраните конфиг ниже).</span>
+              <span>Inbox не настроен для tenant — сохраните конфиг в блоке ниже (роль admin).</span>
             )}
           </div>
         )}
 
+        {/* Master–detail */}
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
+          {/* Message list */}
           <div className="overflow-hidden rounded-control border border-line bg-surface-1">
-            <table className="w-full text-left text-[11px]">
-              <thead className="border-b border-line bg-surface-2 text-ink-muted">
-                <tr>
-                  <th className="px-3 py-2 font-semibold">Когда</th>
-                  <th className="px-3 py-2 font-semibold">От</th>
-                  <th className="px-3 py-2 font-semibold">Тема</th>
-                  <th className="px-3 py-2 font-semibold">Статус</th>
-                  <th className="px-3 py-2 font-semibold">Влож.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {messages.length === 0 && (
+            <div className="flex items-center justify-between border-b border-line bg-surface-2 px-3 py-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">
+                Список писем
+              </span>
+              {selectedId && (
+                <span className="text-[10px] font-semibold text-accent-primary">выбрано</span>
+              )}
+            </div>
+            <div className="max-h-[min(520px,60vh)] overflow-auto custom-scrollbar">
+              <table className="w-full text-left text-[11px]">
+                <thead className="sticky top-0 z-[1] border-b border-line bg-surface-2/95 text-ink-muted backdrop-blur-sm">
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center text-ink-muted">
-                      Писем нет. Настройте webhook и адрес <span className="font-mono">rfq+&#123;slug&#125;@…</span>
-                    </td>
+                    <th className="whitespace-nowrap px-3 py-2.5 font-semibold">Когда</th>
+                    <th className="px-3 py-2.5 font-semibold">От</th>
+                    <th className="px-3 py-2.5 font-semibold">Тема</th>
+                    <th className="px-3 py-2.5 font-semibold">Статус</th>
+                    <th className="whitespace-nowrap px-3 py-2.5 font-semibold" title="Вложения">
+                      Влож.
+                    </th>
                   </tr>
-                )}
-                {messages.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={() => setSelectedId(row.id)}
-                    className={`cursor-pointer border-t border-line-subtle transition-colors hover:bg-surface-2 ${
-                      selectedId === row.id ? 'bg-accent-primary/5' : ''
-                    }`}
-                  >
-                    <td className="px-3 py-2 font-mono text-ink-secondary">{formatWhen(row.received_at)}</td>
-                    <td className="max-w-[120px] truncate px-3 py-2 text-ink-secondary">{row.from_masked || '—'}</td>
-                    <td className="max-w-[200px] truncate px-3 py-2 font-semibold text-ink-primary">
-                      {row.subject || '(без темы)'}
-                    </td>
-                    <td className="px-3 py-2">
-                      <EmailStatusChip status={row.status} />
-                    </td>
-                    <td data-numeric className="px-3 py-2 font-mono">
-                      {row.attachment_artifact_ids?.length ?? 0}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {messages.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-0">
+                        <div className="ds-empty m-3 border-0 bg-transparent p-6">
+                          <div className="ds-empty__icon" aria-hidden>
+                            <Icon name="inbox" size={18} />
+                          </div>
+                          <p className="ds-empty__title">Писем нет</p>
+                          <p className="ds-empty__hint max-w-xs">
+                            {statusFilter
+                              ? 'Снимите фильтр или дождитесь новых писем с этим статусом.'
+                              : (
+                                <>
+                                  Настройте webhook и адрес{' '}
+                                  <span className="font-mono">rfq+&#123;slug&#125;@…</span>
+                                </>
+                              )}
+                          </p>
+                          {!statusFilter && !config?.configured && (
+                            <p className="mt-2 text-[10px] font-semibold text-accent-primary">
+                              → заполните конфиг inbox ниже
+                            </p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {messages.map((row) => {
+                    const selected = selectedId === row.id;
+                    return (
+                      <tr
+                        key={row.id}
+                        tabIndex={0}
+                        aria-selected={selected}
+                        aria-label={`Письмо: ${row.subject || 'без темы'}, ${STATUS_LABEL[row.status] || row.status}`}
+                        onClick={() => setSelectedId(row.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedId(row.id);
+                          }
+                        }}
+                        className={`cursor-pointer border-t border-line-subtle transition-colors focus-visible:outline-none focus-visible:bg-[var(--state-hover)] ${
+                          selected
+                            ? 'bg-[var(--state-selected)] shadow-[inset_3px_0_0_0_var(--accent-primary)]'
+                            : 'hover:bg-[var(--state-hover)]'
+                        }`}
+                      >
+                        <td className="whitespace-nowrap px-3 py-2.5 font-mono tabular-nums text-ink-secondary">
+                          {formatWhen(row.received_at)}
+                        </td>
+                        <td className="max-w-[110px] truncate px-3 py-2.5 text-ink-secondary" title={row.from_masked || undefined}>
+                          {row.from_masked || '—'}
+                        </td>
+                        <td
+                          className="max-w-[220px] truncate px-3 py-2.5 font-semibold text-ink-primary"
+                          title={row.subject || undefined}
+                        >
+                          {row.subject || '(без темы)'}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <EmailStatusChip status={row.status} />
+                        </td>
+                        <td data-numeric className="px-3 py-2.5 font-mono tabular-nums text-ink-secondary">
+                          {row.attachment_artifact_ids?.length ?? 0}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="flex min-h-[280px] flex-col rounded-control border border-line bg-surface-2 p-4">
+          {/* Detail panel */}
+          <div
+            className="flex min-h-[300px] flex-col rounded-control border border-line bg-surface-2 p-4"
+            aria-label="Просмотр письма"
+          >
             {!detail && (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-ink-muted">
-                <Icon name="envelope" size={22} />
-                <p className="text-xs">Выберите письмо в списке</p>
+              <div className="ds-empty flex-1 border-0 bg-transparent">
+                <div className="ds-empty__icon" aria-hidden>
+                  <Icon name="envelope" size={18} />
+                </div>
+                <p className="ds-empty__title">Выберите письмо</p>
+                <p className="ds-empty__hint max-w-[220px]">
+                  Кликните строку в списке слева, чтобы просмотреть тело, вложения и создать заявку.
+                </p>
               </div>
             )}
             {detail && (
               <>
-                <div className="mb-3 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-ink-primary">{detail.subject || '(без темы)'}</p>
-                    <p className="mt-0.5 text-[10px] text-ink-muted">
-                      {detail.from_masked} · {formatWhen(detail.received_at)}
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate text-sm font-bold leading-snug text-ink-primary" title={detail.subject || undefined}>
+                      {detail.subject || '(без темы)'}
                     </p>
-                    <p className="mt-0.5 font-mono text-[10px] text-ink-muted">{detail.id}</p>
+                    <p className="truncate text-[11px] text-ink-secondary">
+                      <span className="font-semibold">{detail.from_masked || '—'}</span>
+                      <span className="text-ink-muted"> · </span>
+                      <span className="tabular-nums">{formatWhen(detail.received_at)}</span>
+                    </p>
+                    <p className="truncate font-mono text-[10px] text-ink-muted" title={detail.id}>
+                      {detail.id}
+                    </p>
                   </div>
                   <EmailStatusChip status={detail.status} />
                 </div>
@@ -329,44 +541,60 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                 {detail.request_id && (
                   <button
                     type="button"
-                    className="mb-2 text-left text-[11px] font-semibold text-accent-primary hover:underline"
+                    className="mb-2 inline-flex w-fit items-center gap-1 rounded-control border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
                     onClick={() => onOpenRequest?.(detail.request_id!)}
+                    aria-label={`Открыть заявку ${detail.request_id}`}
                   >
-                    Заявка {detail.request_id} →
+                    <Icon name="arrow-right" size={12} />
+                    Заявка {detail.request_id}
                   </button>
                 )}
                 {detail.rejection_reason && (
-                  <p className="mb-2 text-[11px] text-[var(--accent-danger)]">
-                    Причина: {detail.rejection_reason}
+                  <p className="mb-2 rounded-control border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] text-[var(--accent-danger)]">
+                    Причина отклонения: {detail.rejection_reason}
                   </p>
                 )}
                 {typeof detail.auth_results?.auto_ingest_error === 'string' && (
-                  <p className="mb-2 text-[11px] text-amber-800">
+                  <p className="mb-2 rounded-control border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
                     auto_ingest error: {detail.auth_results.auto_ingest_error}
                   </p>
                 )}
 
-                <div className="mb-3 max-h-40 overflow-y-auto rounded-md border border-line bg-surface-1 p-2 text-[11px] leading-relaxed text-ink-secondary whitespace-pre-wrap">
+                <div className="mb-3 max-h-40 overflow-y-auto rounded-md border border-line bg-surface-1 p-3 text-[11px] leading-relaxed text-ink-secondary whitespace-pre-wrap custom-scrollbar">
                   {detail.body_masked_excerpt || '— пустое тело —'}
                 </div>
 
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-                  Вложения ({detail.attachment_artifact_ids?.length ?? 0})
-                </p>
-                <ul className="mb-4 space-y-1 text-[10px] font-mono text-ink-secondary">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+                    Вложения
+                  </p>
+                  <span className="rounded-full border border-line bg-surface-1 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-ink-secondary">
+                    {detail.attachment_artifact_ids?.length ?? 0}
+                  </span>
+                </div>
+                <ul className="mb-4 max-h-24 space-y-1 overflow-y-auto text-[10px] font-mono text-ink-secondary custom-scrollbar">
                   {(detail.attachment_artifact_ids || []).map((aid) => (
-                    <li key={aid}>{aid}</li>
+                    <li
+                      key={aid}
+                      className="truncate rounded border border-line-subtle bg-surface-1 px-2 py-1"
+                      title={aid}
+                    >
+                      {aid}
+                    </li>
                   ))}
-                  {(detail.attachment_artifact_ids || []).length === 0 && <li className="text-ink-muted">нет</li>}
+                  {(detail.attachment_artifact_ids || []).length === 0 && (
+                    <li className="px-1 text-ink-muted">нет вложений</li>
+                  )}
                 </ul>
 
-                <div className="mt-auto flex flex-wrap gap-2">
+                <div className="mt-auto flex flex-wrap gap-2 border-t border-line-subtle pt-3">
                   <Button
                     size="sm"
                     variant="primary"
                     icon="plus"
-                    disabled={busy || detail.status === 'ingested' || detail.status === 'rejected'}
+                    disabled={busy || !canActOnDetail}
                     onClick={() => void ingest(detail.id)}
+                    aria-label="Создать заявку из письма"
                   >
                     Создать заявку
                   </Button>
@@ -374,8 +602,9 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                     size="sm"
                     variant="secondary"
                     icon="x-mark"
-                    disabled={busy || detail.status === 'ingested' || detail.status === 'rejected'}
+                    disabled={busy || !canActOnDetail}
                     onClick={() => void reject(detail.id)}
+                    aria-label="Отклонить письмо"
                   >
                     Отклонить
                   </Button>
@@ -387,35 +616,40 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
       </SectionCard>
 
       <SectionCard title="Конфиг inbox (admin)" icon="circle-info">
+        <p className="mb-3 text-[11px] leading-relaxed text-ink-secondary">
+          Привязка inbound-адреса к tenant. Требуется роль admin. После сохранения webhook может
+          принимать письма на указанный address.
+        </p>
         <div className="grid gap-3 sm:grid-cols-3">
-          <label className="grid gap-1 text-[11px] font-semibold text-ink-secondary">
+          <label className="grid gap-1.5 text-[11px] font-semibold text-ink-secondary">
             org_slug
             <input
-              className="rounded-control border border-line bg-surface-1 px-2 py-1.5 font-mono text-xs text-ink-primary"
+              className="rounded-control border border-line bg-surface-1 px-2.5 py-1.5 font-mono text-xs text-ink-primary"
               value={cfgForm.org_slug}
               onChange={(e) => setCfgForm((f) => ({ ...f, org_slug: e.target.value }))}
               aria-label="org_slug"
             />
           </label>
-          <label className="grid gap-1 text-[11px] font-semibold text-ink-secondary sm:col-span-2">
+          <label className="grid gap-1.5 text-[11px] font-semibold text-ink-secondary sm:col-span-2">
             address
             <input
-              className="rounded-control border border-line bg-surface-1 px-2 py-1.5 font-mono text-xs text-ink-primary"
+              className="rounded-control border border-line bg-surface-1 px-2.5 py-1.5 font-mono text-xs text-ink-primary"
               value={cfgForm.address}
               onChange={(e) => setCfgForm((f) => ({ ...f, address: e.target.value }))}
               aria-label="address"
             />
           </label>
         </div>
-        <label className="mt-3 flex items-center gap-2 text-[11px] font-semibold text-ink-secondary">
+        <label className="mt-3 flex cursor-pointer items-center gap-2 text-[11px] font-semibold text-ink-secondary">
           <input
             type="checkbox"
+            className="rounded border-line"
             checked={cfgForm.auto_ingest}
             onChange={(e) => setCfgForm((f) => ({ ...f, auto_ingest: e.target.checked }))}
           />
           auto_ingest (сразу create_request после webhook)
         </label>
-        <div className="mt-3">
+        <div className="mt-4">
           <Button size="sm" variant="secondary" disabled={busy} onClick={() => void saveConfig()}>
             Сохранить конфиг
           </Button>

@@ -719,6 +719,28 @@ def list_messages(
     return [message_to_dict(m) for m in session.exec(stmt).all()]
 
 
+def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
+    """Per-tenant counts of email_messages by status (tenant isolation only)."""
+    from sqlalchemy import func
+    from sqlmodel import col
+
+    rows = session.exec(
+        select(EmailMessage.status, func.count(col(EmailMessage.id)))
+        .where(EmailMessage.tenant_id == tenant_id)
+        .group_by(EmailMessage.status)
+    ).all()
+    by_status: dict[str, int] = {str(s or ""): int(c or 0) for s, c in rows}
+    total = sum(by_status.values())
+    return {
+        "total": total,
+        "parsed": by_status.get("parsed", 0),
+        "ingested": by_status.get("ingested", 0),
+        "rejected": by_status.get("rejected", 0),
+        "received": by_status.get("received", 0),
+        "ingesting": by_status.get("ingesting", 0),
+    }
+
+
 def get_message(session: Session, tenant_id: str, message_id: str) -> dict[str, Any]:
     msg = session.get(EmailMessage, message_id)
     if not msg or msg.tenant_id != tenant_id:

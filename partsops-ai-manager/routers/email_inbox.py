@@ -157,6 +157,16 @@ def list_email_messages(
     return ingest.list_messages(session, tenant_id, status=status, limit=limit)
 
 
+@router.get("/api/email/stats")
+def email_message_stats(
+    tenant_id: str = Depends(get_current_tenant),
+    role: str = Depends(require_manager),
+    session: Session = Depends(get_session),
+):
+    """Per-tenant inbox counters for operator UI chips (manager+)."""
+    return ingest.get_message_stats(session, tenant_id)
+
+
 @router.get("/api/email/messages/{message_id}")
 def get_email_message(
     message_id: str,

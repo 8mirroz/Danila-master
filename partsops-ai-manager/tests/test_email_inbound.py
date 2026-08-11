@@ -17,7 +17,11 @@ from database import get_session
 from models import UploadArtifact
 from models_email import EmailMessage
 from rbac import create_signed_token, _get_api_token
-from services.email_ingest import extract_org_slug_from_recipients, upsert_inbox_config
+from services.email_ingest import (
+    extract_org_slug_from_recipients,
+    get_message_stats,
+    upsert_inbox_config,
+)
 
 
 @pytest.fixture(name="session")
@@ -567,3 +571,92 @@ def test_auto_ingest_creates_request(client: TestClient, session: Session):
     assert body.get("auto_ingested") is True
     assert body["status"] == "ingested"
     assert body.get("request_id", "").startswith("REQ-")
+
+
+def test_get_message_stats_service_and_endpoint(client: TestClient, session: Session):
+    """Stats are scoped by tenant_id; empty keys default to 0."""
+    empty = get_message_stats(session, "tenant-stats-a")
+    assert empty == {
+        "total": 0,
+        "parsed": 0,
+        "ingested": 0,
+        "rejected": 0,
+        "received": 0,
+        "ingesting": 0,
+    }
+
+    upsert_inbox_config(
+        session,
+        tenant_id="tenant-stats-a",
+        org_slug="stats-a",
+        address="rfq+stats-a@inbound.example",
+    )
+    upsert_inbox_config(
+        session,
+        tenant_id="tenant-stats-b",
+        org_slug="stats-b",
+        address="rfq+stats-b@inbound.example",
+    )
+
+    def post_inbound(to_addr: str, mid: str) -> None:
+        payload = {
+            "message_id": mid,
+            "from": "buyer@partner.ru",
+            "to": [to_addr],
+            "subject": "RFQ",
+            "text_body": "need pads x2",
+        }
+        raw = json.dumps(payload).encode()
+        res = client.post(
+            "/api/integrations/email/inbound",
+            content=raw,
+            headers={
+                "Content-Type": "application/json",
+                "X-PartsOps-Signature": sign(raw),
+            },
+        )
+        assert res.status_code == 202, res.text
+
+    post_inbound("rfq+stats-a@inbound.example", "<stats-a-1@x>")
+    post_inbound("rfq+stats-a@inbound.example", "<stats-a-2@x>")
+    post_inbound("rfq+stats-b@inbound.example", "<stats-b-1@x>")
+
+    # Mark one tenant-a message rejected so counts diverge by status
+    msgs_a = session.exec(
+        select(EmailMessage).where(EmailMessage.tenant_id == "tenant-stats-a")
+    ).all()
+    assert len(msgs_a) == 2
+    msgs_a[0].status = "rejected"
+    session.add(msgs_a[0])
+    session.commit()
+
+    stats_a = get_message_stats(session, "tenant-stats-a")
+    assert stats_a["total"] == 2
+    assert stats_a["rejected"] == 1
+    assert stats_a["parsed"] + stats_a["received"] + stats_a["ingested"] + stats_a["ingesting"] == 1
+    assert stats_a["ingested"] == 0
+    assert stats_a["ingesting"] == 0
+
+    stats_b = get_message_stats(session, "tenant-stats-b")
+    assert stats_b["total"] == 1
+    assert stats_b["rejected"] == 0
+
+    # API: manager can read own tenant stats
+    res = client.get("/api/email/stats", headers=auth_headers("tenant-stats-a", "manager"))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["total"] == 2
+    assert body["rejected"] == 1
+    assert set(body.keys()) == {
+        "total",
+        "parsed",
+        "ingested",
+        "rejected",
+        "received",
+        "ingesting",
+    }
+
+    # Cross-tenant: tenant-b token must not see tenant-a totals
+    res_b = client.get("/api/email/stats", headers=auth_headers("tenant-stats-b", "manager"))
+    assert res_b.status_code == 200
+    assert res_b.json()["total"] == 1

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiFetch } from '../lib/api';
 import { SectionCard, ActionButton, Icon } from './Primitives';
 
@@ -29,6 +29,50 @@ type HermesHealth = {
   hint?: string;
   latency_ms?: number;
 };
+
+function statusStripClasses(status: HermesHealth['status']) {
+  if (status === 'online') {
+    return {
+      pill: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+      dot: 'bg-emerald-500 animate-pulse',
+      label: 'Online',
+    };
+  }
+  if (status === 'degraded') {
+    return {
+      pill: 'border-amber-200 bg-amber-50 text-amber-800',
+      dot: 'bg-amber-500',
+      label: 'Degraded',
+    };
+  }
+  return {
+    pill: 'border-rose-200 bg-rose-50 text-rose-800',
+    dot: 'bg-rose-500',
+    label: 'Offline',
+  };
+}
+
+function statusHeadline(health: HermesHealth): string {
+  if (health.status === 'online') return 'Hermes API Server готов';
+  if (health.status === 'degraded') {
+    return health.mode === 'local' ? 'Локальный grounded fallback' : 'Ограниченный режим';
+  }
+  return 'Сервис недоступен';
+}
+
+function traceStatusClass(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'ok' || s === 'success' || s === 'completed') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  }
+  if (s === 'error' || s === 'failed') {
+    return 'border-rose-200 bg-rose-50 text-rose-800';
+  }
+  if (s === 'timeout' || s === 'degraded') {
+    return 'border-amber-200 bg-amber-50 text-amber-800';
+  }
+  return 'border-line bg-surface-2 text-ink-secondary';
+}
 
 export const AgentOSPanel: React.FC = () => {
   const [traces, setTraces] = useState<Trace[]>([]);
@@ -87,205 +131,286 @@ export const AgentOSPanel: React.FC = () => {
 
   const totalCost = traces.reduce((acc, t) => acc + (t.cost_usd || 0), 0);
   const totalTokens = traces.reduce((acc, t) => acc + (t.total_tokens || 0), 0);
+  const strip = useMemo(() => statusStripClasses(hermesHealth.status), [hermesHealth.status]);
+
+  const refreshAll = () => {
+    fetchHealth();
+    fetchTraces();
+  };
 
   return (
     <div className="space-y-6">
+      {/* Hero + status strip */}
       <section className="panel-card relative overflow-hidden p-6">
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 relative z-10 w-full">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-emerald-700">
-                HERMES AGENT OS
+        <div className="relative z-10 flex w-full flex-col justify-between gap-5 xl:flex-row xl:items-start">
+          <div className="min-w-0 space-y-3">
+            {/* Compact status strip: brand · health · mode */}
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="status"
+              aria-live="polite"
+              aria-label={`Статус Hermes: ${strip.label}`}
+            >
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-sky-800">
+                Hermes Agent OS
               </span>
               <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  hermesHealth.status === 'online'
-                    ? 'bg-emerald-500 animate-pulse'
-                    : hermesHealth.status === 'degraded'
-                    ? 'bg-amber-400'
-                    : 'bg-rose-500'
-                }`}
-              />
-              <span className="text-xs font-semibold text-ink-secondary">
-                {hermesHealth.status === 'online'
-                  ? 'Hermes API Server готов (Online)'
-                  : hermesHealth.status === 'degraded'
-                  ? hermesHealth.mode === 'local'
-                    ? 'Локальный grounded fallback'
-                    : 'Ограниченный режим (Degraded)'
-                  : 'Сервис оффлайн (Offline)'}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${strip.pill}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${strip.dot}`} aria-hidden />
+                {strip.label}
               </span>
               {hermesHealth.mode && (
-                <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-muted">
-                  mode:{hermesHealth.mode}
+                <span className="rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-ink-muted">
+                  mode · {hermesHealth.mode}
+                </span>
+              )}
+              {hermesHealth.local_fallback && hermesHealth.status !== 'online' && (
+                <span className="rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-ink-secondary">
+                  fallback ready
                 </span>
               )}
             </div>
-            <h2 className="font-sans text-xl font-bold tracking-tight text-ink-primary sm:text-2xl">
-              Операторская консоль и трассировка Hermes
-            </h2>
-            <p className="max-w-xl text-xs leading-relaxed text-ink-secondary">
-              Реальный мониторинг состояния изолированного профиля Hermes (`partsops`), доступных навыков, трассировки LLM вызовов и бюджета.
+
+            <div className="space-y-1.5">
+              <h2 className="font-sans text-xl font-bold tracking-tight text-ink-primary sm:text-2xl">
+                Операторская консоль и трассировка Hermes
+              </h2>
+              <p className="text-xs font-semibold text-ink-secondary">{statusHeadline(hermesHealth)}</p>
+              <p className="max-w-xl text-xs leading-relaxed text-ink-secondary">
+                Мониторинг профиля <code className="font-mono text-[10px]">partsops</code>, навыков,
+                LLM-трасс и бюджета. Обновление каждые 15 с.
+              </p>
               {hermesHealth.hint ? (
-                <span className="mt-1 block text-[11px] text-ink-muted">{hermesHealth.hint}</span>
+                <p className="max-w-xl rounded-control border border-line bg-surface-2 px-2.5 py-1.5 text-[11px] text-ink-muted">
+                  {hermesHealth.hint}
+                </p>
               ) : null}
-            </p>
+              {hermesHealth.error ? (
+                <p className="max-w-xl rounded-control border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-800">
+                  {hermesHealth.error}
+                </p>
+              ) : null}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <ActionButton variant="secondary" icon="sync-alt" onClick={() => { fetchHealth(); fetchTraces(); }}>
+          <div className="flex shrink-0 items-center gap-3">
+            <ActionButton
+              variant="secondary"
+              icon="sync-alt"
+              onClick={refreshAll}
+              aria-label="Обновить health и трассы"
+            >
               Обновить данные
             </ActionButton>
           </div>
         </div>
       </section>
 
-      {/* Real KPI Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-surface-1 border border-line rounded-xl p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Статус готовности</span>
-          <b
-            className={`text-xl font-extrabold font-mono block mt-1 ${
+      {/* KPI metrics */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+        <div className="ui-metric-card ui-metric-card--erp">
+          <div className="ui-metric-card__label">
+            <Icon name="pulse" size={12} />
+            Статус готовности
+          </div>
+          <div
+            className={`ui-metric-card__value text-lg sm:text-xl ${
               hermesHealth.status === 'online'
                 ? 'text-emerald-600'
                 : hermesHealth.status === 'degraded'
-                ? 'text-amber-500'
-                : 'text-rose-500'
+                  ? 'text-amber-600'
+                  : 'text-rose-600'
             }`}
           >
             {hermesHealth.status.toUpperCase()}
-          </b>
-          <span className="text-[9px] text-ink-secondary mt-1.5">Профиль: {hermesHealth.profile}</span>
+          </div>
+          <div className="ui-metric-card__detail">Профиль: {hermesHealth.profile}</div>
         </div>
 
-        <div className="bg-surface-1 border border-line rounded-xl p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Общий расход сессии</span>
-          <b className="text-xl font-extrabold text-ink-primary font-mono block mt-1">
+        <div className="ui-metric-card ui-metric-card--approvals">
+          <div className="ui-metric-card__label">
+            <Icon name="money-bill-wave" size={12} />
+            Расход сессии
+          </div>
+          <div className="ui-metric-card__value text-lg sm:text-xl font-mono">
             ${totalCost.toFixed(4)}
-          </b>
-          <span className="text-[9px] text-ink-secondary mt-1.5">из дневного лимита $10.00</span>
+          </div>
+          <div className="ui-metric-card__detail">из дневного лимита $10.00</div>
         </div>
 
-        <div className="bg-surface-1 border border-line rounded-xl p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Обработано токенов</span>
-          <b className="text-xl font-extrabold text-indigo-600 font-mono block mt-1">
-            {totalTokens.toLocaleString()}
-          </b>
-          <span className="text-[9px] text-ink-secondary mt-1.5">всего вызовов: {traces.length}</span>
+        <div className="ui-metric-card ui-metric-card--queue">
+          <div className="ui-metric-card__label">
+            <Icon name="terminal" size={12} />
+            Токены
+          </div>
+          <div className="ui-metric-card__value text-lg sm:text-xl font-mono text-indigo-600">
+            {totalTokens.toLocaleString('ru-RU')}
+          </div>
+          <div className="ui-metric-card__detail">вызовов: {traces.length}</div>
         </div>
 
-        <div className="bg-surface-1 border border-line rounded-xl p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Версия / канал</span>
-          <b className="text-xl font-extrabold text-ink-primary font-mono block mt-1">
+        <div className="ui-metric-card ui-metric-card--suppliers">
+          <div className="ui-metric-card__label">
+            <Icon name="microchip" size={12} />
+            Версия / канал
+          </div>
+          <div className="ui-metric-card__value text-lg sm:text-xl font-mono">
             v{hermesHealth.version || '—'}
-          </b>
-          <span className="text-[9px] text-ink-secondary mt-1.5">
+          </div>
+          <div className="ui-metric-card__detail truncate" title={hermesHealth.hermes_url}>
             {hermesHealth.hermes_url || 'http://127.0.0.1:8642'}
-            {typeof hermesHealth.latency_ms === 'number' ? ` · ${hermesHealth.latency_ms}ms` : ''}
-            {hermesHealth.local_fallback ? ' · fallback ready' : ''}
-          </span>
+            {typeof hermesHealth.latency_ms === 'number' ? ` · ${hermesHealth.latency_ms} ms` : ''}
+          </div>
         </div>
       </div>
 
-      {/* Main Dual Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Column: LLM Traces from Backend */}
-        <div className="lg:col-span-2 space-y-4">
+      {/* Main dual panel */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* LLM Traces */}
+        <div className="space-y-4 lg:col-span-2">
           <SectionCard
             title="Реальные вызовы моделей (LLM Traces)"
             icon="terminal"
             headerActions={
-              <ActionButton variant="secondary" icon="sync-alt" onClick={fetchTraces}>
-                Обновить трассы
+              <ActionButton
+                variant="secondary"
+                icon="sync-alt"
+                size="sm"
+                onClick={fetchTraces}
+                aria-label="Обновить трассы"
+              >
+                Обновить
               </ActionButton>
             }
           >
-            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+            <div className="custom-scrollbar max-h-[500px] space-y-3 overflow-y-auto pr-0.5">
               {traces.length === 0 ? (
-                <div className="p-8 text-center text-ink-muted text-xs">
-                  <Icon name="inbox" size={24} className="text-2xl mb-2 text-ink-secondary block" />
-                  Нет зафиксированных LLM-трасс. Вызовите Hermes через чат-дровер для записи вызова.
+                <div className="ds-empty">
+                  <div className="ds-empty__icon" aria-hidden>
+                    <Icon name="inbox" size={18} />
+                  </div>
+                  <p className="ds-empty__title">Нет зафиксированных LLM-трасс</p>
+                  <p className="ds-empty__hint max-w-sm">
+                    Вызовите Hermes через чат-дровер — вызов появится здесь с latency, токенами и
+                    стоимостью.
+                  </p>
                 </div>
               ) : (
-                <div className="divide-y divide-[var(--border-subtle)] border border-line rounded-lg bg-surface-2">
+                <ul className="divide-y divide-[var(--border-subtle)] overflow-hidden rounded-control border border-line bg-surface-1">
                   {traces.map((trace) => (
-                    <div key={trace.correlation_id} className="p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-surface-20/5 transition-colors">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-ink-muted font-extrabold">{trace.correlation_id}</span>
-                          <span className="text-[10px] font-bold text-ink-primary">{trace.model}</span>
+                    <li
+                      key={trace.correlation_id}
+                      className="flex flex-col justify-between gap-3 px-3.5 py-3 transition-colors hover:bg-[var(--state-hover)] md:flex-row md:items-center"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className="truncate font-mono text-[10px] font-bold text-ink-muted"
+                            title={trace.correlation_id}
+                          >
+                            {trace.correlation_id}
+                          </span>
+                          <span className="truncate text-[11px] font-bold text-ink-primary">
+                            {trace.model}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-3 text-[9px] text-ink-muted">
-                          <span>Провайдер: <strong className="text-ink-secondary">{trace.provider}</strong></span>
-                          <span>Токенов: <strong className="text-ink-secondary">{trace.total_tokens}</strong></span>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-ink-muted">
+                          <span>
+                            Провайдер:{' '}
+                            <strong className="font-semibold text-ink-secondary">{trace.provider}</strong>
+                          </span>
+                          <span>
+                            Токенов:{' '}
+                            <strong className="font-mono font-semibold tabular-nums text-ink-secondary">
+                              {trace.total_tokens}
+                            </strong>
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 text-right shrink-0">
+                      <div className="flex shrink-0 items-center gap-3 md:gap-4">
                         <div className="text-right">
-                          <span className="text-xs font-mono font-bold text-ink-primary block">${(trace.cost_usd || 0).toFixed(5)}</span>
-                          <span className="text-[9px] text-ink-muted">{trace.latency_ms} ms</span>
+                          <span className="block font-mono text-xs font-bold tabular-nums text-ink-primary">
+                            ${(trace.cost_usd || 0).toFixed(5)}
+                          </span>
+                          <span className="text-[10px] tabular-nums text-ink-muted">
+                            {trace.latency_ms} ms
+                          </span>
                         </div>
-                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 border border-emerald-200 rounded-full">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${traceStatusClass(
+                            trace.status,
+                          )}`}
+                        >
                           {trace.status}
                         </span>
                       </div>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </div>
           </SectionCard>
         </div>
 
-        {/* Right Column: Active Profile Skills & Capabilities */}
+        {/* Skills + security */}
         <div className="space-y-4">
-          <SectionCard title="Подключенные Навыки (PartsOps Skills)" icon="microchip">
-            <div className="space-y-2 pt-1">
-              <span className="text-[10px] text-ink-muted block">
-                Изолированный профиль `partsops` имеет доступ строго к 3 одобренным skills:
-              </span>
+          <SectionCard title="Подключенные навыки (PartsOps Skills)" icon="microchip">
+            <div className="space-y-2.5 pt-0.5">
+              <p className="text-[11px] leading-relaxed text-ink-secondary">
+                Изолированный профиль <code className="font-mono text-[10px]">partsops</code> имеет
+                доступ строго к одобренным skills:
+              </p>
 
-              {hermesHealth.skills.map((skillName) => (
-                <div key={skillName} className="p-2.5 rounded-lg border border-line bg-ink-primary flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Icon name="check-circle" size={12} className="text-emerald-400 text-xs" />
-                    <span className="text-xs font-bold text-ink-primary font-mono">{skillName}</span>
-                  </div>
-                  <span className="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded font-bold">
-                    READ-ONLY
-                  </span>
-                </div>
-              ))}
+              <ul className="space-y-2">
+                {hermesHealth.skills.map((skillName) => (
+                  <li
+                    key={skillName}
+                    className="flex items-center justify-between gap-2 rounded-control border border-line bg-surface-1 px-3 py-2.5"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Icon name="check-circle" size={14} className="shrink-0 text-emerald-600" />
+                      <span className="truncate font-mono text-[11px] font-bold text-ink-primary" title={skillName}>
+                        {skillName}
+                      </span>
+                    </div>
+                    <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                      Read-only
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </SectionCard>
 
           <SectionCard title="Ограничения профиля и безопасность" icon="shield-halved">
-            <div className="space-y-2 text-[11px] text-ink-secondary pt-1">
-              <div className="flex items-center justify-between py-1 border-b border-line">
-                <span>Прямой доступ к CLI / Terminal</span>
-                <span className="text-rose-400 font-bold">ОТКЛЮЧЕН</span>
-              </div>
-              <div className="flex items-center justify-between py-1 border-b border-line">
-                <span>Файловый доступ / File I/O</span>
-                <span className="text-rose-400 font-bold">ОТКЛЮЧЕН</span>
-              </div>
-              <div className="flex items-center justify-between py-1 border-b border-line">
-                <span>Сетевой Web Search / Scraper</span>
-                <span className="text-rose-400 font-bold">ОТКЛЮЧЕН</span>
-              </div>
-              <div className="flex items-center justify-between py-1 border-b border-line">
-                <span>Автоматическое редактирование skills</span>
-                <span className="text-rose-400 font-bold">ЗАБЛОКИРОВАНО</span>
-              </div>
-              <div className="flex items-center justify-between py-1">
-                <span>Обезличивание PII (VIN/Телефон)</span>
-                <span className="text-emerald-400 font-bold">АКТИВНО</span>
-              </div>
-            </div>
+            <ul className="space-y-0 text-[11px] text-ink-secondary">
+              {[
+                { label: 'Прямой доступ к CLI / Terminal', value: 'Отключён', ok: false },
+                { label: 'Файловый доступ / File I/O', value: 'Отключён', ok: false },
+                { label: 'Сетевой Web Search / Scraper', value: 'Отключён', ok: false },
+                { label: 'Автоматическое редактирование skills', value: 'Заблокировано', ok: false },
+                { label: 'Обезличивание PII (VIN / телефон)', value: 'Активно', ok: true },
+              ].map((row, idx, arr) => (
+                <li
+                  key={row.label}
+                  className={`flex items-center justify-between gap-3 py-2 ${
+                    idx < arr.length - 1 ? 'border-b border-line-subtle' : ''
+                  }`}
+                >
+                  <span className="min-w-0 leading-snug">{row.label}</span>
+                  <span
+                    className={`shrink-0 text-[10px] font-bold uppercase tracking-wide ${
+                      row.ok ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {row.value}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </SectionCard>
         </div>
-
       </div>
     </div>
   );
