@@ -336,3 +336,83 @@ def test_daily_budget_guard(client: TestClient, session: Session):
     )
     assert run_res.status_code == 402
     assert "исчерпан" in run_res.json()["detail"]
+
+
+def test_concurrent_run_limit_process_local_honesty(client: TestClient, monkeypatch):
+    """Process-local concurrent counter: 429 with scope=process + Retry-After."""
+    import settings as settings_mod
+
+    tenant = "tenant-concurrent"
+    headers = make_auth_headers(tenant_id=tenant, role="manager")
+    conv_res = client.post(
+        "/api/copilot/conversations",
+        json={"title": "Concurrent"},
+        headers=headers,
+    )
+    assert conv_res.status_code == 200
+    conv_id = conv_res.json()["id"]
+
+    monkeypatch.setattr(
+        type(settings_mod.settings),
+        "COPILOT_MAX_CONCURRENT_RUNS",
+        property(lambda self: 1),
+    )
+    # Simulate one active SSE stream on this process (counter is in-memory / per-worker).
+    copilot_router._tenant_concurrent_runs[tenant] = 1
+    try:
+        run_res = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "ещё один параллельный", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert run_res.status_code == 429, run_res.text
+        assert run_res.headers.get("Retry-After") == "5"
+        detail = run_res.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["code"] == "COPILOT_CONCURRENT_LIMIT"
+        assert detail["scope"] == "process"
+        assert detail["retry_after_seconds"] == 5
+        assert detail["max_concurrent"] == 1
+        assert detail["current_concurrent"] == 1
+        assert "параллель" in detail["message"].lower()
+    finally:
+        copilot_router._tenant_concurrent_runs.pop(tenant, None)
+
+
+def test_rpm_limit_process_local_honesty(client: TestClient, monkeypatch):
+    """RPM bucket is process-local; 429 body exposes scope=process + Retry-After."""
+    import settings as settings_mod
+    from datetime import timedelta
+
+    tenant = "tenant-rpm"
+    headers = make_auth_headers(tenant_id=tenant, role="manager")
+    conv_res = client.post(
+        "/api/copilot/conversations",
+        json={"title": "RPM"},
+        headers=headers,
+    )
+    assert conv_res.status_code == 200
+    conv_id = conv_res.json()["id"]
+
+    monkeypatch.setattr(
+        type(settings_mod.settings),
+        "COPILOT_RPM_LIMIT",
+        property(lambda self: 1),
+    )
+    # One hit already in the rolling minute window
+    copilot_router._tenant_run_history[tenant] = [datetime.now(timezone.utc) - timedelta(seconds=5)]
+    try:
+        run_res = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "слишком часто", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert run_res.status_code == 429, run_res.text
+        assert run_res.headers.get("Retry-After") is not None
+        detail = run_res.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["code"] == "COPILOT_RPM_LIMIT"
+        assert detail["scope"] == "process"
+        assert 1 <= int(detail["retry_after_seconds"]) <= 60
+    finally:
+        copilot_router._tenant_run_history.pop(tenant, None)

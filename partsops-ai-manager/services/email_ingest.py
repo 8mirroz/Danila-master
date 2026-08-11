@@ -664,23 +664,32 @@ def ingest_message(
         "priority": priority,
     }
 
+    def _release_ingest_claim() -> None:
+        """CAS: only release if still ingesting (do not clobber terminal states)."""
+        release_at = utc_now().replace(tzinfo=None)
+        session.execute(
+            update(EmailMessage.__table__)
+            .where(
+                EmailMessage.__table__.c.id == message_id,
+                EmailMessage.__table__.c.tenant_id == tenant_id,
+                EmailMessage.__table__.c.status == "ingesting",
+            )
+            .values(status="parsed", updated_at=release_at)
+        )
+        session.commit()
+        session.expire_all()
+
     try:
         created = _invoke_create_request(tenant_id, payload, idem_key)
     except Exception:
-        # Release claim so operator can retry.
-        msg.status = "parsed"
-        msg.updated_at = utc_now().replace(tzinfo=None)
-        session.add(msg)
-        session.commit()
+        # Release claim so operator / peer can retry.
+        _release_ingest_claim()
         raise
 
     request_obj = created.get("request") or {}
     request_id = request_obj.get("request_id")
     if not request_id:
-        msg.status = "parsed"
-        msg.updated_at = utc_now().replace(tzinfo=None)
-        session.add(msg)
-        session.commit()
+        _release_ingest_claim()
         raise HTTPException(status_code=500, detail="create_request returned no request_id")
 
     now_naive = utc_now().replace(tzinfo=None)

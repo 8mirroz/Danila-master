@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Icon, InlineAlert, SectionCard } from './Primitives';
+import { Button, Icon, InlineAlert, SectionCard, Skeleton } from './Primitives';
 import { apiJson } from '../lib/api';
 import { notify } from '../lib/notify';
 
@@ -101,6 +101,8 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
   const [stats, setStats] = useState<EmailStats | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [busy, setBusy] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cfgForm, setCfgForm] = useState({
     org_slug: 'default',
@@ -117,6 +119,8 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Не удалось загрузить inbox');
       setMessages([]);
+    } finally {
+      setListLoading(false);
     }
   }, [statusFilter]);
 
@@ -148,6 +152,8 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
   }, []);
 
   useEffect(() => {
+    // Cold start + status filter change: skeleton only when list not yet ready.
+    setListLoading(true);
     void loadMessages();
     void loadConfig();
     void loadStats();
@@ -167,15 +173,20 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
+      setDetailLoading(false);
       return;
     }
     let active = true;
+    setDetailLoading(true);
     void apiJson<EmailMessage>(`/api/email/messages/${selectedId}`)
       .then((row) => {
         if (active) setDetail(row);
       })
       .catch(() => {
         if (active) setDetail(null);
+      })
+      .finally(() => {
+        if (active) setDetailLoading(false);
       });
     return () => {
       active = false;
@@ -305,13 +316,15 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
               заявку» (source=EMAIL).
             </p>
             <p className="text-[10px] font-semibold tabular-nums text-ink-muted">
-              {messages.length > 0
-                ? `${messages.length} ${messages.length === 1 ? 'письмо' : messages.length < 5 ? 'письма' : 'писем'}${
-                    statusFilter ? ` · фильтр: ${STATUS_LABEL[statusFilter] || statusFilter}` : ''
-                  }`
-                : statusFilter
-                  ? 'Нет писем с выбранным статусом'
-                  : 'Очередь пуста'}
+              {listLoading
+                ? 'Загрузка очереди…'
+                : messages.length > 0
+                  ? `${messages.length} ${messages.length === 1 ? 'письмо' : messages.length < 5 ? 'письма' : 'писем'}${
+                      statusFilter ? ` · фильтр: ${STATUS_LABEL[statusFilter] || statusFilter}` : ''
+                    }`
+                  : statusFilter
+                    ? 'Нет писем с выбранным статусом'
+                    : 'Очередь пуста'}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -435,7 +448,35 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {messages.length === 0 && (
+                  {listLoading && messages.length === 0 && (
+                    <>
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <tr key={`sk-list-${i}`} className="border-t border-line-subtle" aria-hidden>
+                          <td className="px-3 py-2.5">
+                            <Skeleton className="h-3 w-14" />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Skeleton className="h-3 w-20" />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Skeleton className="h-3 w-36 max-w-full" />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Skeleton className="h-4 w-16 rounded-full" />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Skeleton className="h-3 w-6" />
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="sr-only">
+                        <td colSpan={5} role="status" aria-live="polite">
+                          Загрузка списка писем…
+                        </td>
+                      </tr>
+                    </>
+                  )}
+                  {!listLoading && messages.length === 0 && (
                     <tr>
                       <td colSpan={5} className="p-0">
                         <div className="ds-empty m-3 border-0 bg-transparent p-6">
@@ -514,7 +555,27 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
             className="flex min-h-[300px] flex-col rounded-control border border-line bg-surface-2 p-4"
             aria-label="Просмотр письма"
           >
-            {!detail && (
+            {detailLoading && !detail && (
+              <div className="flex flex-1 flex-col gap-3" role="status" aria-live="polite">
+                <span className="sr-only">Загрузка письма…</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-48 max-w-full" />
+                    <Skeleton className="h-3 w-40" />
+                    <Skeleton className="h-2.5 w-28" />
+                  </div>
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+                <Skeleton className="h-28 w-full" />
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-8 w-full" />
+                <div className="mt-auto space-y-2 border-t border-line-subtle pt-3">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              </div>
+            )}
+            {!detailLoading && !detail && (
               <div className="ds-empty flex-1 border-0 bg-transparent">
                 <div className="ds-empty__icon" aria-hidden>
                   <Icon name="envelope" size={18} />

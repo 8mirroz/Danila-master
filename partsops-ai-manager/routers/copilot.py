@@ -232,21 +232,51 @@ async def create_copilot_run(
     if not conv or conv.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Разговор не найден")
 
-    # Rate limiting check (settings-driven per tenant)
+    # Rate limiting check (settings-driven per tenant; process-local counters)
     now = datetime.now(timezone.utc)
     recent_runs = [
         t for t in _tenant_run_history.get(tenant_id, [])
         if now - t < timedelta(minutes=1)
     ]
     if len(recent_runs) >= settings.COPILOT_RPM_LIMIT:
-        raise HTTPException(status_code=429, detail=f"Превышен лимит запросов ({settings.COPILOT_RPM_LIMIT} сообщений в минуту).")
+        retry_after = 60
+        if recent_runs:
+            oldest = min(recent_runs)
+            elapsed = (now - oldest).total_seconds()
+            retry_after = max(1, min(60, int(60 - elapsed) + 1))
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "COPILOT_RPM_LIMIT",
+                "message": (
+                    f"Превышен лимит запросов ({settings.COPILOT_RPM_LIMIT} сообщений в минуту)."
+                ),
+                "retry_after_seconds": retry_after,
+                "scope": "process",  # not cluster-wide / multi-worker shared
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
     recent_runs.append(now)
     _tenant_run_history[tenant_id] = recent_runs
 
-    # Concurrency check (settings-driven parallel runs per tenant)
+    # Concurrency check (active SSE streams per tenant; process-local)
     current_concurrent = _tenant_concurrent_runs.get(tenant_id, 0)
     if current_concurrent >= settings.COPILOT_MAX_CONCURRENT_RUNS:
-        raise HTTPException(status_code=429, detail=f"Превышен лимит параллельных запросов (максимум {settings.COPILOT_MAX_CONCURRENT_RUNS} параллельно).")
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "COPILOT_CONCURRENT_LIMIT",
+                "message": (
+                    f"Превышен лимит параллельных запросов "
+                    f"(максимум {settings.COPILOT_MAX_CONCURRENT_RUNS} параллельно)."
+                ),
+                "retry_after_seconds": 5,
+                "scope": "process",  # in-memory per worker; not shared across processes
+                "max_concurrent": settings.COPILOT_MAX_CONCURRENT_RUNS,
+                "current_concurrent": current_concurrent,
+            },
+            headers={"Retry-After": "5"},
+        )
 
     # Daily budget check ($10 default)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)

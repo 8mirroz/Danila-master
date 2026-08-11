@@ -992,3 +992,245 @@ def test_threaded_double_ingest_single_request(monkeypatch, tmp_path):
     # create_request at most once (CAS winner only); never double-create
     assert create_calls["n"] == 1
     assert len(results) + len(errors) == 2
+
+
+def test_ingest_failure_releases_claim_then_retry_succeeds(monkeypatch, tmp_path):
+    """Mid-flight create_request failure must CAS-release claim so retry can ingest."""
+    from models import PartRequest
+    from services.email_ingest import ingest_message
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    import models  # noqa: F401
+    import models_email  # noqa: F401
+
+    SQLModel.metadata.create_all(engine)
+
+    monkeypatch.setenv("TESTING", "1")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+
+    calls = {"n": 0}
+
+    def flaky_create_request(tenant_id, payload_data, x_idempotency_key=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("simulated create_request failure")
+        if x_idempotency_key:
+            with Session(engine) as s:
+                existing = s.exec(
+                    select(PartRequest).where(
+                        PartRequest.idempotency_key == x_idempotency_key,
+                        PartRequest.tenant_id == tenant_id,
+                    )
+                ).first()
+                if existing:
+                    return {
+                        "request": {
+                            "request_id": existing.request_id,
+                            "status": existing.status,
+                            "source": existing.source,
+                        },
+                        "idempotent": True,
+                    }
+        rid = "REQ-" + hashlib.sha256((x_idempotency_key or "x").encode()).hexdigest()[:8].upper()
+        with Session(engine) as s:
+            req = PartRequest(
+                request_id=rid,
+                tenant_id=tenant_id,
+                idempotency_key=x_idempotency_key,
+                source=payload_data.get("source", "EMAIL"),
+                status="PART_EXTRACTION",
+                priority=payload_data.get("priority", "normal"),
+                customer_name=payload_data.get("customer_name", "Email RFQ"),
+                parts_json="[]",
+            )
+            s.add(req)
+            s.commit()
+        return {
+            "request": {"request_id": rid, "status": "PART_EXTRACTION", "source": "EMAIL"},
+            "idempotent": False,
+        }
+
+    monkeypatch.setattr(
+        "services.email_ingest._invoke_create_request",
+        flaky_create_request,
+    )
+
+    mid = "em-claim-release"
+    with Session(engine) as session:
+        upsert_inbox_config(
+            session,
+            tenant_id="default",
+            org_slug="default",
+            address="rfq+default@inbound.example",
+        )
+        session.add(
+            EmailMessage(
+                id=mid,
+                tenant_id="default",
+                provider="mailgun",
+                provider_message_id="<claim-release@x>",
+                from_masked="a@b.com",
+                to_address="rfq+default@inbound.example",
+                subject="claim release",
+                body_masked_excerpt="filter x2",
+                status="parsed",
+            )
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        with pytest.raises(RuntimeError, match="simulated create_request failure"):
+            ingest_message(session, "default", mid)
+        session.expire_all()
+        after_fail = session.get(EmailMessage, mid)
+        assert after_fail is not None
+        assert after_fail.status == "parsed", "claim must release to parsed for retry"
+        assert after_fail.request_id is None
+
+    with Session(engine) as session:
+        out = ingest_message(session, "default", mid)
+        assert out["status"] == "ingested"
+        assert out["request_id"]
+        session.expire_all()
+        final = session.get(EmailMessage, mid)
+        assert final is not None
+        assert final.status == "ingested"
+        assert final.request_id == out["request_id"]
+
+    assert calls["n"] == 2
+
+
+def test_ingest_mid_flight_peer_409_then_retry_after_release(monkeypatch, tmp_path):
+    """While claim held (ingesting), peer gets 409; after failure release, retry succeeds."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from fastapi import HTTPException
+    from models import PartRequest
+    from services.email_ingest import ingest_message
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    import models  # noqa: F401
+    import models_email  # noqa: F401
+
+    SQLModel.metadata.create_all(engine)
+
+    monkeypatch.setenv("TESTING", "1")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+
+    hold = threading.Event()
+    entered = threading.Event()
+    calls = {"n": 0}
+    lock = threading.Lock()
+
+    def blocking_then_fail_create(tenant_id, payload_data, x_idempotency_key=None):
+        with lock:
+            calls["n"] += 1
+            n = calls["n"]
+        if n == 1:
+            entered.set()
+            # Hold claim while peer races
+            assert hold.wait(timeout=5), "test gate timeout"
+            raise RuntimeError("mid-flight boom")
+        # Success path for retry after release
+        rid = "REQ-" + hashlib.sha256((x_idempotency_key or "x").encode()).hexdigest()[:8].upper()
+        with Session(engine) as s:
+            req = PartRequest(
+                request_id=rid,
+                tenant_id=tenant_id,
+                idempotency_key=x_idempotency_key,
+                source=payload_data.get("source", "EMAIL"),
+                status="PART_EXTRACTION",
+                priority=payload_data.get("priority", "normal"),
+                customer_name=payload_data.get("customer_name", "Email RFQ"),
+                parts_json="[]",
+            )
+            s.add(req)
+            s.commit()
+        return {
+            "request": {"request_id": rid, "status": "PART_EXTRACTION", "source": "EMAIL"},
+            "idempotent": False,
+        }
+
+    monkeypatch.setattr(
+        "services.email_ingest._invoke_create_request",
+        blocking_then_fail_create,
+    )
+
+    mid = "em-mid-flight"
+    with Session(engine) as session:
+        upsert_inbox_config(
+            session,
+            tenant_id="default",
+            org_slug="default",
+            address="rfq+default@inbound.example",
+        )
+        session.add(
+            EmailMessage(
+                id=mid,
+                tenant_id="default",
+                provider="mailgun",
+                provider_message_id="<mid-flight@x>",
+                from_masked="a@b.com",
+                to_address="rfq+default@inbound.example",
+                subject="mid flight",
+                body_masked_excerpt="gasket",
+                status="parsed",
+            )
+        )
+        session.commit()
+
+    peer_errors: list[HTTPException] = []
+    holder_errors: list[BaseException] = []
+    results_lock = threading.Lock()
+
+    def holder() -> None:
+        with Session(engine) as s:
+            try:
+                ingest_message(s, "default", mid)
+            except Exception as exc:
+                with results_lock:
+                    holder_errors.append(exc)
+
+    def peer() -> None:
+        assert entered.wait(timeout=5)
+        with Session(engine) as s:
+            try:
+                ingest_message(s, "default", mid)
+            except HTTPException as exc:
+                with results_lock:
+                    peer_errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_hold = pool.submit(holder)
+        f_peer = pool.submit(peer)
+        assert entered.wait(timeout=5)
+        # Peer should see ingesting / race while claim held
+        f_peer.result(timeout=10)
+        hold.set()
+        f_hold.result(timeout=10)
+
+    assert len(holder_errors) == 1
+    assert isinstance(holder_errors[0], RuntimeError)
+    assert len(peer_errors) == 1
+    assert peer_errors[0].status_code == 409
+
+    with Session(engine) as session:
+        session.expire_all()
+        released = session.get(EmailMessage, mid)
+        assert released is not None
+        assert released.status == "parsed"
+
+    # Operator/retry after release
+    with Session(engine) as session:
+        out = ingest_message(session, "default", mid)
+        assert out["status"] == "ingested"
+        assert out["request_id"]
