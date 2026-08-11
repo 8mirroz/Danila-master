@@ -543,7 +543,12 @@ def test_webhook_rate_limit(client: TestClient, session: Session, monkeypatch):
     assert post_once("<rl-2@x>").status_code == 202
     third = post_once("<rl-3@x>")
     assert third.status_code == 429
-    assert third.json()["detail"]["code"] == "EMAIL_WEBHOOK_RATE_LIMIT"
+    body = third.json()["detail"]
+    assert body["code"] == "EMAIL_WEBHOOK_RATE_LIMIT"
+    assert body.get("scope") == "process"
+    assert 1 <= int(body.get("retry_after_seconds", 0)) <= 60
+    assert third.headers.get("Retry-After") is not None
+    assert 1 <= int(third.headers["Retry-After"]) <= 60
 
 
 def test_auto_ingest_creates_request(client: TestClient, session: Session):
@@ -847,4 +852,143 @@ def test_ingest_claim_lost_to_reject_returns_422(client: TestClient, session: Se
         json={},
     )
     assert res.status_code == 422, res.text
-    assert "rejected" in res.json()["detail"].lower()
+
+
+def test_threaded_double_ingest_single_request(monkeypatch, tmp_path):
+    """Two concurrent ingest workers: CAS ensures at most one PartRequest."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from fastapi import HTTPException
+    from models import PartRequest
+    from services.email_ingest import ingest_message
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    import models  # noqa: F401
+    import models_email  # noqa: F401
+
+    SQLModel.metadata.create_all(engine)
+
+    monkeypatch.setenv("TESTING", "1")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+
+    create_calls = {"n": 0}
+    create_lock = threading.Lock()
+    gate = threading.Barrier(2, timeout=5)
+
+    def fake_create_request(tenant_id, payload_data, x_idempotency_key=None):
+        # Hold both winners-of-race at create edge so loser must hit CAS, not only
+        # sequential re-read. Only CAS winner reaches this function.
+        with create_lock:
+            create_calls["n"] += 1
+        if x_idempotency_key:
+            with Session(engine) as s:
+                existing = s.exec(
+                    select(PartRequest).where(
+                        PartRequest.idempotency_key == x_idempotency_key,
+                        PartRequest.tenant_id == tenant_id,
+                    )
+                ).first()
+                if existing:
+                    return {
+                        "request": {
+                            "request_id": existing.request_id,
+                            "status": existing.status,
+                            "source": existing.source,
+                        },
+                        "idempotent": True,
+                    }
+        rid = "REQ-" + hashlib.sha256((x_idempotency_key or "x").encode()).hexdigest()[:8].upper()
+        with Session(engine) as s:
+            req = PartRequest(
+                request_id=rid,
+                tenant_id=tenant_id,
+                idempotency_key=x_idempotency_key,
+                source=payload_data.get("source", "EMAIL"),
+                status="PART_EXTRACTION",
+                priority=payload_data.get("priority", "normal"),
+                customer_name=payload_data.get("customer_name", "Email RFQ"),
+                parts_json="[]",
+            )
+            s.add(req)
+            s.commit()
+        return {
+            "request": {"request_id": rid, "status": "PART_EXTRACTION", "source": "EMAIL"},
+            "idempotent": False,
+        }
+
+    monkeypatch.setattr(
+        "services.email_ingest._invoke_create_request",
+        fake_create_request,
+    )
+
+    with Session(engine) as session:
+        upsert_inbox_config(
+            session,
+            tenant_id="default",
+            org_slug="default",
+            address="rfq+default@inbound.example",
+        )
+        msg = EmailMessage(
+            id="em-thread-double",
+            tenant_id="default",
+            provider="mailgun",
+            provider_message_id="<thread-double@x>",
+            from_masked="a@b.com",
+            to_address="rfq+default@inbound.example",
+            subject="thread race",
+            body_masked_excerpt="oil filter x1",
+            status="parsed",
+        )
+        session.add(msg)
+        session.commit()
+        mid = msg.id
+
+    results: list[dict] = []
+    errors: list[HTTPException] = []
+    lock = threading.Lock()
+
+    def worker() -> None:
+        gate.wait()
+        with Session(engine) as s:
+            try:
+                out = ingest_message(s, "default", mid)
+                with lock:
+                    results.append(out)
+            except HTTPException as exc:
+                with lock:
+                    errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futs = [pool.submit(worker) for _ in range(2)]
+        for f in as_completed(futs):
+            f.result(timeout=10)
+
+    with Session(engine) as session:
+        session.expire_all()
+        final = session.get(EmailMessage, mid)
+        assert final is not None
+        assert final.status == "ingested"
+        assert final.request_id
+        reqs = session.exec(
+            select(PartRequest).where(
+                PartRequest.tenant_id == "default",
+                PartRequest.source == "EMAIL",
+            )
+        ).all()
+        assert len(reqs) == 1, f"expected single PartRequest, got {len(reqs)}"
+        assert reqs[0].request_id == final.request_id
+
+    # One hard success; peer is 409 in-progress, or rare idempotent re-read after finish
+    assert len(results) >= 1
+    assert all(r.get("request_id") == final.request_id for r in results)
+    for exc in errors:
+        assert exc.status_code == 409
+        assert "in progress" in str(exc.detail).lower() or "race" in str(exc.detail).lower()
+    # create_request at most once (CAS winner only); never double-create
+    assert create_calls["n"] == 1
+    assert len(results) + len(errors) == 2

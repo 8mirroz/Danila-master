@@ -19,7 +19,9 @@ router = APIRouter(tags=["Email Inbox"])
 require_manager = RoleChecker(allowed_roles=["admin", "manager"])
 require_admin = RoleChecker(allowed_roles=["admin", "platform_admin"])
 
-# Soft in-memory RPM guard for webhook (per process).
+# Soft in-memory RPM guard for webhook.
+# Honesty: per-process only — multi-worker / multi-replica deploys do NOT share this
+# bucket. For hard cluster-wide limits use edge rate-limit (CDN/proxy) or Redis.
 _webhook_hits: Dict[str, Deque[datetime]] = defaultdict(deque)
 
 
@@ -61,12 +63,21 @@ def _enforce_webhook_rpm(request: Request) -> None:
     while q and q[0] < window_start:
         q.popleft()
     if len(q) >= limit:
+        # Retry-After: remaining window is at most 60s for a rolling minute bucket.
+        retry_after = 60
+        if q:
+            oldest = q[0]
+            elapsed = (now - oldest).total_seconds()
+            retry_after = max(1, min(60, int(60 - elapsed) + 1))
         raise HTTPException(
             status_code=429,
             detail={
                 "code": "EMAIL_WEBHOOK_RATE_LIMIT",
                 "message": f"Webhook rate limit exceeded ({limit}/min)",
+                "retry_after_seconds": retry_after,
+                "scope": "process",  # not cluster-wide
             },
+            headers={"Retry-After": str(retry_after)},
         )
     q.append(now)
 

@@ -74,8 +74,13 @@ function traceStatusClass(status: string) {
   return 'border-line bg-surface-2 text-ink-secondary';
 }
 
+type TracesLoadState = 'idle' | 'loading' | 'ready' | 'error';
+
 export const AgentOSPanel: React.FC = () => {
   const [traces, setTraces] = useState<Trace[]>([]);
+  const [tracesState, setTracesState] = useState<TracesLoadState>('idle');
+  const [tracesError, setTracesError] = useState<string | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
   const [hermesHealth, setHermesHealth] = useState<HermesHealth>({
     status: 'offline',
     version: 'unknown',
@@ -92,34 +97,47 @@ export const AgentOSPanel: React.FC = () => {
       const res = await apiFetch('/api/copilot/health');
       if (res.ok) {
         const data = await res.json();
+        setHealthError(null);
         setHermesHealth((prev) => ({
           ...prev,
           ...data,
           capabilities: Array.isArray(data.capabilities) ? data.capabilities : prev.capabilities,
           skills: Array.isArray(data.skills) ? data.skills : prev.skills,
         }));
+      } else {
+        setHealthError(`Health HTTP ${res.status}`);
+        setHermesHealth((prev) => ({ ...prev, status: 'offline', mode: 'unavailable' }));
       }
     } catch {
+      setHealthError('Не удалось связаться с /api/copilot/health');
       setHermesHealth((prev) => ({ ...prev, status: 'offline', mode: 'unavailable' }));
     }
   }, []);
 
   const fetchTraces = useCallback(async () => {
+    setTracesState((prev) => (prev === 'ready' ? prev : 'loading'));
     try {
       const res = await apiFetch('/api/admin/observability/traces');
       if (res.ok) {
         const data = await res.json();
-        setTraces(data);
+        setTraces(Array.isArray(data) ? data : []);
+        setTracesError(null);
+        setTracesState('ready');
       } else {
         setTraces([]);
+        setTracesError(`Traces HTTP ${res.status}`);
+        setTracesState('error');
       }
     } catch (e) {
       console.warn('Backend traces endpoint offline:', e);
       setTraces([]);
+      setTracesError('Эндпоинт трасс недоступен');
+      setTracesState('error');
     }
   }, []);
 
   useEffect(() => {
+    setTracesState('loading');
     fetchHealth();
     fetchTraces();
     const interval = setInterval(() => {
@@ -132,8 +150,10 @@ export const AgentOSPanel: React.FC = () => {
   const totalCost = traces.reduce((acc, t) => acc + (t.cost_usd || 0), 0);
   const totalTokens = traces.reduce((acc, t) => acc + (t.total_tokens || 0), 0);
   const strip = useMemo(() => statusStripClasses(hermesHealth.status), [hermesHealth.status]);
+  const skillsList = Array.isArray(hermesHealth.skills) ? hermesHealth.skills : [];
 
   const refreshAll = () => {
+    setTracesState('loading');
     fetchHealth();
     fetchTraces();
   };
@@ -189,6 +209,11 @@ export const AgentOSPanel: React.FC = () => {
               {hermesHealth.error ? (
                 <p className="max-w-xl rounded-control border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-800">
                   {hermesHealth.error}
+                </p>
+              ) : null}
+              {healthError && !hermesHealth.error ? (
+                <p className="max-w-xl rounded-control border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-800">
+                  {healthError}
                 </p>
               ) : null}
             </div>
@@ -285,7 +310,41 @@ export const AgentOSPanel: React.FC = () => {
             }
           >
             <div className="custom-scrollbar max-h-[500px] space-y-3 overflow-y-auto pr-0.5">
-              {traces.length === 0 ? (
+              {tracesState === 'loading' && traces.length === 0 ? (
+                <div className="ds-empty" role="status" aria-live="polite">
+                  <div className="ds-empty__icon" aria-hidden>
+                    <Icon name="sync-alt" size={18} />
+                  </div>
+                  <p className="ds-empty__title">Загрузка LLM-трасс…</p>
+                  <p className="ds-empty__hint max-w-sm">
+                    Запрос к <code className="font-mono text-[10px]">/api/admin/observability/traces</code>
+                  </p>
+                </div>
+              ) : tracesState === 'error' && traces.length === 0 ? (
+                <div className="ds-empty" role="alert">
+                  <div className="ds-empty__icon" aria-hidden>
+                    <Icon name="triangle-exclamation" size={18} />
+                  </div>
+                  <p className="ds-empty__title">Не удалось загрузить трассы</p>
+                  <p className="ds-empty__hint max-w-sm">
+                    {tracesError || 'Проверьте доступ оператора и backend observability.'}
+                  </p>
+                  <div className="mt-3">
+                    <ActionButton
+                      variant="secondary"
+                      icon="sync-alt"
+                      size="sm"
+                      onClick={() => {
+                        setTracesState('loading');
+                        fetchTraces();
+                      }}
+                      aria-label="Повторить загрузку трасс"
+                    >
+                      Повторить
+                    </ActionButton>
+                  </div>
+                </div>
+              ) : traces.length === 0 ? (
                 <div className="ds-empty">
                   <div className="ds-empty__icon" aria-hidden>
                     <Icon name="inbox" size={18} />
@@ -362,24 +421,39 @@ export const AgentOSPanel: React.FC = () => {
                 доступ строго к одобренным skills:
               </p>
 
-              <ul className="space-y-2">
-                {hermesHealth.skills.map((skillName) => (
-                  <li
-                    key={skillName}
-                    className="flex items-center justify-between gap-2 rounded-control border border-line bg-surface-1 px-3 py-2.5"
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Icon name="check-circle" size={14} className="shrink-0 text-emerald-600" />
-                      <span className="truncate font-mono text-[11px] font-bold text-ink-primary" title={skillName}>
-                        {skillName}
+              {skillsList.length === 0 ? (
+                <div className="ds-empty border-0 bg-transparent p-4">
+                  <div className="ds-empty__icon" aria-hidden>
+                    <Icon name="microchip" size={16} />
+                  </div>
+                  <p className="ds-empty__title">Список skills пуст</p>
+                  <p className="ds-empty__hint max-w-xs">
+                    Health не вернул skills — обновите панель или проверьте профиль Hermes.
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {skillsList.map((skillName) => (
+                    <li
+                      key={skillName}
+                      className="flex items-center justify-between gap-2 rounded-control border border-line bg-surface-1 px-3 py-2.5"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Icon name="check-circle" size={14} className="shrink-0 text-emerald-600" />
+                        <span
+                          className="truncate font-mono text-[11px] font-bold text-ink-primary"
+                          title={skillName}
+                        >
+                          {skillName}
+                        </span>
+                      </div>
+                      <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                        Read-only
                       </span>
-                    </div>
-                    <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
-                      Read-only
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </SectionCard>
 
