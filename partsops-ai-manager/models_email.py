@@ -79,6 +79,9 @@ class EmailMessage(SQLModel, table=True):
     rejection_reason: Optional[str] = Field(default=None)
     attachment_artifact_ids_json: str = Field(default="[]")
     auth_results_json: str = Field(default="{}")
+    # Denormalized webhook redelivery counter (mirrors auth_results.duplicate_hits).
+    # Indexed so list?status=duplicate and stats.sum do not scan JSON blobs.
+    duplicate_hits: int = Field(default=0, index=True)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

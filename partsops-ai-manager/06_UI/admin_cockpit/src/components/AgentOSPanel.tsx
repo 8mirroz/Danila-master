@@ -207,7 +207,7 @@ export const AgentOSPanel: React.FC = () => {
               )}
               <SoftPollPill
                 active={listRefreshing && tracesState === 'ready'}
-                className="px-2.5 py-1 gap-1.5"
+                size="md"
               />
             </div>
 

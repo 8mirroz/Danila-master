@@ -199,11 +199,18 @@ def _store_raw_payload(tenant_id: str, message_id: str, payload: dict[str, Any])
 
 
 def _duplicate_hits_of(msg: EmailMessage) -> int:
-    """Webhook redelivery counter from auth_results (0 if absent/invalid)."""
+    """Webhook redelivery counter: prefer denormalized column, fallback JSON."""
+    col = 0
     try:
-        return max(0, int((msg.auth_results or {}).get("duplicate_hits") or 0))
+        col = int(getattr(msg, "duplicate_hits", 0) or 0)
     except (TypeError, ValueError):
-        return 0
+        col = 0
+    json_hits = 0
+    try:
+        json_hits = int((msg.auth_results or {}).get("duplicate_hits") or 0)
+    except (TypeError, ValueError):
+        json_hits = 0
+    return max(0, col, json_hits)
 
 
 def message_to_dict(msg: EmailMessage) -> dict[str, Any]:
@@ -239,11 +246,16 @@ def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
     """Persist a webhook redelivery hit without clobbering the row's real status.
 
     Provider redeliveries return API status ``duplicate`` but the message stays
-    parsed/ingested/rejected. Hits live in auth_results so /api/email/stats can
-    report an honest ``duplicate`` counter for operators.
+    parsed/ingested/rejected. Hits are written to both:
+      - denormalized column ``duplicate_hits`` (indexed list/filter/stats)
+      - ``auth_results.duplicate_hits`` (legacy mirror / debug)
 
-    Returns the new hit count after increment. Process-local lock + refresh
-    serialises concurrent redeliveries on the same primary key within one worker.
+    Honesty: increment is process-local (lock per message id). Multi-worker
+    deploys may under-count without a shared DB atomic UPDATE; column still
+    allows indexed reads. Prefer a single-writer or SQL ``SET col = col + 1``
+    under row lock for cluster-wide correctness.
+
+    Returns the new hit count after increment.
     """
     with _dup_hit_lock(existing.id):
         # Re-read under lock so concurrent retries do not lose increments.
@@ -253,18 +265,24 @@ def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
             return 0
         ar = dict(fresh.auth_results or {})
         try:
-            hits = int(ar.get("duplicate_hits") or 0)
+            json_hits = int(ar.get("duplicate_hits") or 0)
         except (TypeError, ValueError):
-            hits = 0
-        hits += 1
+            json_hits = 0
+        try:
+            col_hits = int(getattr(fresh, "duplicate_hits", 0) or 0)
+        except (TypeError, ValueError):
+            col_hits = 0
+        hits = max(0, col_hits, json_hits) + 1
         ar["duplicate_hits"] = hits
         fresh.auth_results = ar
+        fresh.duplicate_hits = hits
         fresh.updated_at = utc_now().replace(tzinfo=None)
         session.add(fresh)
         session.commit()
         session.refresh(fresh)
         # Keep caller's ORM instance in sync for subsequent reads.
         existing.auth_results_json = fresh.auth_results_json
+        existing.duplicate_hits = fresh.duplicate_hits
         existing.updated_at = fresh.updated_at
         return hits
 
@@ -799,17 +817,21 @@ def list_messages(
     stmt = select(EmailMessage).where(EmailMessage.tenant_id == tenant_id)
 
     # Operator filter "duplicate" = redelivery hits (honest with stats.duplicate).
-    # Provider redeliveries do NOT set status=duplicate on the row.
+    # Provider redeliveries do NOT set status=duplicate on the row — use column.
     if status == "duplicate":
-        stmt = stmt.order_by(EmailMessage.received_at.desc()).limit(max(limit * 5, 100))
-        rows = session.exec(stmt).all()
-        out: list[dict[str, Any]] = []
-        for m in rows:
-            if _duplicate_hits_of(m) > 0 or (m.status or "") == "duplicate":
-                out.append(message_to_dict(m))
-            if len(out) >= limit:
-                break
-        return out
+        from sqlalchemy import or_
+
+        stmt = (
+            stmt.where(
+                or_(
+                    EmailMessage.duplicate_hits > 0,
+                    EmailMessage.status == "duplicate",
+                )
+            )
+            .order_by(EmailMessage.received_at.desc())
+            .limit(limit)
+        )
+        return [message_to_dict(m) for m in session.exec(stmt).all()]
 
     if status:
         stmt = stmt.where(EmailMessage.status == status)
@@ -820,12 +842,10 @@ def list_messages(
 def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
     """Per-tenant counts of email_messages by status (tenant isolation only).
 
-    ``duplicate`` is webhook redelivery hits (auth_results.duplicate_hits sum),
+    ``duplicate`` is sum of denormalized ``duplicate_hits`` (webhook redeliveries),
     not rows with status=duplicate — redeliveries keep the original status so
     operators still see parsed/ingested honestly while the chip counts dups.
     """
-    import json as _json
-
     from sqlalchemy import func
     from sqlmodel import col
 
@@ -837,17 +857,16 @@ def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
     by_status: dict[str, int] = {str(s or ""): int(c or 0) for s, c in rows}
     total = sum(by_status.values())
 
-    # Sum redelivery hits: load only JSON column (lighter than full ORM rows).
-    dup_hits = 0
-    for ar_json in session.exec(
-        select(EmailMessage.auth_results_json).where(EmailMessage.tenant_id == tenant_id)
-    ).all():
-        try:
-            data = _json.loads(ar_json or "{}")
-            if isinstance(data, dict):
-                dup_hits += int(data.get("duplicate_hits") or 0)
-        except (TypeError, ValueError, _json.JSONDecodeError):
-            continue
+    # Indexed column sum (O(1) aggregate vs JSON scan).
+    col_sum = session.exec(
+        select(func.coalesce(func.sum(EmailMessage.duplicate_hits), 0)).where(
+            EmailMessage.tenant_id == tenant_id
+        )
+    ).one()
+    try:
+        dup_hits = int(col_sum or 0)
+    except (TypeError, ValueError):
+        dup_hits = 0
     # Legacy rows that somehow have status=duplicate still contribute.
     dup_hits += by_status.get("duplicate", 0)
 

@@ -1332,22 +1332,30 @@ export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) =
 interface SoftPollPillProps {
   active?: boolean;
   label?: string;
+  /** sm = compact list chrome; md = hero/status strip */
+  size?: 'sm' | 'md';
   className?: string;
 }
 
 export const SoftPollPill: React.FC<SoftPollPillProps> = ({
   active = true,
   label = 'Обновление',
+  size = 'sm',
   className = '',
 }) => {
   if (!active) return null;
+  const sizeCls =
+    size === 'md'
+      ? 'gap-1.5 px-2.5 py-1 text-[9px]'
+      : 'gap-1 px-2 py-0.5 text-[9px]';
+  const dotCls = size === 'md' ? 'h-1.5 w-1.5' : 'h-1.5 w-1.5';
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-secondary ${className}`}
+      className={`inline-flex items-center rounded-full border border-line bg-surface-2 font-bold uppercase tracking-wide text-ink-secondary ${sizeCls} ${className}`}
       role="status"
       aria-live="polite"
     >
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" aria-hidden />
+      <span className={`${dotCls} animate-pulse rounded-full bg-sky-500`} aria-hidden />
       {label}
     </span>
   );
