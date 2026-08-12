@@ -206,8 +206,25 @@ export const AgentOSPanel: React.FC = () => {
                 </span>
               )}
               <SoftPollPill
-                active={listRefreshing && tracesState === 'ready'}
+                active={
+                  listRefreshing &&
+                  (tracesState === 'ready' || tracesState === 'error' || Boolean(healthError))
+                }
                 size="md"
+                tone={
+                  tracesState === 'error' || healthError
+                    ? 'rose'
+                    : hermesHealth.status === 'degraded'
+                      ? 'amber'
+                      : 'sky'
+                }
+                label={
+                  tracesState === 'error' || healthError
+                    ? 'Ошибка опроса'
+                    : hermesHealth.status === 'degraded'
+                      ? 'Опрос · degraded'
+                      : 'Обновление'
+                }
               />
             </div>
 

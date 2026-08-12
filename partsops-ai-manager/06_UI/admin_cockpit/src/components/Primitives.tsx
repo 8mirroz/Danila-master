@@ -1334,6 +1334,8 @@ interface SoftPollPillProps {
   label?: string;
   /** sm = compact list chrome; md = hero/status strip */
   size?: 'sm' | 'md';
+  /** sky = default refresh; amber = degraded; rose = error while polling */
+  tone?: 'sky' | 'amber' | 'rose';
   className?: string;
 }
 
@@ -1341,6 +1343,7 @@ export const SoftPollPill: React.FC<SoftPollPillProps> = ({
   active = true,
   label = 'Обновление',
   size = 'sm',
+  tone = 'sky',
   className = '',
 }) => {
   if (!active) return null;
@@ -1348,14 +1351,25 @@ export const SoftPollPill: React.FC<SoftPollPillProps> = ({
     size === 'md'
       ? 'gap-1.5 px-2.5 py-1 text-[9px]'
       : 'gap-1 px-2 py-0.5 text-[9px]';
-  const dotCls = size === 'md' ? 'h-1.5 w-1.5' : 'h-1.5 w-1.5';
+  const toneCls =
+    tone === 'rose'
+      ? 'border-rose-200 bg-rose-50 text-rose-800'
+      : tone === 'amber'
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : 'border-line bg-surface-2 text-ink-secondary';
+  const dotCls =
+    tone === 'rose'
+      ? 'h-1.5 w-1.5 bg-rose-500'
+      : tone === 'amber'
+        ? 'h-1.5 w-1.5 bg-amber-500'
+        : 'h-1.5 w-1.5 bg-sky-500';
   return (
     <span
-      className={`inline-flex items-center rounded-full border border-line bg-surface-2 font-bold uppercase tracking-wide text-ink-secondary ${sizeCls} ${className}`}
+      className={`inline-flex items-center rounded-full border font-bold uppercase tracking-wide ${sizeCls} ${toneCls} ${className}`}
       role="status"
       aria-live="polite"
     >
-      <span className={`${dotCls} animate-pulse rounded-full bg-sky-500`} aria-hidden />
+      <span className={`${dotCls} animate-pulse rounded-full`} aria-hidden />
       {label}
     </span>
   );

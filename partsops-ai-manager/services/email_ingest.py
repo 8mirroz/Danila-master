@@ -250,10 +250,10 @@ def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
       - denormalized column ``duplicate_hits`` (indexed list/filter/stats) — SoT
       - ``auth_results.duplicate_hits`` (legacy mirror / debug)
 
-    Cluster honesty: column uses SQL ``SET duplicate_hits = duplicate_hits + 1``
-    so multi-worker shared DB does not lose increments under concurrent
-    redeliveries. Process-local lock still serializes the JSON mirror write
-    within one worker (avoids lost-update on auth_results_json).
+    Cluster honesty:
+      - column uses SQL ``SET duplicate_hits = duplicate_hits + 1`` (multi-worker OK)
+      - JSON mirror re-reads under ``SELECT … FOR UPDATE`` (Postgres/MySQL row lock;
+        SQLite degrades to process-local lock which still serialises one worker)
 
     Returns the new hit count after increment (column value).
     """
@@ -261,7 +261,18 @@ def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
         now_naive = utc_now().replace(tzinfo=None)
         tbl = EmailMessage.__table__
         session.expire(existing)
-        seed = session.get(EmailMessage, existing.id)
+
+        # Row lock when dialect supports it — serialises JSON mirror + lag repair
+        # across concurrent workers on a shared DB.
+        try:
+            seed = session.exec(
+                select(EmailMessage)
+                .where(EmailMessage.id == existing.id)
+                .with_for_update()
+            ).first()
+        except Exception:
+            # Dialects without FOR UPDATE (or nested-tx quirks): plain get.
+            seed = session.get(EmailMessage, existing.id)
         if seed is None:
             return 0
         ar0 = dict(seed.auth_results or {})
@@ -296,8 +307,15 @@ def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
             session.rollback()
             return 0
         session.flush()
-        session.expire(existing)
-        fresh = session.get(EmailMessage, existing.id)
+        session.expire_all()
+        try:
+            fresh = session.exec(
+                select(EmailMessage)
+                .where(EmailMessage.id == existing.id)
+                .with_for_update()
+            ).first()
+        except Exception:
+            fresh = session.get(EmailMessage, existing.id)
         if fresh is None:
             session.rollback()
             return 0
@@ -309,7 +327,7 @@ def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
             # Should not happen after +1; fail closed rather than report 0 hits.
             session.rollback()
             return 0
-        # Mirror column → JSON. Use max so a lagging JSON never regresses column.
+        # Mirror column → JSON under row lock. max() so lagging JSON never regresses.
         ar = dict(fresh.auth_results or {})
         try:
             json_now = int(ar.get("duplicate_hits") or 0)

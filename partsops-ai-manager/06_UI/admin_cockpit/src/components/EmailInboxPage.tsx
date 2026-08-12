@@ -366,7 +366,12 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                       ? 'Нет писем с выбранным статусом'
                       : 'Очередь пуста'}
               </span>
-              <SoftPollPill active={listRefreshing && !listLoading} size="sm" />
+              <SoftPollPill
+                active={listRefreshing && !listLoading}
+                size="sm"
+                tone={error ? 'rose' : 'sky'}
+                label={error ? 'Сбой опроса' : 'Обновление'}
+              />
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
