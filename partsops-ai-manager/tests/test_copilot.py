@@ -287,6 +287,55 @@ def test_run_creation_and_sse_streaming(client: TestClient, monkeypatch):
     assert '"sequence":' in content
     assert '"correlation_id":' in content
 
+    # 4. Terminal run cannot re-stream
+    again = client.get(f"/api/copilot/runs/{run_id}/events", headers=headers)
+    assert again.status_code == 409, again.text
+    assert again.json()["detail"]["code"] == "COPILOT_RUN_TERMINAL"
+
+
+def test_exclusive_sse_stream_rejects_second_client(client: TestClient, monkeypatch):
+    """Second concurrent SSE for same run_id must 409 (no dual Hermes)."""
+    hold = __import__("threading").Event()
+    entered = __import__("threading").Event()
+
+    class BlockingHermesTransport:
+        async def start_run(self, **kwargs):
+            return {"run_id": "hermes-block", "model": "partsops-test"}
+
+        async def stream_run(self, hermes_run_id):
+            entered.set()
+            # Hold stream open so second client hits exclusive claim
+            assert hold.wait(timeout=5)
+            yield {"event": "message.delta", "delta": "late"}
+            yield {"event": "run.completed", "usage": {"total_tokens": 1, "cost_usd": 0.0}}
+
+        async def stop_run(self, hermes_run_id):
+            return {"status": "stopped", "run_id": hermes_run_id}
+
+    monkeypatch.setattr(copilot_router, "HermesTransport", BlockingHermesTransport)
+    headers = make_auth_headers(tenant_id="tenant-exclusive-sse", role="manager")
+    conv_id = client.post(
+        "/api/copilot/conversations", json={"title": "Excl"}, headers=headers
+    ).json()["id"]
+    run_id = client.post(
+        f"/api/copilot/conversations/{conv_id}/runs",
+        json={"message": "hold stream", "context_ref": {"screen_id": "kanban_board"}},
+        headers=headers,
+    ).json()["run_id"]
+
+    # Simulate in-flight stream by claiming the slot directly (TestClient is sync;
+    # true parallel SSE is awkward — claim mirrors production exclusive gate).
+    assert copilot_router._claim_stream_slot(run_id) is True
+    try:
+        second = client.get(f"/api/copilot/runs/{run_id}/events", headers=headers)
+        assert second.status_code == 409, second.text
+        detail = second.json()["detail"]
+        assert detail["code"] == "COPILOT_STREAM_IN_PROGRESS"
+        assert detail["run_id"] == run_id
+    finally:
+        copilot_router._release_concurrent_slot(run_id)
+        hold.set()
+
 
 def test_stop_copilot_run(client: TestClient):
     headers = make_auth_headers(tenant_id="tenant-stop", role="manager")
@@ -447,6 +496,35 @@ def test_concurrent_reserved_at_create_without_sse(client: TestClient, monkeypat
         for rid, tid in list(copilot_router._run_concurrent_holders.items()):
             if tid == tenant:
                 copilot_router._run_concurrent_holders.pop(rid, None)
+
+
+def test_health_reaps_abandoned_slots(client: TestClient, monkeypatch):
+    """GET /health opportunistically reaps abandoned non-streaming slots."""
+    import time
+
+    tenant = "tenant-health-reap"
+    headers = make_auth_headers(tenant_id=tenant, role="manager")
+    monkeypatch.setattr(
+        type(__import__("settings", fromlist=["settings"]).settings),
+        "COPILOT_ABANDONED_SLOT_TTL_SECONDS",
+        property(lambda self: 1),
+    )
+    stale_run = "run-stale-health"
+    copilot_router._tenant_concurrent_runs[tenant] = 1
+    copilot_router._run_concurrent_holders[stale_run] = tenant
+    copilot_router._run_concurrent_reserved_at[stale_run] = time.monotonic() - 30
+    copilot_router._run_slot_streaming.discard(stale_run)
+    try:
+        res = client.get("/api/copilot/health", headers=headers)
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert stale_run not in copilot_router._run_concurrent_holders
+        assert copilot_router._tenant_concurrent_runs.get(tenant, 0) == 0
+        assert int(body.get("abandoned_slots_reaped", 0)) >= 1
+    finally:
+        copilot_router._tenant_concurrent_runs.pop(tenant, None)
+        copilot_router._run_concurrent_holders.pop(stale_run, None)
+        copilot_router._run_concurrent_reserved_at.pop(stale_run, None)
 
 
 def test_abandoned_queued_slot_ttl_reaper(client: TestClient, monkeypatch):

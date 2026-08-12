@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Icon, InlineAlert, SectionCard, Skeleton } from './Primitives';
+import { Button, Icon, InlineAlert, SectionCard, Skeleton, SoftPollPill } from './Primitives';
 import { apiJson } from '../lib/api';
 import { notify } from '../lib/notify';
 
@@ -36,6 +36,7 @@ type EmailStats = {
   rejected: number;
   received: number;
   ingesting: number;
+  duplicate: number;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -63,6 +64,7 @@ const STATS_CHIP_ORDER: Array<{ key: keyof EmailStats; label: string; className:
   { key: 'ingesting', label: 'Импорт', className: 'border-sky-200 bg-sky-50 text-sky-800' },
   { key: 'ingested', label: 'В заявке', className: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
   { key: 'rejected', label: 'Отклонено', className: 'border-red-200 bg-red-50 text-red-800' },
+  { key: 'duplicate', label: 'Дубликаты', className: 'border-line bg-surface-2 text-ink-muted' },
 ];
 
 function EmailStatusChip({ status }: { status: string }) {
@@ -339,19 +341,7 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                       ? 'Нет писем с выбранным статусом'
                       : 'Очередь пуста'}
               </span>
-              {listRefreshing && !listLoading ? (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-secondary"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span
-                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500"
-                    aria-hidden
-                  />
-                  Обновление
-                </span>
-              ) : null}
+              <SoftPollPill active={listRefreshing && !listLoading} />
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -366,6 +356,7 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
               <option value="ingested">В заявке</option>
               <option value="rejected">Отклонено</option>
               <option value="received">Получено</option>
+              <option value="duplicate">Дубликаты</option>
             </select>
             <Button
               size="sm"

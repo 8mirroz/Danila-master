@@ -588,6 +588,7 @@ def test_get_message_stats_service_and_endpoint(client: TestClient, session: Ses
         "rejected": 0,
         "received": 0,
         "ingesting": 0,
+        "duplicate": 0,
     }
 
     upsert_inbox_config(
@@ -659,7 +660,9 @@ def test_get_message_stats_service_and_endpoint(client: TestClient, session: Ses
         "rejected",
         "received",
         "ingesting",
+        "duplicate",
     }
+    assert body["duplicate"] == 0
 
     # Cross-tenant: tenant-b token must not see tenant-a totals
     res_b = client.get("/api/email/stats", headers=auth_headers("tenant-stats-b", "manager"))

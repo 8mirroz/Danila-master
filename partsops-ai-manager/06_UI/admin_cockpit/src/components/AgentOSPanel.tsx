@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiFetch } from '../lib/api';
-import { SectionCard, ActionButton, Icon } from './Primitives';
+import { SectionCard, ActionButton, Icon, SoftPollPill } from './Primitives';
 
 type Trace = {
   correlation_id: string;
@@ -205,19 +205,10 @@ export const AgentOSPanel: React.FC = () => {
                   fallback ready
                 </span>
               )}
-              {listRefreshing && tracesState === 'ready' ? (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-ink-secondary"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span
-                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500"
-                    aria-hidden
-                  />
-                  Обновление
-                </span>
-              ) : null}
+              <SoftPollPill
+                active={listRefreshing && tracesState === 'ready'}
+                className="px-2.5 py-1 gap-1.5"
+              />
             </div>
 
             <div className="space-y-1.5">

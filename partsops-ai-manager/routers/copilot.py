@@ -130,11 +130,24 @@ def _reserve_concurrent_slot(tenant_id: str, run_id: str, max_concurrent: int) -
         return current + 1
 
 
-def _mark_slot_streaming(run_id: str) -> None:
-    """Mark run as active SSE so TTL reaper will not release its slot mid-stream."""
+def _claim_stream_slot(run_id: str) -> bool:
+    """Exclusive SSE claim for run_id.
+
+    Returns False if another stream already owns this run (prevents dual Hermes
+    execution / double release races). Marks streaming so TTL reaper will not
+    free the concurrent slot mid-SSE.
+    """
     with _concurrent_lock:
-        if run_id in _run_concurrent_holders:
-            _run_slot_streaming.add(run_id)
+        if run_id in _run_slot_streaming:
+            return False
+        _run_slot_streaming.add(run_id)
+        return True
+
+
+def _reap_abandoned_slots() -> int:
+    """Public reaper entry (e.g. health probe for long-idle workers)."""
+    with _concurrent_lock:
+        return _reap_abandoned_slots_unlocked()
 
 
 def _release_concurrent_slot(run_id: str) -> None:
@@ -248,7 +261,12 @@ async def check_hermes_health_async() -> Dict[str, Any]:
 async def copilot_health(
     principal: CurrentPrincipal = Depends(get_current_principal)
 ):
+    # Opportunistic reaper so long-idle workers free abandoned slots without
+    # waiting for the next run create (process-local honesty).
+    reaped = _reap_abandoned_slots()
     health = await check_hermes_health_async()
+    if reaped:
+        health = {**health, "abandoned_slots_reaped": reaped}
     return health
 
 
@@ -441,13 +459,33 @@ async def stream_run_events(
     if not conv or conv.tenant_id != tenant_id:
         raise HTTPException(status_code=403, detail="Доступ запрещен")
 
+    terminal = (run.status or "").lower()
+    if terminal in {"completed", "failed", "stopped", "cancelled"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "COPILOT_RUN_TERMINAL",
+                "message": f"Run уже завершён (status={run.status}); повторный SSE запрещён.",
+                "status": run.status,
+            },
+        )
+
+    # Exclusive stream: second concurrent SSE must not double-execute Hermes.
+    if not _claim_stream_slot(run_id):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "COPILOT_STREAM_IN_PROGRESS",
+                "message": "SSE-поток для этого run уже активен.",
+                "run_id": run_id,
+            },
+        )
+
     def encode(payload: Dict[str, Any]) -> str:
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        # Slot was reserved at create; do not double-increment here.
-        # Mark streaming so abandoned-slot TTL reaper will not free this run mid-SSE.
-        _mark_slot_streaming(run_id)
+        # Concurrent slot reserved at create; stream claim already exclusive above.
         cancel_event = _run_cancel_events.setdefault(run_id, asyncio.Event())
         transport = HermesTransport()
         sequence = 0

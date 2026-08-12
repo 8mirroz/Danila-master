@@ -102,7 +102,7 @@ def main() -> int:
     if not isinstance(stats_before, dict) or "total" not in stats_before:
         print("FAIL: /api/email/stats missing total", file=sys.stderr)
         return 1
-    for key in ("parsed", "ingested", "rejected", "received", "ingesting"):
+    for key in ("parsed", "ingested", "rejected", "received", "ingesting", "duplicate"):
         if key not in stats_before:
             print(f"FAIL: /api/email/stats missing key={key}", file=sys.stderr)
             return 1

@@ -757,6 +757,7 @@ def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
         "rejected": by_status.get("rejected", 0),
         "received": by_status.get("received", 0),
         "ingesting": by_status.get("ingesting", 0),
+        "duplicate": by_status.get("duplicate", 0),
     }
 
 

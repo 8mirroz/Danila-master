@@ -1327,6 +1327,33 @@ export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) =
 );
 
 // =========================================
+// 21b. SoftPollPill — subtle background-refresh indicator (no skeleton flash)
+// =========================================
+interface SoftPollPillProps {
+  active?: boolean;
+  label?: string;
+  className?: string;
+}
+
+export const SoftPollPill: React.FC<SoftPollPillProps> = ({
+  active = true,
+  label = 'Обновление',
+  className = '',
+}) => {
+  if (!active) return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-secondary ${className}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" aria-hidden />
+      {label}
+    </span>
+  );
+};
+
+// =========================================
 // 22. ErrorState
 // =========================================
 interface ErrorStateProps { title?: string; message: string; onRetry?: () => void; }
