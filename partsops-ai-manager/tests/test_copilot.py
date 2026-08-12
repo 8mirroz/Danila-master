@@ -293,6 +293,69 @@ def test_run_creation_and_sse_streaming(client: TestClient, monkeypatch):
     assert again.json()["detail"]["code"] == "COPILOT_RUN_TERMINAL"
 
 
+def test_stream_end_marks_terminal_before_slot_release(client: TestClient, monkeypatch, session: Session):
+    """SSE finally must leave run terminal so a late client gets RUN_TERMINAL not dual stream."""
+    import settings as settings_mod
+
+    class AbruptHermesTransport:
+        """Upstream dies without terminal event; local fallback disabled → failed path."""
+
+        async def start_run(self, **kwargs):
+            return {"run_id": "hermes-abrupt", "model": "partsops-test"}
+
+        async def stream_run(self, hermes_run_id):
+            yield {"event": "message.delta", "delta": "partial"}
+            # EOF without run.completed / run.failed
+
+        async def stop_run(self, hermes_run_id):
+            return {"status": "stopped", "run_id": hermes_run_id}
+
+    monkeypatch.setattr(copilot_router, "HermesTransport", AbruptHermesTransport)
+    # Force no local fallback so stream ends via HERMES_UPSTREAM_EOF → failed
+    monkeypatch.setattr(
+        type(settings_mod.settings),
+        "COPILOT_LOCAL_FALLBACK",
+        property(lambda self: False),
+    )
+    monkeypatch.setattr(
+        type(settings_mod.settings),
+        "COPILOT_PREFER_LOCAL",
+        property(lambda self: False),
+    )
+    # Strong key so we don't take local path at start
+    monkeypatch.setattr(
+        type(settings_mod.settings),
+        "HERMES_API_KEY",
+        property(lambda self: "sk-test-strong-key-not-placeholder-xxxx"),
+    )
+
+    headers = make_auth_headers(tenant_id="tenant-term-before-rel", role="manager")
+    conv_id = client.post(
+        "/api/copilot/conversations", json={"title": "Term"}, headers=headers
+    ).json()["id"]
+    run_id = client.post(
+        f"/api/copilot/conversations/{conv_id}/runs",
+        json={"message": "abrupt eof", "context_ref": {"screen_id": "kanban_board"}},
+        headers=headers,
+    ).json()["run_id"]
+
+    stream_res = client.get(f"/api/copilot/runs/{run_id}/events", headers=headers)
+    assert stream_res.status_code == 200, stream_res.text
+    assert "run.failed" in stream_res.text or "run.completed" in stream_res.text
+
+    run = session.get(CopilotRun, run_id)
+    assert run is not None
+    assert (run.status or "").lower() in {"completed", "failed", "stopped", "cancelled"}
+    # Slot fully released after terminal write
+    assert run_id not in copilot_router._run_slot_streaming
+    assert run_id not in copilot_router._run_concurrent_holders
+
+    # Late second client: terminal gate, not STREAM_IN_PROGRESS / not 200 dual stream
+    late = client.get(f"/api/copilot/runs/{run_id}/events", headers=headers)
+    assert late.status_code == 409, late.text
+    assert late.json()["detail"]["code"] == "COPILOT_RUN_TERMINAL"
+
+
 def test_exclusive_sse_stream_rejects_second_client(client: TestClient, monkeypatch):
     """Second concurrent SSE for same run_id must 409 (no dual Hermes)."""
     hold = __import__("threading").Event()

@@ -208,6 +208,25 @@ def message_to_dict(msg: EmailMessage) -> dict[str, Any]:
     }
 
 
+def _record_duplicate_hit(session: Session, existing: EmailMessage) -> None:
+    """Persist a webhook redelivery hit without clobbering the row's real status.
+
+    Provider redeliveries return API status ``duplicate`` but the message stays
+    parsed/ingested/rejected. Hits live in auth_results so /api/email/stats can
+    report an honest ``duplicate`` counter for operators.
+    """
+    ar = dict(existing.auth_results or {})
+    try:
+        hits = int(ar.get("duplicate_hits") or 0)
+    except (TypeError, ValueError):
+        hits = 0
+    ar["duplicate_hits"] = hits + 1
+    existing.auth_results = ar
+    existing.updated_at = utc_now().replace(tzinfo=None)
+    session.add(existing)
+    session.commit()
+
+
 def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
     """Idempotent receive: create EmailMessage or return existing duplicate."""
     provider = str(payload.get("provider") or "mailgun")
@@ -230,6 +249,7 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
         )
     ).first()
     if existing:
+        _record_duplicate_hit(session, existing)
         return {
             "email_message_id": existing.id,
             "status": "duplicate",
@@ -325,6 +345,7 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
             )
         ).first()
         if existing:
+            _record_duplicate_hit(session, existing)
             return {
                 "email_message_id": existing.id,
                 "status": "duplicate",
@@ -739,7 +760,12 @@ def list_messages(
 
 
 def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
-    """Per-tenant counts of email_messages by status (tenant isolation only)."""
+    """Per-tenant counts of email_messages by status (tenant isolation only).
+
+    ``duplicate`` is webhook redelivery hits (auth_results.duplicate_hits sum),
+    not rows with status=duplicate — redeliveries keep the original status so
+    operators still see parsed/ingested honestly while the chip counts dups.
+    """
     from sqlalchemy import func
     from sqlmodel import col
 
@@ -750,6 +776,19 @@ def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
     ).all()
     by_status: dict[str, int] = {str(s or ""): int(c or 0) for s, c in rows}
     total = sum(by_status.values())
+
+    # Sum redelivery hits without JSON SQL dialect splits (sqlite/pg).
+    dup_hits = 0
+    for msg in session.exec(
+        select(EmailMessage).where(EmailMessage.tenant_id == tenant_id)
+    ).all():
+        try:
+            dup_hits += int((msg.auth_results or {}).get("duplicate_hits") or 0)
+        except (TypeError, ValueError):
+            continue
+    # Legacy rows that somehow have status=duplicate still contribute.
+    dup_hits += by_status.get("duplicate", 0)
+
     return {
         "total": total,
         "parsed": by_status.get("parsed", 0),
@@ -757,7 +796,7 @@ def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
         "rejected": by_status.get("rejected", 0),
         "received": by_status.get("received", 0),
         "ingesting": by_status.get("ingesting", 0),
-        "duplicate": by_status.get("duplicate", 0),
+        "duplicate": dup_hits,
     }
 
 

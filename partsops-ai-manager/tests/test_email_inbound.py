@@ -181,6 +181,15 @@ def test_webhook_idempotent_and_masks_pii(client: TestClient, session: Session):
     assert second.json()["status"] == "duplicate"
     assert second.json()["email_message_id"] == msg_id
 
+    # Redelivery must bump stats.duplicate while row stays parsed (not status=duplicate)
+    stats_after_dup = get_message_stats(session, "tenant-a")
+    assert stats_after_dup["duplicate"] == 1
+    assert stats_after_dup["total"] == 1
+    third = client.post("/api/integrations/email/inbound", content=raw, headers=headers)
+    assert third.status_code == 202
+    assert third.json()["status"] == "duplicate"
+    assert get_message_stats(session, "tenant-a")["duplicate"] == 2
+
     # tenant list
     listed = client.get("/api/email/messages", headers=auth_headers("tenant-a", "manager"))
     assert listed.status_code == 200
@@ -668,6 +677,50 @@ def test_get_message_stats_service_and_endpoint(client: TestClient, session: Ses
     res_b = client.get("/api/email/stats", headers=auth_headers("tenant-stats-b", "manager"))
     assert res_b.status_code == 200
     assert res_b.json()["total"] == 1
+
+
+def test_duplicate_webhook_increments_stats_duplicate(client: TestClient, session: Session):
+    """Provider redelivery: API status=duplicate, stats.duplicate++, row status unchanged."""
+    upsert_inbox_config(
+        session,
+        tenant_id="tenant-dup-stats",
+        org_slug="dup-stats",
+        address="rfq+dup-stats@inbound.example",
+    )
+    payload = {
+        "message_id": "<dup-stats-1@x>",
+        "from": "buyer@partner.ru",
+        "to": ["rfq+dup-stats@inbound.example"],
+        "subject": "RFQ pads",
+        "text_body": "need pads x2",
+    }
+    raw = json.dumps(payload).encode()
+    headers = {
+        "Content-Type": "application/json",
+        "X-PartsOps-Signature": sign(raw),
+    }
+
+    first = client.post("/api/integrations/email/inbound", content=raw, headers=headers)
+    assert first.status_code == 202, first.text
+    assert first.json()["status"] == "parsed"
+    assert get_message_stats(session, "tenant-dup-stats")["duplicate"] == 0
+
+    second = client.post("/api/integrations/email/inbound", content=raw, headers=headers)
+    assert second.status_code == 202
+    assert second.json()["status"] == "duplicate"
+
+    stats = get_message_stats(session, "tenant-dup-stats")
+    assert stats["total"] == 1
+    assert stats["duplicate"] == 1
+    assert stats["parsed"] == 1  # original status preserved
+
+    api = client.get(
+        "/api/email/stats",
+        headers=auth_headers("tenant-dup-stats", "manager"),
+    )
+    assert api.status_code == 200
+    assert api.json()["duplicate"] == 1
+    assert api.json()["parsed"] == 1
 
 
 def test_reject_while_ingesting_returns_409(client: TestClient, session: Session):

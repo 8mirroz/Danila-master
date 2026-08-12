@@ -873,6 +873,25 @@ async def stream_run_events(
             session.commit()
             yield encode(event("run.failed", code="COPILOT_INTERNAL_ERROR", message="Внутренняя ошибка Copilot.", retryable=True))
         finally:
+            # Terminal-before-release: a late second SSE client must see
+            # COPILOT_RUN_TERMINAL, not re-claim the slot and dual-execute Hermes
+            # when the first stream ended without a terminal status write.
+            try:
+                session.refresh(run)
+                st = (run.status or "").lower()
+                if st not in {"completed", "failed", "stopped", "cancelled"}:
+                    cancelled = cancel_event.is_set()
+                    run.status = "stopped" if cancelled else "failed"
+                    run.error_code = run.error_code or (
+                        "CANCELLED" if cancelled else "COPILOT_STREAM_ENDED"
+                    )
+                    run.latency_ms = int(
+                        (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+                    )
+                    session.add(run)
+                    session.commit()
+            except Exception:
+                pass
             _release_concurrent_slot(run_id)
             _run_cancel_events.pop(run_id, None)
             _run_upstream_ids.pop(run_id, None)

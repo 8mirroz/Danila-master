@@ -107,6 +107,27 @@ def main() -> int:
             print(f"FAIL: /api/email/stats missing key={key}", file=sys.stderr)
             return 1
 
+    # Redelivery honesty: same Message-ID → status=duplicate, stats.duplicate++
+    dup_before = int(stats_before.get("duplicate", 0))
+    inbound_dup = _req("POST", "/api/integrations/email/inbound", payload, signed=True, role="manager")
+    if inbound_dup.get("status") != "duplicate":
+        print(f"FAIL: expected duplicate redelivery, got {inbound_dup}", file=sys.stderr)
+        return 1
+    if inbound_dup.get("email_message_id") != emsg:
+        print(
+            f"FAIL: duplicate email_message_id mismatch {inbound_dup.get('email_message_id')} != {emsg}",
+            file=sys.stderr,
+        )
+        return 1
+    stats_dup = _req("GET", "/api/email/stats", role="manager")
+    if int(stats_dup.get("duplicate", 0)) < dup_before + 1:
+        print(
+            f"FAIL: stats.duplicate did not increase ({dup_before} → {stats_dup.get('duplicate')})",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"duplicate redelivery ok: stats.duplicate={stats_dup.get('duplicate')}")
+
     ingested = _req("POST", f"/api/email/messages/{emsg}/ingest", {}, role="manager")
     print("ingest:", ingested)
     rid = ingested.get("request_id")
