@@ -741,6 +741,60 @@ def test_duplicate_webhook_increments_stats_duplicate(client: TestClient, sessio
     assert api.json()["parsed"] == 1
 
 
+def test_duplicate_hit_repairs_json_ahead_of_column(monkeypatch, tmp_path):
+    """Legacy JSON-only counters must not be under-counted after denorm column."""
+    from services.email_ingest import _record_duplicate_hit, receive_inbound_email
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    import models  # noqa: F401
+    import models_email  # noqa: F401
+
+    SQLModel.metadata.create_all(engine)
+    monkeypatch.setenv("TESTING", "1")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+
+    with Session(engine) as session:
+        upsert_inbox_config(
+            session,
+            tenant_id="tenant-json-lag",
+            org_slug="json-lag",
+            address="rfq+json-lag@inbound.example",
+        )
+
+    payload = {
+        "provider": "mailgun",
+        "message_id": "<json-lag-1@x>",
+        "from": "buyer@partner.ru",
+        "to": ["rfq+json-lag@inbound.example"],
+        "subject": "RFQ lag",
+        "text_body": "pads",
+    }
+    with Session(engine) as session:
+        first = receive_inbound_email(session, payload)
+        assert first["status"] == "parsed"
+        mid = first["email_message_id"]
+        msg = session.get(EmailMessage, mid)
+        assert msg is not None
+        # Simulate pre-migration / partial backfill: JSON ahead of column.
+        msg.auth_results = {**(msg.auth_results or {}), "duplicate_hits": 3}
+        msg.duplicate_hits = 0
+        session.add(msg)
+        session.commit()
+
+    with Session(engine) as session:
+        msg = session.get(EmailMessage, mid)
+        assert msg is not None
+        hits = _record_duplicate_hit(session, msg)
+        assert hits == 4
+        session.refresh(msg)
+        assert int(msg.duplicate_hits or 0) == 4
+        assert int((msg.auth_results or {}).get("duplicate_hits") or 0) == 4
+
+
 def test_threaded_concurrent_redelivery_hits(monkeypatch, tmp_path):
     """Concurrent redeliveries of same Message-ID must not lose duplicate_hits."""
     import threading
@@ -820,6 +874,8 @@ def test_threaded_concurrent_redelivery_hits(monkeypatch, tmp_path):
         msg = session.get(EmailMessage, mid)
         assert msg is not None
         assert msg.status == "parsed"  # redelivery must not clobber row status
+        # Column is SoT (atomic SQL +1); JSON is legacy mirror.
+        assert int(getattr(msg, "duplicate_hits", 0) or 0) == n_workers
         assert int((msg.auth_results or {}).get("duplicate_hits") or 0) == n_workers
 
 

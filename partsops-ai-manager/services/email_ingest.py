@@ -40,9 +40,9 @@ RFQ_PLUS_RE = re.compile(
 ALLOWED_ATTACHMENT_EXT = {".xlsx", ".xls", ".csv", ".pdf", ".txt", ".docx"}
 MAX_EXCERPT = 8000
 
-# Process-local serialisation for redelivery hit increments (closes lost-update
-# races when Mailgun/SES retry the same Message-ID concurrently on one worker).
-# Multi-worker still needs Redis/edge limits — same honesty as webhook RPM.
+# Process-local serialisation for redelivery hit JSON mirror writes (column uses
+# atomic SQL +1 and is multi-worker safe on a shared DB). Webhook RPM remains
+# process-local — cluster hard limits belong at edge/Redis.
 _dup_hit_locks: Dict[str, threading.Lock] = {}
 _dup_hit_locks_guard = threading.Lock()
 
@@ -247,36 +247,76 @@ def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
 
     Provider redeliveries return API status ``duplicate`` but the message stays
     parsed/ingested/rejected. Hits are written to both:
-      - denormalized column ``duplicate_hits`` (indexed list/filter/stats)
+      - denormalized column ``duplicate_hits`` (indexed list/filter/stats) — SoT
       - ``auth_results.duplicate_hits`` (legacy mirror / debug)
 
-    Honesty: increment is process-local (lock per message id). Multi-worker
-    deploys may under-count without a shared DB atomic UPDATE; column still
-    allows indexed reads. Prefer a single-writer or SQL ``SET col = col + 1``
-    under row lock for cluster-wide correctness.
+    Cluster honesty: column uses SQL ``SET duplicate_hits = duplicate_hits + 1``
+    so multi-worker shared DB does not lose increments under concurrent
+    redeliveries. Process-local lock still serializes the JSON mirror write
+    within one worker (avoids lost-update on auth_results_json).
 
-    Returns the new hit count after increment.
+    Returns the new hit count after increment (column value).
     """
     with _dup_hit_lock(existing.id):
-        # Re-read under lock so concurrent retries do not lose increments.
+        now_naive = utc_now().replace(tzinfo=None)
+        tbl = EmailMessage.__table__
         session.expire(existing)
-        fresh = session.get(EmailMessage, existing.id)
-        if fresh is None:
+        seed = session.get(EmailMessage, existing.id)
+        if seed is None:
             return 0
-        ar = dict(fresh.auth_results or {})
+        ar0 = dict(seed.auth_results or {})
         try:
-            json_hits = int(ar.get("duplicate_hits") or 0)
+            json_hits = int(ar0.get("duplicate_hits") or 0)
         except (TypeError, ValueError):
             json_hits = 0
         try:
-            col_hits = int(getattr(fresh, "duplicate_hits", 0) or 0)
+            col_hits = int(getattr(seed, "duplicate_hits", 0) or 0)
         except (TypeError, ValueError):
             col_hits = 0
-        hits = max(0, col_hits, json_hits) + 1
-        ar["duplicate_hits"] = hits
+        # Repair denorm lag (partial migration / legacy JSON-only counters)
+        # before the atomic +1 so we never under-count relative to JSON.
+        if json_hits > col_hits:
+            session.execute(
+                update(tbl)
+                .where(tbl.c.id == existing.id)
+                .values(duplicate_hits=json_hits, updated_at=now_naive)
+            )
+            session.flush()
+
+        # Atomic column increment — safe across workers on a shared DB.
+        result = session.execute(
+            update(tbl)
+            .where(tbl.c.id == existing.id)
+            .values(
+                duplicate_hits=tbl.c.duplicate_hits + 1,
+                updated_at=now_naive,
+            )
+        )
+        if result.rowcount == 0:
+            session.rollback()
+            return 0
+        session.flush()
+        session.expire(existing)
+        fresh = session.get(EmailMessage, existing.id)
+        if fresh is None:
+            session.rollback()
+            return 0
+        try:
+            hits = int(getattr(fresh, "duplicate_hits", 0) or 0)
+        except (TypeError, ValueError):
+            hits = 0
+        if hits < 1:
+            # Should not happen after +1; fail closed rather than report 0 hits.
+            session.rollback()
+            return 0
+        # Mirror column → JSON. Use max so a lagging JSON never regresses column.
+        ar = dict(fresh.auth_results or {})
+        try:
+            json_now = int(ar.get("duplicate_hits") or 0)
+        except (TypeError, ValueError):
+            json_now = 0
+        ar["duplicate_hits"] = max(hits, json_now)
         fresh.auth_results = ar
-        fresh.duplicate_hits = hits
-        fresh.updated_at = utc_now().replace(tzinfo=None)
         session.add(fresh)
         session.commit()
         session.refresh(fresh)
@@ -284,7 +324,7 @@ def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
         existing.auth_results_json = fresh.auth_results_json
         existing.duplicate_hits = fresh.duplicate_hits
         existing.updated_at = fresh.updated_at
-        return hits
+        return int(fresh.duplicate_hits or hits)
 
 
 def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
