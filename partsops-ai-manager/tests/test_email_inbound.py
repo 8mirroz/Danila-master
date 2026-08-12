@@ -197,6 +197,21 @@ def test_webhook_idempotent_and_masks_pii(client: TestClient, session: Session):
     assert len(rows) == 1
     assert rows[0]["id"] == msg_id
     assert "john.doe@partner.ru" not in rows[0]["from_masked"]
+    # Redelivery hits exposed for UI badge (status stays parsed)
+    assert rows[0]["status"] == "parsed"
+    assert rows[0].get("duplicate_hits") == 2
+    assert int((rows[0].get("auth_results") or {}).get("duplicate_hits") or 0) == 2
+
+    # Filter status=duplicate returns redelivery rows (not empty just because status≠duplicate)
+    only_dups = client.get(
+        "/api/email/messages?status=duplicate",
+        headers=auth_headers("tenant-a", "manager"),
+    )
+    assert only_dups.status_code == 200
+    dup_rows = only_dups.json()
+    assert len(dup_rows) == 1
+    assert dup_rows[0]["id"] == msg_id
+    assert dup_rows[0]["duplicate_hits"] == 2
     assert "***" in rows[0]["from_masked"] or "jo" in rows[0]["from_masked"]
     assert "WBA3C3C50EF123456" not in rows[0]["body_masked_excerpt"]
     assert rows[0]["status"] == "parsed"

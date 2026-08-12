@@ -17,6 +17,8 @@ type EmailMessage = {
   rejection_reason: string | null;
   attachment_artifact_ids: string[];
   auth_results?: Record<string, unknown>;
+  /** Webhook redelivery count (row status stays parsed/ingested). */
+  duplicate_hits?: number;
 };
 
 type EmailConfig = {
@@ -66,6 +68,29 @@ const STATS_CHIP_ORDER: Array<{ key: keyof EmailStats; label: string; className:
   { key: 'rejected', label: 'Отклонено', className: 'border-red-200 bg-red-50 text-red-800' },
   { key: 'duplicate', label: 'Дубликаты', className: 'border-line bg-surface-2 text-ink-muted' },
 ];
+
+function redeliveryHits(row: Pick<EmailMessage, 'duplicate_hits' | 'auth_results'>): number {
+  if (typeof row.duplicate_hits === 'number' && row.duplicate_hits > 0) {
+    return row.duplicate_hits;
+  }
+  const raw = row.auth_results?.duplicate_hits;
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function RedeliveryBadge({ hits }: { hits: number }) {
+  if (hits <= 0) return null;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-800"
+      title={`Провайдер повторно доставил письмо ${hits}× (webhook redelivery)`}
+      aria-label={`Повторных доставок: ${hits}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
+      ×{hits} redelivery
+    </span>
+  );
+}
 
 function EmailStatusChip({ status }: { status: string }) {
   return (
@@ -524,12 +549,13 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                   )}
                   {messages.map((row) => {
                     const selected = selectedId === row.id;
+                    const hits = redeliveryHits(row);
                     return (
                       <tr
                         key={row.id}
                         tabIndex={0}
                         aria-selected={selected}
-                        aria-label={`Письмо: ${row.subject || 'без темы'}, ${STATUS_LABEL[row.status] || row.status}`}
+                        aria-label={`Письмо: ${row.subject || 'без темы'}, ${STATUS_LABEL[row.status] || row.status}${hits ? `, redelivery ×${hits}` : ''}`}
                         onClick={() => setSelectedId(row.id)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -556,7 +582,10 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                           {row.subject || '(без темы)'}
                         </td>
                         <td className="px-3 py-2.5">
-                          <EmailStatusChip status={row.status} />
+                          <div className="flex flex-wrap items-center gap-1">
+                            <EmailStatusChip status={row.status} />
+                            <RedeliveryBadge hits={hits} />
+                          </div>
                         </td>
                         <td data-numeric className="px-3 py-2.5 font-mono tabular-nums text-ink-secondary">
                           {row.attachment_artifact_ids?.length ?? 0}
@@ -621,8 +650,19 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
                       {detail.id}
                     </p>
                   </div>
-                  <EmailStatusChip status={detail.status} />
+                  <div className="flex flex-col items-end gap-1">
+                    <EmailStatusChip status={detail.status} />
+                    <RedeliveryBadge hits={redeliveryHits(detail)} />
+                  </div>
                 </div>
+
+                {redeliveryHits(detail) > 0 && (
+                  <p className="mb-2 rounded-control border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] text-violet-900">
+                    Провайдер повторно доставил это письмо{' '}
+                    <strong className="font-bold tabular-nums">{redeliveryHits(detail)}</strong>× —
+                    статус строки не меняется (parsed/ingested остаётся честным).
+                  </p>
+                )}
 
                 {detail.request_id && (
                   <button

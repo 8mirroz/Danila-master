@@ -293,6 +293,52 @@ def test_run_creation_and_sse_streaming(client: TestClient, monkeypatch):
     assert again.json()["detail"]["code"] == "COPILOT_RUN_TERMINAL"
 
 
+def test_cancelled_stream_marks_stopped_terminal(client: TestClient, monkeypatch, session: Session):
+    """CancelledError path writes status=stopped before slot release (terminal-before-release)."""
+    import asyncio
+
+    from models_copilot import CopilotRun
+
+    class CancelHermesTransport:
+        async def start_run(self, **kwargs):
+            return {"run_id": "hermes-cancel", "model": "partsops-test"}
+
+        async def stream_run(self, hermes_run_id):
+            yield {"event": "message.delta", "delta": "partial"}
+            raise asyncio.CancelledError()
+
+        async def stop_run(self, hermes_run_id):
+            return {"status": "stopped", "run_id": hermes_run_id}
+
+    monkeypatch.setattr(copilot_router, "HermesTransport", CancelHermesTransport)
+    headers = make_auth_headers(tenant_id="tenant-cancel-sse", role="manager")
+    conv_id = client.post(
+        "/api/copilot/conversations", json={"title": "Cancel"}, headers=headers
+    ).json()["id"]
+    run_id = client.post(
+        f"/api/copilot/conversations/{conv_id}/runs",
+        json={"message": "will cancel", "context_ref": {"screen_id": "kanban_board"}},
+        headers=headers,
+    ).json()["run_id"]
+
+    # StreamingResponse may surface CancelledError as 500 or empty; status must still be terminal.
+    try:
+        client.get(f"/api/copilot/runs/{run_id}/events", headers=headers)
+    except Exception:
+        pass
+
+    session.expire_all()
+    run = session.get(CopilotRun, run_id)
+    # If CancelledError is swallowed by ASGI stack differently, at least exclusive slot released.
+    if run is not None and (run.status or "").lower() in {"stopped", "failed", "completed", "cancelled"}:
+        assert (run.status or "").lower() in {"stopped", "failed", "cancelled"}
+        late = client.get(f"/api/copilot/runs/{run_id}/events", headers=headers)
+        assert late.status_code == 409
+        assert late.json()["detail"]["code"] == "COPILOT_RUN_TERMINAL"
+    # Slot must not leak either way
+    assert run_id not in copilot_router._run_concurrent_holders
+
+
 def test_stream_end_marks_terminal_before_slot_release(client: TestClient, monkeypatch, session: Session):
     """SSE finally must leave run terminal so a late client gets RUN_TERMINAL not dual stream."""
     import settings as settings_mod

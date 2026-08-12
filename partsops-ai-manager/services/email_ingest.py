@@ -182,10 +182,19 @@ def _store_raw_payload(tenant_id: str, message_id: str, payload: dict[str, Any])
         return None, None
 
 
+def _duplicate_hits_of(msg: EmailMessage) -> int:
+    """Webhook redelivery counter from auth_results (0 if absent/invalid)."""
+    try:
+        return max(0, int((msg.auth_results or {}).get("duplicate_hits") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def message_to_dict(msg: EmailMessage) -> dict[str, Any]:
     # Do not expose full filesystem paths to operators — only presence + digest.
     raw_uri = msg.raw_storage_uri
     raw_name = Path(raw_uri).name if raw_uri else None
+    dup_hits = _duplicate_hits_of(msg)
     return {
         "id": msg.id,
         "tenant_id": msg.tenant_id,
@@ -203,6 +212,8 @@ def message_to_dict(msg: EmailMessage) -> dict[str, Any]:
         "rejection_reason": msg.rejection_reason,
         "attachment_artifact_ids": msg.attachment_artifact_ids,
         "auth_results": msg.auth_results,
+        # Top-level for UI badges (redelivery count without parsing auth_results).
+        "duplicate_hits": dup_hits,
         "created_at": msg.created_at.isoformat() if msg.created_at else None,
         "updated_at": msg.updated_at.isoformat() if msg.updated_at else None,
     }
@@ -753,6 +764,20 @@ def list_messages(
 ) -> list[dict[str, Any]]:
     limit = max(1, min(limit, 200))
     stmt = select(EmailMessage).where(EmailMessage.tenant_id == tenant_id)
+
+    # Operator filter "duplicate" = redelivery hits (honest with stats.duplicate).
+    # Provider redeliveries do NOT set status=duplicate on the row.
+    if status == "duplicate":
+        stmt = stmt.order_by(EmailMessage.received_at.desc()).limit(max(limit * 5, 100))
+        rows = session.exec(stmt).all()
+        out: list[dict[str, Any]] = []
+        for m in rows:
+            if _duplicate_hits_of(m) > 0 or (m.status or "") == "duplicate":
+                out.append(message_to_dict(m))
+            if len(out) >= limit:
+                break
+        return out
+
     if status:
         stmt = stmt.where(EmailMessage.status == status)
     stmt = stmt.order_by(EmailMessage.received_at.desc()).limit(limit)
@@ -766,6 +791,8 @@ def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
     not rows with status=duplicate — redeliveries keep the original status so
     operators still see parsed/ingested honestly while the chip counts dups.
     """
+    import json as _json
+
     from sqlalchemy import func
     from sqlmodel import col
 
@@ -777,14 +804,16 @@ def get_message_stats(session: Session, tenant_id: str) -> dict[str, int]:
     by_status: dict[str, int] = {str(s or ""): int(c or 0) for s, c in rows}
     total = sum(by_status.values())
 
-    # Sum redelivery hits without JSON SQL dialect splits (sqlite/pg).
+    # Sum redelivery hits: load only JSON column (lighter than full ORM rows).
     dup_hits = 0
-    for msg in session.exec(
-        select(EmailMessage).where(EmailMessage.tenant_id == tenant_id)
+    for ar_json in session.exec(
+        select(EmailMessage.auth_results_json).where(EmailMessage.tenant_id == tenant_id)
     ).all():
         try:
-            dup_hits += int((msg.auth_results or {}).get("duplicate_hits") or 0)
-        except (TypeError, ValueError):
+            data = _json.loads(ar_json or "{}")
+            if isinstance(data, dict):
+                dup_hits += int(data.get("duplicate_hits") or 0)
+        except (TypeError, ValueError, _json.JSONDecodeError):
             continue
     # Legacy rows that somehow have status=duplicate still contribute.
     dup_hits += by_status.get("duplicate", 0)

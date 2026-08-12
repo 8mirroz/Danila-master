@@ -864,7 +864,22 @@ async def stream_run_events(
                 session.commit()
                 yield encode(event("run.failed", code=exc.code, message=str(exc), retryable=exc.retryable))
         except asyncio.CancelledError:
+            # Client disconnect / task cancel: mark cancelled before re-raise so
+            # finally's terminal-before-release path sees cancel_event and writes
+            # status=stopped (not failed) before slot release.
             cancel_event.set()
+            try:
+                st = (run.status or "").lower()
+                if st not in {"completed", "failed", "stopped", "cancelled"}:
+                    run.status = "stopped"
+                    run.error_code = run.error_code or "CANCELLED"
+                    run.latency_ms = int(
+                        (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+                    )
+                    session.add(run)
+                    session.commit()
+            except Exception:
+                pass
             raise
         except Exception:
             run.status = "failed"
