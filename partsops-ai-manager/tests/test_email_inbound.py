@@ -1234,3 +1234,78 @@ def test_ingest_mid_flight_peer_409_then_retry_after_release(monkeypatch, tmp_pa
         out = ingest_message(session, "default", mid)
         assert out["status"] == "ingested"
         assert out["request_id"]
+
+
+def test_ingest_no_request_id_releases_claim_then_reject(monkeypatch, tmp_path):
+    """create_request without request_id must CAS-release ingesting→parsed (not leave claim stuck).
+
+    Concurrent reject after release must succeed (not 409 ingesting).
+    """
+    from fastapi import HTTPException
+    from services.email_ingest import ingest_message, reject_message
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    import models  # noqa: F401
+    import models_email  # noqa: F401
+
+    SQLModel.metadata.create_all(engine)
+
+    monkeypatch.setenv("TESTING", "1")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+
+    def empty_create_request(tenant_id, payload_data, x_idempotency_key=None):
+        # Honest empty payload — no request id
+        return {"request": {}, "idempotent": False}
+
+    monkeypatch.setattr(
+        "services.email_ingest._invoke_create_request",
+        empty_create_request,
+    )
+
+    mid = "em-no-rid"
+    with Session(engine) as session:
+        upsert_inbox_config(
+            session,
+            tenant_id="default",
+            org_slug="default",
+            address="rfq+default@inbound.example",
+        )
+        session.add(
+            EmailMessage(
+                id=mid,
+                tenant_id="default",
+                provider="mailgun",
+                provider_message_id="<no-rid@x>",
+                from_masked="a@b.com",
+                to_address="rfq+default@inbound.example",
+                subject="no rid",
+                body_masked_excerpt="pads",
+                status="parsed",
+            )
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        with pytest.raises(HTTPException) as ei:
+            ingest_message(session, "default", mid)
+        assert ei.value.status_code == 500
+        assert "request_id" in str(ei.value.detail).lower()
+        session.expire_all()
+        after = session.get(EmailMessage, mid)
+        assert after is not None
+        assert after.status == "parsed", "claim must release on empty request_id"
+        assert after.request_id is None
+
+    # After release, operator reject must not see ingesting
+    with Session(engine) as session:
+        rejected = reject_message(session, "default", mid, reason="empty_create")
+        assert rejected["status"] == "rejected"
+        session.expire_all()
+        final = session.get(EmailMessage, mid)
+        assert final is not None
+        assert final.status == "rejected"
+        assert final.rejection_reason == "empty_create"

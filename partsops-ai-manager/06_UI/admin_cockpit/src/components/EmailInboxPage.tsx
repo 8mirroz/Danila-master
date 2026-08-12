@@ -102,6 +102,7 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [listLoading, setListLoading] = useState(true);
+  const [listRefreshing, setListRefreshing] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cfgForm, setCfgForm] = useState({
@@ -110,17 +111,28 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
     auto_ingest: false,
   });
 
-  const loadMessages = useCallback(async () => {
-    setError(null);
+  const loadMessages = useCallback(async (opts?: { background?: boolean }) => {
+    const background = Boolean(opts?.background);
+    if (background) {
+      // Soft poll: no skeleton flash, only subtle indicator.
+      setListRefreshing(true);
+    } else {
+      setError(null);
+    }
     try {
       const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : '';
       const rows = await apiJson<EmailMessage[]>(`/api/email/messages${qs}`);
       setMessages(rows);
+      if (background) setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Не удалось загрузить inbox');
-      setMessages([]);
+      if (!background) {
+        setError(cause instanceof Error ? cause.message : 'Не удалось загрузить inbox');
+        setMessages([]);
+      }
+      // Background poll failures stay silent to avoid toast spam every 20s.
     } finally {
       setListLoading(false);
+      if (background) setListRefreshing(false);
     }
   }, [statusFilter]);
 
@@ -159,10 +171,10 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
     void loadStats();
   }, [loadMessages, loadConfig, loadStats]);
 
-  // Auto-refresh list + stats every 20s while mounted
+  // Auto-refresh list + stats every 20s while mounted (background: no skeleton)
   useEffect(() => {
     const timer = window.setInterval(() => {
-      void loadMessages();
+      void loadMessages({ background: true });
       void loadStats();
     }, 20_000);
     return () => {
@@ -315,16 +327,31 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
               попадают сюда. По умолчанию review-first: оператор создаёт заявку кнопкой «Создать
               заявку» (source=EMAIL).
             </p>
-            <p className="text-[10px] font-semibold tabular-nums text-ink-muted">
-              {listLoading
-                ? 'Загрузка очереди…'
-                : messages.length > 0
-                  ? `${messages.length} ${messages.length === 1 ? 'письмо' : messages.length < 5 ? 'письма' : 'писем'}${
-                      statusFilter ? ` · фильтр: ${STATUS_LABEL[statusFilter] || statusFilter}` : ''
-                    }`
-                  : statusFilter
-                    ? 'Нет писем с выбранным статусом'
-                    : 'Очередь пуста'}
+            <p className="flex flex-wrap items-center gap-2 text-[10px] font-semibold tabular-nums text-ink-muted">
+              <span>
+                {listLoading
+                  ? 'Загрузка очереди…'
+                  : messages.length > 0
+                    ? `${messages.length} ${messages.length === 1 ? 'письмо' : messages.length < 5 ? 'письма' : 'писем'}${
+                        statusFilter ? ` · фильтр: ${STATUS_LABEL[statusFilter] || statusFilter}` : ''
+                      }`
+                    : statusFilter
+                      ? 'Нет писем с выбранным статусом'
+                      : 'Очередь пуста'}
+              </span>
+              {listRefreshing && !listLoading ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-secondary"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span
+                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500"
+                    aria-hidden
+                  />
+                  Обновление
+                </span>
+              ) : null}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -344,14 +371,15 @@ export function EmailInboxPage({ onOpenRequest }: Props) {
               size="sm"
               variant="secondary"
               icon="rotate"
-              disabled={busy}
+              disabled={busy || listRefreshing}
               onClick={() => {
-                void loadMessages();
+                void loadMessages({ background: messages.length > 0 });
                 void loadStats();
               }}
               aria-label="Обновить список писем"
+              aria-busy={listRefreshing || listLoading}
             >
-              Обновить
+              {listRefreshing ? 'Обновляем…' : 'Обновить'}
             </Button>
           </div>
         </div>

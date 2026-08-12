@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator, Optional, Dict, Any, List
@@ -53,7 +54,54 @@ _run_locks: Dict[str, asyncio.Lock] = {}
 
 # Tenant rate limit counters (minute window)
 _tenant_run_history: Dict[str, List[datetime]] = {}
+# Process-local concurrent slots: reserved at run *create* (closes queue race where
+# many clients create runs before any SSE stream starts). Released once per run_id
+# on SSE finally or stop — never double-decrement.
 _tenant_concurrent_runs: Dict[str, int] = {}
+_run_concurrent_holders: Dict[str, str] = {}  # run_id -> tenant_id
+_concurrent_lock = threading.Lock()
+
+
+def _reserve_concurrent_slot(tenant_id: str, run_id: str, max_concurrent: int) -> int:
+    """Atomically reserve a concurrent slot for run_id. Returns count after reserve.
+
+    Raises HTTPException 429 if tenant is already at the process-local cap.
+    Idempotent if the same run_id already holds a slot.
+    """
+    with _concurrent_lock:
+        if run_id in _run_concurrent_holders:
+            return _tenant_concurrent_runs.get(tenant_id, 0)
+        current = _tenant_concurrent_runs.get(tenant_id, 0)
+        if current >= max_concurrent:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "COPILOT_CONCURRENT_LIMIT",
+                    "message": (
+                        f"Превышен лимит параллельных запросов "
+                        f"(максимум {max_concurrent} параллельно)."
+                    ),
+                    "retry_after_seconds": 5,
+                    "scope": "process",  # in-memory per worker; not shared across processes
+                    "max_concurrent": max_concurrent,
+                    "current_concurrent": current,
+                },
+                headers={"Retry-After": "5"},
+            )
+        _tenant_concurrent_runs[tenant_id] = current + 1
+        _run_concurrent_holders[run_id] = tenant_id
+        return current + 1
+
+
+def _release_concurrent_slot(run_id: str) -> None:
+    """Release reservation for run_id if still held (idempotent)."""
+    with _concurrent_lock:
+        tenant_id = _run_concurrent_holders.pop(run_id, None)
+        if tenant_id is None:
+            return
+        _tenant_concurrent_runs[tenant_id] = max(
+            0, _tenant_concurrent_runs.get(tenant_id, 1) - 1
+        )
 
 
 class CreateConversationRequest(BaseModel):
@@ -259,25 +307,6 @@ async def create_copilot_run(
     recent_runs.append(now)
     _tenant_run_history[tenant_id] = recent_runs
 
-    # Concurrency check (active SSE streams per tenant; process-local)
-    current_concurrent = _tenant_concurrent_runs.get(tenant_id, 0)
-    if current_concurrent >= settings.COPILOT_MAX_CONCURRENT_RUNS:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": "COPILOT_CONCURRENT_LIMIT",
-                "message": (
-                    f"Превышен лимит параллельных запросов "
-                    f"(максимум {settings.COPILOT_MAX_CONCURRENT_RUNS} параллельно)."
-                ),
-                "retry_after_seconds": 5,
-                "scope": "process",  # in-memory per worker; not shared across processes
-                "max_concurrent": settings.COPILOT_MAX_CONCURRENT_RUNS,
-                "current_concurrent": current_concurrent,
-            },
-            headers={"Retry-After": "5"},
-        )
-
     # Daily budget check ($10 default)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     daily_cost_stmt = select(func.sum(CopilotRun.cost_usd)).where(
@@ -326,6 +355,20 @@ async def create_copilot_run(
     session.add(conv)
     session.commit()
 
+    # Reserve concurrent slot at create (not only at SSE) so queued runs count
+    # against the cap and close the multi-create-before-stream race.
+    try:
+        _reserve_concurrent_slot(
+            tenant_id, run_id, int(settings.COPILOT_MAX_CONCURRENT_RUNS)
+        )
+    except HTTPException:
+        # Roll back the just-created run so we do not leave orphan queued rows
+        # that never held a slot (client will retry).
+        session.delete(run)
+        session.delete(user_msg)
+        session.commit()
+        raise
+
     _run_cancel_events[run_id] = asyncio.Event()
 
     return {
@@ -356,7 +399,7 @@ async def stream_run_events(
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        _tenant_concurrent_runs[tenant_id] = _tenant_concurrent_runs.get(tenant_id, 0) + 1
+        # Slot was reserved at create; do not double-increment here.
         cancel_event = _run_cancel_events.setdefault(run_id, asyncio.Event())
         transport = HermesTransport()
         sequence = 0
@@ -744,7 +787,7 @@ async def stream_run_events(
             session.commit()
             yield encode(event("run.failed", code="COPILOT_INTERNAL_ERROR", message="Внутренняя ошибка Copilot.", retryable=True))
         finally:
-            _tenant_concurrent_runs[tenant_id] = max(0, _tenant_concurrent_runs.get(tenant_id, 1) - 1)
+            _release_concurrent_slot(run_id)
             _run_cancel_events.pop(run_id, None)
             _run_upstream_ids.pop(run_id, None)
             _run_locks.pop(run_id, None)
@@ -781,6 +824,10 @@ async def stop_copilot_run(
     run.status = "stopped"
     session.add(run)
     session.commit()
+
+    # Release slot if client stops a queued run without (or before) SSE finally.
+    _release_concurrent_slot(run_id)
+    _run_cancel_events.pop(run_id, None)
 
     return {"status": "stopped", "run_id": run_id}
 

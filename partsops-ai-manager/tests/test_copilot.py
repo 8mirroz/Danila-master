@@ -357,7 +357,7 @@ def test_concurrent_run_limit_process_local_honesty(client: TestClient, monkeypa
         "COPILOT_MAX_CONCURRENT_RUNS",
         property(lambda self: 1),
     )
-    # Simulate one active SSE stream on this process (counter is in-memory / per-worker).
+    # Simulate one active/queued reservation on this process (counter is in-memory / per-worker).
     copilot_router._tenant_concurrent_runs[tenant] = 1
     try:
         run_res = client.post(
@@ -377,6 +377,76 @@ def test_concurrent_run_limit_process_local_honesty(client: TestClient, monkeypa
         assert "параллель" in detail["message"].lower()
     finally:
         copilot_router._tenant_concurrent_runs.pop(tenant, None)
+        copilot_router._run_concurrent_holders.clear()
+
+
+def test_concurrent_reserved_at_create_without_sse(client: TestClient, monkeypatch):
+    """Creating a run reserves the concurrent slot even before SSE starts."""
+    import settings as settings_mod
+
+    tenant = "tenant-create-reserve"
+    headers = make_auth_headers(tenant_id=tenant, role="manager")
+    conv_res = client.post(
+        "/api/copilot/conversations",
+        json={"title": "Reserve at create"},
+        headers=headers,
+    )
+    assert conv_res.status_code == 200
+    conv_id = conv_res.json()["id"]
+
+    monkeypatch.setattr(
+        type(settings_mod.settings),
+        "COPILOT_MAX_CONCURRENT_RUNS",
+        property(lambda self: 1),
+    )
+    copilot_router._tenant_concurrent_runs.pop(tenant, None)
+    for rid, tid in list(copilot_router._run_concurrent_holders.items()):
+        if tid == tenant:
+            copilot_router._run_concurrent_holders.pop(rid, None)
+
+    try:
+        first = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "первый в очереди", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert first.status_code == 200, first.text
+        run_id = first.json()["run_id"]
+        assert copilot_router._tenant_concurrent_runs.get(tenant) == 1
+        assert copilot_router._run_concurrent_holders.get(run_id) == tenant
+
+        # Second create without SSE must hit concurrent limit (queue race closed)
+        second = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "второй без SSE", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert second.status_code == 429, second.text
+        assert second.json()["detail"]["code"] == "COPILOT_CONCURRENT_LIMIT"
+
+        # Stop releases the slot so a new run can be created
+        stop = client.post(
+            f"/api/copilot/runs/{run_id}/stop",
+            headers=headers,
+        )
+        assert stop.status_code == 200, stop.text
+        assert run_id not in copilot_router._run_concurrent_holders
+        assert copilot_router._tenant_concurrent_runs.get(tenant, 0) == 0
+
+        third = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "после stop", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert third.status_code == 200, third.text
+        third_id = third.json()["run_id"]
+        # cleanup reservation from third
+        copilot_router._release_concurrent_slot(third_id)
+    finally:
+        copilot_router._tenant_concurrent_runs.pop(tenant, None)
+        for rid, tid in list(copilot_router._run_concurrent_holders.items()):
+            if tid == tenant:
+                copilot_router._run_concurrent_holders.pop(rid, None)
 
 
 def test_rpm_limit_process_local_honesty(client: TestClient, monkeypatch):
