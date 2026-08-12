@@ -10,11 +10,12 @@ import hashlib
 import hmac
 import json
 import re
+import threading
 import uuid
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import update
@@ -38,6 +39,21 @@ RFQ_PLUS_RE = re.compile(
 
 ALLOWED_ATTACHMENT_EXT = {".xlsx", ".xls", ".csv", ".pdf", ".txt", ".docx"}
 MAX_EXCERPT = 8000
+
+# Process-local serialisation for redelivery hit increments (closes lost-update
+# races when Mailgun/SES retry the same Message-ID concurrently on one worker).
+# Multi-worker still needs Redis/edge limits — same honesty as webhook RPM.
+_dup_hit_locks: Dict[str, threading.Lock] = {}
+_dup_hit_locks_guard = threading.Lock()
+
+
+def _dup_hit_lock(message_pk: str) -> threading.Lock:
+    with _dup_hit_locks_guard:
+        lock = _dup_hit_locks.get(message_pk)
+        if lock is None:
+            lock = threading.Lock()
+            _dup_hit_locks[message_pk] = lock
+        return lock
 
 
 class EmailIngestError(Exception):
@@ -219,23 +235,38 @@ def message_to_dict(msg: EmailMessage) -> dict[str, Any]:
     }
 
 
-def _record_duplicate_hit(session: Session, existing: EmailMessage) -> None:
+def _record_duplicate_hit(session: Session, existing: EmailMessage) -> int:
     """Persist a webhook redelivery hit without clobbering the row's real status.
 
     Provider redeliveries return API status ``duplicate`` but the message stays
     parsed/ingested/rejected. Hits live in auth_results so /api/email/stats can
     report an honest ``duplicate`` counter for operators.
+
+    Returns the new hit count after increment. Process-local lock + refresh
+    serialises concurrent redeliveries on the same primary key within one worker.
     """
-    ar = dict(existing.auth_results or {})
-    try:
-        hits = int(ar.get("duplicate_hits") or 0)
-    except (TypeError, ValueError):
-        hits = 0
-    ar["duplicate_hits"] = hits + 1
-    existing.auth_results = ar
-    existing.updated_at = utc_now().replace(tzinfo=None)
-    session.add(existing)
-    session.commit()
+    with _dup_hit_lock(existing.id):
+        # Re-read under lock so concurrent retries do not lose increments.
+        session.expire(existing)
+        fresh = session.get(EmailMessage, existing.id)
+        if fresh is None:
+            return 0
+        ar = dict(fresh.auth_results or {})
+        try:
+            hits = int(ar.get("duplicate_hits") or 0)
+        except (TypeError, ValueError):
+            hits = 0
+        hits += 1
+        ar["duplicate_hits"] = hits
+        fresh.auth_results = ar
+        fresh.updated_at = utc_now().replace(tzinfo=None)
+        session.add(fresh)
+        session.commit()
+        session.refresh(fresh)
+        # Keep caller's ORM instance in sync for subsequent reads.
+        existing.auth_results_json = fresh.auth_results_json
+        existing.updated_at = fresh.updated_at
+        return hits
 
 
 def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
@@ -260,12 +291,13 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
         )
     ).first()
     if existing:
-        _record_duplicate_hit(session, existing)
+        hits = _record_duplicate_hit(session, existing)
         return {
             "email_message_id": existing.id,
             "status": "duplicate",
             "tenant_id": existing.tenant_id,
             "duplicate_of": existing.id,
+            "duplicate_hits": hits,
         }
 
     from_raw = str(payload.get("from") or "")
@@ -356,12 +388,13 @@ def receive_inbound_email(session: Session, payload: dict[str, Any]) -> dict[str
             )
         ).first()
         if existing:
-            _record_duplicate_hit(session, existing)
+            hits = _record_duplicate_hit(session, existing)
             return {
                 "email_message_id": existing.id,
                 "status": "duplicate",
                 "tenant_id": existing.tenant_id,
                 "duplicate_of": existing.id,
+                "duplicate_hits": hits,
             }
         raise
 

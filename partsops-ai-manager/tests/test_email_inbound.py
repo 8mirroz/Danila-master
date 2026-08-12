@@ -180,6 +180,7 @@ def test_webhook_idempotent_and_masks_pii(client: TestClient, session: Session):
     assert second.status_code == 202
     assert second.json()["status"] == "duplicate"
     assert second.json()["email_message_id"] == msg_id
+    assert second.json().get("duplicate_hits") == 1
 
     # Redelivery must bump stats.duplicate while row stays parsed (not status=duplicate)
     stats_after_dup = get_message_stats(session, "tenant-a")
@@ -188,6 +189,7 @@ def test_webhook_idempotent_and_masks_pii(client: TestClient, session: Session):
     third = client.post("/api/integrations/email/inbound", content=raw, headers=headers)
     assert third.status_code == 202
     assert third.json()["status"] == "duplicate"
+    assert third.json().get("duplicate_hits") == 2
     assert get_message_stats(session, "tenant-a")["duplicate"] == 2
 
     # tenant list
@@ -723,6 +725,7 @@ def test_duplicate_webhook_increments_stats_duplicate(client: TestClient, sessio
     second = client.post("/api/integrations/email/inbound", content=raw, headers=headers)
     assert second.status_code == 202
     assert second.json()["status"] == "duplicate"
+    assert second.json().get("duplicate_hits") == 1
 
     stats = get_message_stats(session, "tenant-dup-stats")
     assert stats["total"] == 1
@@ -736,6 +739,88 @@ def test_duplicate_webhook_increments_stats_duplicate(client: TestClient, sessio
     assert api.status_code == 200
     assert api.json()["duplicate"] == 1
     assert api.json()["parsed"] == 1
+
+
+def test_threaded_concurrent_redelivery_hits(monkeypatch, tmp_path):
+    """Concurrent redeliveries of same Message-ID must not lose duplicate_hits."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from services.email_ingest import get_message_stats, receive_inbound_email
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    import models  # noqa: F401
+    import models_email  # noqa: F401
+
+    SQLModel.metadata.create_all(engine)
+
+    monkeypatch.setenv("TESTING", "1")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+
+    with Session(engine) as session:
+        upsert_inbox_config(
+            session,
+            tenant_id="tenant-dup-race",
+            org_slug="dup-race",
+            address="rfq+dup-race@inbound.example",
+        )
+
+    payload = {
+        "provider": "mailgun",
+        "message_id": "<dup-race-1@x>",
+        "from": "buyer@partner.ru",
+        "to": ["rfq+dup-race@inbound.example"],
+        "subject": "RFQ concurrent",
+        "text_body": "pads x2",
+    }
+
+    with Session(engine) as session:
+        first = receive_inbound_email(session, payload)
+        assert first["status"] == "parsed"
+        mid = first["email_message_id"]
+
+    n_workers = 8
+    gate = threading.Barrier(n_workers, timeout=5)
+    results: list[dict] = []
+    errors: list[BaseException] = []
+    lock = threading.Lock()
+
+    def worker() -> None:
+        gate.wait()
+        try:
+            with Session(engine) as s:
+                out = receive_inbound_email(s, payload)
+            with lock:
+                results.append(out)
+        except BaseException as exc:  # noqa: BLE001 — surface all race failures
+            with lock:
+                errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futs = [pool.submit(worker) for _ in range(n_workers)]
+        for f in as_completed(futs):
+            f.result(timeout=15)
+
+    assert not errors, f"workers failed: {errors}"
+    assert len(results) == n_workers
+    assert all(r.get("status") == "duplicate" for r in results)
+    assert all(r.get("email_message_id") == mid for r in results)
+    # Each worker must report a unique monotonic hit under process-local lock
+    hits = sorted(int(r.get("duplicate_hits") or 0) for r in results)
+    assert hits == list(range(1, n_workers + 1)), f"lost increments: {hits}"
+
+    with Session(engine) as session:
+        stats = get_message_stats(session, "tenant-dup-race")
+        assert stats["total"] == 1
+        assert stats["duplicate"] == n_workers
+        msg = session.get(EmailMessage, mid)
+        assert msg is not None
+        assert msg.status == "parsed"  # redelivery must not clobber row status
+        assert int((msg.auth_results or {}).get("duplicate_hits") or 0) == n_workers
 
 
 def test_reject_while_ingesting_returns_409(client: TestClient, session: Session):

@@ -127,6 +127,30 @@ def main() -> int:
         )
         return 1
     print(f"duplicate redelivery ok: stats.duplicate={stats_dup.get('duplicate')}")
+    if int(inbound_dup.get("duplicate_hits") or 0) < 1:
+        print(
+            f"FAIL: inbound duplicate_hits missing/zero: {inbound_dup}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Operator filter honesty: ?status=duplicate lists redelivery rows (status stays parsed)
+    dup_list = _req("GET", "/api/email/messages?status=duplicate", role="manager")
+    if not isinstance(dup_list, list) or not any(r.get("id") == emsg for r in dup_list):
+        print(f"FAIL: list?status=duplicate missing message {emsg}: {dup_list}", file=sys.stderr)
+        return 1
+    dup_row = next(r for r in dup_list if r.get("id") == emsg)
+    if int(dup_row.get("duplicate_hits") or 0) < 1:
+        print(f"FAIL: list duplicate_hits={dup_row.get('duplicate_hits')}", file=sys.stderr)
+        return 1
+    detail = _req("GET", f"/api/email/messages/{emsg}", role="manager")
+    if int(detail.get("duplicate_hits") or 0) < 1:
+        print(f"FAIL: detail duplicate_hits={detail.get('duplicate_hits')}", file=sys.stderr)
+        return 1
+    print(
+        f"duplicate filter ok: list_hits={dup_row.get('duplicate_hits')} "
+        f"detail_hits={detail.get('duplicate_hits')}"
+    )
 
     ingested = _req("POST", f"/api/email/messages/{emsg}/ingest", {}, role="manager")
     print("ingest:", ingested)
