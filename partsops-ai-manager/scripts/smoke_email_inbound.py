@@ -128,7 +128,78 @@ def main() -> int:
     if again.get("idempotent") is not True:
         print(f"WARN: second ingest idempotent flag={again.get('idempotent')}", file=sys.stderr)
 
-    print(f"OK request_id={rid} email_message_id={emsg}")
+    # --- reject path honesty: second inbound → operator reject → no ingest ---
+    reject_payload = {
+        "provider": "mailgun",
+        "message_id": f"<smoke-reject-{os.getpid()}@local>",
+        "from": "noise@partner.example",
+        "to": [ADDRESS],
+        "subject": "Smoke reject me",
+        "text_body": "not a real RFQ",
+        "attachments": [],
+    }
+    inbound2 = _req("POST", "/api/integrations/email/inbound", reject_payload, signed=True, role="manager")
+    emsg2 = inbound2.get("email_message_id")
+    if not emsg2:
+        print("FAIL: no email_message_id for reject path", file=sys.stderr)
+        return 1
+
+    stats_pre_reject = _req("GET", "/api/email/stats", role="manager")
+    rejected_before = int(stats_pre_reject.get("rejected", 0))
+
+    rejected = _req(
+        "POST",
+        f"/api/email/messages/{emsg2}/reject",
+        {"reason": "smoke_operator_reject"},
+        role="manager",
+    )
+    if rejected.get("status") != "rejected":
+        print(f"FAIL: reject status={rejected}", file=sys.stderr)
+        return 1
+    if rejected.get("rejection_reason") != "smoke_operator_reject":
+        print(f"FAIL: rejection_reason={rejected.get('rejection_reason')}", file=sys.stderr)
+        return 1
+
+    # Ingest after reject must fail (4xx)
+    try:
+        _req("POST", f"/api/email/messages/{emsg2}/ingest", {}, role="manager")
+        print("FAIL: ingest after reject should not succeed", file=sys.stderr)
+        return 1
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (409, 422):
+            print(f"FAIL: expected 409/422 after reject, got {exc.code}", file=sys.stderr)
+            return 1
+        print(f"ingest-after-reject HTTP {exc.code} (expected)")
+
+    # Idempotent reject
+    rejected_again = _req(
+        "POST",
+        f"/api/email/messages/{emsg2}/reject",
+        {"reason": "should_not_overwrite"},
+        role="manager",
+    )
+    if rejected_again.get("status") != "rejected":
+        print(f"FAIL: idempotent reject status={rejected_again}", file=sys.stderr)
+        return 1
+    if rejected_again.get("rejection_reason") != "smoke_operator_reject":
+        print(
+            f"FAIL: idempotent reject overwrote reason={rejected_again.get('rejection_reason')}",
+            file=sys.stderr,
+        )
+        return 1
+
+    stats_post_reject = _req("GET", "/api/email/stats", role="manager")
+    if int(stats_post_reject.get("rejected", 0)) < rejected_before + 1:
+        print(
+            f"FAIL: stats.rejected did not increase ({rejected_before} → {stats_post_reject.get('rejected')})",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        f"OK request_id={rid} email_message_id={emsg} "
+        f"rejected_id={emsg2} stats.rejected={stats_post_reject.get('rejected')}"
+    )
     return 0
 
 

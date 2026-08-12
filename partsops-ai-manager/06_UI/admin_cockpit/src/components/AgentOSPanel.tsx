@@ -81,6 +81,8 @@ export const AgentOSPanel: React.FC = () => {
   const [tracesState, setTracesState] = useState<TracesLoadState>('idle');
   const [tracesError, setTracesError] = useState<string | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  /** Soft 15s poll: pill only, no skeleton flash when data already loaded. */
+  const [listRefreshing, setListRefreshing] = useState(false);
   const [hermesHealth, setHermesHealth] = useState<HermesHealth>({
     status: 'offline',
     version: 'unknown',
@@ -114,8 +116,14 @@ export const AgentOSPanel: React.FC = () => {
     }
   }, []);
 
-  const fetchTraces = useCallback(async () => {
-    setTracesState((prev) => (prev === 'ready' ? prev : 'loading'));
+  const fetchTraces = useCallback(async (opts?: { background?: boolean }) => {
+    const background = Boolean(opts?.background);
+    if (background) {
+      // Soft poll: keep existing list, only subtle indicator.
+      setListRefreshing(true);
+    } else {
+      setTracesState((prev) => (prev === 'ready' ? prev : 'loading'));
+    }
     try {
       const res = await apiFetch('/api/admin/observability/traces');
       if (res.ok) {
@@ -124,15 +132,22 @@ export const AgentOSPanel: React.FC = () => {
         setTracesError(null);
         setTracesState('ready');
       } else {
-        setTraces([]);
-        setTracesError(`Traces HTTP ${res.status}`);
-        setTracesState('error');
+        if (!background) {
+          setTraces([]);
+          setTracesError(`Traces HTTP ${res.status}`);
+          setTracesState('error');
+        }
+        // Background poll failures stay silent to avoid flicker every 15s.
       }
     } catch (e) {
       console.warn('Backend traces endpoint offline:', e);
-      setTraces([]);
-      setTracesError('Эндпоинт трасс недоступен');
-      setTracesState('error');
+      if (!background) {
+        setTraces([]);
+        setTracesError('Эндпоинт трасс недоступен');
+        setTracesState('error');
+      }
+    } finally {
+      if (background) setListRefreshing(false);
     }
   }, []);
 
@@ -142,7 +157,7 @@ export const AgentOSPanel: React.FC = () => {
     fetchTraces();
     const interval = setInterval(() => {
       fetchHealth();
-      fetchTraces();
+      fetchTraces({ background: true });
     }, 15000);
     return () => clearInterval(interval);
   }, [fetchHealth, fetchTraces]);
@@ -153,7 +168,7 @@ export const AgentOSPanel: React.FC = () => {
   const skillsList = Array.isArray(hermesHealth.skills) ? hermesHealth.skills : [];
 
   const refreshAll = () => {
-    setTracesState('loading');
+    setTracesState((prev) => (prev === 'ready' ? prev : 'loading'));
     fetchHealth();
     fetchTraces();
   };
@@ -190,6 +205,19 @@ export const AgentOSPanel: React.FC = () => {
                   fallback ready
                 </span>
               )}
+              {listRefreshing && tracesState === 'ready' ? (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-ink-secondary"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span
+                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500"
+                    aria-hidden
+                  />
+                  Обновление
+                </span>
+              ) : null}
             </div>
 
             <div className="space-y-1.5">
@@ -302,7 +330,7 @@ export const AgentOSPanel: React.FC = () => {
                 variant="secondary"
                 icon="sync-alt"
                 size="sm"
-                onClick={fetchTraces}
+                onClick={() => fetchTraces()}
                 aria-label="Обновить трассы"
               >
                 Обновить

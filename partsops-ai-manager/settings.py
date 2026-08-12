@@ -232,6 +232,17 @@ class Settings:
             return 2
 
     @property
+    def COPILOT_ABANDONED_SLOT_TTL_SECONDS(self) -> int:
+        """Release process-local concurrent slots for runs that never SSE/stop.
+
+        Default 120s. Active SSE streams are never reaped (streaming flag).
+        """
+        try:
+            return int(os.environ.get("COPILOT_ABANDONED_SLOT_TTL_SECONDS", "120"))
+        except ValueError:
+            return 120
+
+    @property
     def EMAIL_WEBHOOK_SECRET(self) -> str:
         """HMAC secret for POST /api/integrations/email/inbound."""
         return (

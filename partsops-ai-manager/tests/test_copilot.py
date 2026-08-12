@@ -449,6 +449,98 @@ def test_concurrent_reserved_at_create_without_sse(client: TestClient, monkeypat
                 copilot_router._run_concurrent_holders.pop(rid, None)
 
 
+def test_abandoned_queued_slot_ttl_reaper(client: TestClient, monkeypatch):
+    """Queued runs that never SSE/stop free their concurrent slot after TTL.
+
+    Active streaming slots must not be reaped even if reserved_at is old.
+    """
+    import settings as settings_mod
+    import time as time_mod
+
+    tenant = "tenant-abandon-ttl"
+    headers = make_auth_headers(tenant_id=tenant, role="manager")
+    conv_res = client.post(
+        "/api/copilot/conversations",
+        json={"title": "Abandon TTL"},
+        headers=headers,
+    )
+    assert conv_res.status_code == 200
+    conv_id = conv_res.json()["id"]
+
+    monkeypatch.setattr(
+        type(settings_mod.settings),
+        "COPILOT_MAX_CONCURRENT_RUNS",
+        property(lambda self: 1),
+    )
+    monkeypatch.setattr(
+        type(settings_mod.settings),
+        "COPILOT_ABANDONED_SLOT_TTL_SECONDS",
+        property(lambda self: 1),
+    )
+
+    # Clean process-local state for this tenant
+    copilot_router._tenant_concurrent_runs.pop(tenant, None)
+    for rid, tid in list(copilot_router._run_concurrent_holders.items()):
+        if tid == tenant:
+            copilot_router._run_concurrent_holders.pop(rid, None)
+            copilot_router._run_concurrent_reserved_at.pop(rid, None)
+            copilot_router._run_slot_streaming.discard(rid)
+
+    try:
+        first = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "abandoned queue", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert first.status_code == 200, first.text
+        abandoned_id = first.json()["run_id"]
+        assert copilot_router._run_concurrent_holders.get(abandoned_id) == tenant
+        assert abandoned_id not in copilot_router._run_slot_streaming
+
+        # Still within TTL → second create must 429
+        blocked = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "blocked", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert blocked.status_code == 429, blocked.text
+
+        # Age the reservation past TTL (monotonic clock)
+        past = time_mod.monotonic() - 5.0
+        copilot_router._run_concurrent_reserved_at[abandoned_id] = past
+
+        # Reaper runs on next reserve → new create succeeds
+        after = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "after reaper", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert after.status_code == 200, after.text
+        new_id = after.json()["run_id"]
+        assert abandoned_id not in copilot_router._run_concurrent_holders
+        assert copilot_router._run_concurrent_holders.get(new_id) == tenant
+
+        # Streaming flag protects against reaping active SSE
+        copilot_router._run_slot_streaming.add(new_id)
+        copilot_router._run_concurrent_reserved_at[new_id] = past
+        protected = client.post(
+            f"/api/copilot/conversations/{conv_id}/runs",
+            json={"message": "must stay 429", "context_ref": {"screen_id": "kanban_board"}},
+            headers=headers,
+        )
+        assert protected.status_code == 429, protected.text
+        assert new_id in copilot_router._run_concurrent_holders
+
+        copilot_router._release_concurrent_slot(new_id)
+    finally:
+        copilot_router._tenant_concurrent_runs.pop(tenant, None)
+        for rid, tid in list(copilot_router._run_concurrent_holders.items()):
+            if tid == tenant:
+                copilot_router._run_concurrent_holders.pop(rid, None)
+                copilot_router._run_concurrent_reserved_at.pop(rid, None)
+                copilot_router._run_slot_streaming.discard(rid)
+
+
 def test_rpm_limit_process_local_honesty(client: TestClient, monkeypatch):
     """RPM bucket is process-local; 429 body exposes scope=process + Retry-After."""
     import settings as settings_mod

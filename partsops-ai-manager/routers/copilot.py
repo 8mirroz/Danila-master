@@ -7,9 +7,10 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator, Optional, Dict, Any, List
+from typing import AsyncGenerator, Optional, Dict, Any, List, Set
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -57,9 +58,42 @@ _tenant_run_history: Dict[str, List[datetime]] = {}
 # Process-local concurrent slots: reserved at run *create* (closes queue race where
 # many clients create runs before any SSE stream starts). Released once per run_id
 # on SSE finally or stop — never double-decrement.
+# Abandoned queued runs (client never SSE/stop) are reaped after TTL so slots
+# do not leak forever in this process.
 _tenant_concurrent_runs: Dict[str, int] = {}
 _run_concurrent_holders: Dict[str, str] = {}  # run_id -> tenant_id
+_run_concurrent_reserved_at: Dict[str, float] = {}  # run_id -> time.monotonic()
+_run_slot_streaming: Set[str] = set()  # run_ids with active SSE (never reap while streaming)
 _concurrent_lock = threading.Lock()
+
+
+def _abandoned_slot_ttl_seconds() -> float:
+    try:
+        return max(1.0, float(settings.COPILOT_ABANDONED_SLOT_TTL_SECONDS))
+    except (TypeError, ValueError, AttributeError):
+        return 120.0
+
+
+def _reap_abandoned_slots_unlocked(now: Optional[float] = None) -> int:
+    """Release non-streaming slots older than TTL. Caller must hold _concurrent_lock."""
+    deadline = _abandoned_slot_ttl_seconds()
+    ts = time.monotonic() if now is None else now
+    reaped = 0
+    for run_id, reserved_at in list(_run_concurrent_reserved_at.items()):
+        if run_id in _run_slot_streaming:
+            continue
+        if (ts - reserved_at) < deadline:
+            continue
+        tenant_id = _run_concurrent_holders.pop(run_id, None)
+        _run_concurrent_reserved_at.pop(run_id, None)
+        _run_slot_streaming.discard(run_id)
+        if tenant_id is None:
+            continue
+        _tenant_concurrent_runs[tenant_id] = max(
+            0, _tenant_concurrent_runs.get(tenant_id, 1) - 1
+        )
+        reaped += 1
+    return reaped
 
 
 def _reserve_concurrent_slot(tenant_id: str, run_id: str, max_concurrent: int) -> int:
@@ -67,8 +101,10 @@ def _reserve_concurrent_slot(tenant_id: str, run_id: str, max_concurrent: int) -
 
     Raises HTTPException 429 if tenant is already at the process-local cap.
     Idempotent if the same run_id already holds a slot.
+    Reaps abandoned (non-streaming, past TTL) slots before enforcing the cap.
     """
     with _concurrent_lock:
+        _reap_abandoned_slots_unlocked()
         if run_id in _run_concurrent_holders:
             return _tenant_concurrent_runs.get(tenant_id, 0)
         current = _tenant_concurrent_runs.get(tenant_id, 0)
@@ -90,13 +126,23 @@ def _reserve_concurrent_slot(tenant_id: str, run_id: str, max_concurrent: int) -
             )
         _tenant_concurrent_runs[tenant_id] = current + 1
         _run_concurrent_holders[run_id] = tenant_id
+        _run_concurrent_reserved_at[run_id] = time.monotonic()
         return current + 1
+
+
+def _mark_slot_streaming(run_id: str) -> None:
+    """Mark run as active SSE so TTL reaper will not release its slot mid-stream."""
+    with _concurrent_lock:
+        if run_id in _run_concurrent_holders:
+            _run_slot_streaming.add(run_id)
 
 
 def _release_concurrent_slot(run_id: str) -> None:
     """Release reservation for run_id if still held (idempotent)."""
     with _concurrent_lock:
         tenant_id = _run_concurrent_holders.pop(run_id, None)
+        _run_concurrent_reserved_at.pop(run_id, None)
+        _run_slot_streaming.discard(run_id)
         if tenant_id is None:
             return
         _tenant_concurrent_runs[tenant_id] = max(
@@ -400,6 +446,8 @@ async def stream_run_events(
 
     async def event_generator() -> AsyncGenerator[str, None]:
         # Slot was reserved at create; do not double-increment here.
+        # Mark streaming so abandoned-slot TTL reaper will not free this run mid-SSE.
+        _mark_slot_streaming(run_id)
         cancel_event = _run_cancel_events.setdefault(run_id, asyncio.Event())
         transport = HermesTransport()
         sequence = 0
